@@ -1,0 +1,39 @@
+echo "Running pre-commit checks..."
+
+# 1. 运行单元测试
+echo "▶ Running unit tests..."
+if ! pnpm test; then
+    echo "❌ Unit tests failed. Commit aborted."
+    exit 1
+fi
+
+# 2. 运行 build
+echo "▶ Running build..."
+if ! pnpm run build; then
+    echo "❌ Build failed. Commit aborted."
+    exit 1
+fi
+
+# 3. 运行 format
+echo "▶ Running format..."
+if ! pnpm run format; then
+    echo "❌ Format failed. Commit aborted."
+    exit 1
+fi
+
+# 4. 运行 lint:fix
+echo "▶ Running lint:fix..."
+if ! pnpm run lint:fix; then
+    echo "❌ Lint failed. Commit aborted."
+    exit 1
+fi
+
+# 5. 检查 format/lint 是否修改了工作区文件（未 stage 的变更）
+if ! git diff --quiet; then
+    echo "⚠️  Some files were modified by format/lint. Please review and stage them."
+    echo "Modified files:"
+    git diff --name-only
+    exit 1
+fi
+
+echo "✅ All checks passed. Proceeding with commit..."
