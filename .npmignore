@@ -1,0 +1,31 @@
+# 测试输出
+test/
+.test-output/
+coverage/
+
+# 开发文件
+*.test.ts
+*.spec.ts
+vitest.config.ts
+
+# 构建缓存
+*.tsbuildinfo
+
+# 文档
+DESIGN.md
+PLAN.md
+examples/
+
+# 环境文件
+.env
+.env.local
+.env.example
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
