@@ -1,5 +1,7 @@
 # LLM Client Integration Tests
 
+[![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
+
 This directory contains integration tests based on user stories. These tests make real API calls and require valid OpenAI API keys.
 
 ## Setup

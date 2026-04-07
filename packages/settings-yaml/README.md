@@ -1,8 +1,16 @@
 # @agentskillmania/settings-yaml
 
-YAML 配置文件读取模块，支持默认值和深度合并。
+[![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
-## 使用
+YAML configuration file reader with default values and deep merge support.
+
+## Installation
+
+```bash
+pnpm add @agentskillmania/settings-yaml
+```
+
+## Usage
 
 ```typescript
 import { Settings } from "@agentskillmania/settings-yaml";
@@ -25,60 +33,60 @@ console.log(config.server.port); // 3000
 
 ### `constructor(configPath: string)`
 
-创建 Settings 实例。支持以下路径格式：
-- 绝对路径：`/path/to/config.yaml`
-- 相对路径：`./config.yaml` 或 `config.yaml`
-- 用户目录：`~/.config/app/config.yaml`
+Creates a Settings instance. Supports the following path formats:
+- Absolute path: `/path/to/config.yaml`
+- Relative path: `./config.yaml` or `config.yaml`
+- Home directory: `~/.config/app/config.yaml`
 
 ### `async initialize(options?: InitializeOptions<T>): Promise<void>`
 
-初始化配置：
+Initializes the configuration:
 
-- 配置文件不存在 + 有 defaultYaml：创建文件并写入默认值
-- 配置文件不存在 + 无 defaultYaml：抛出错误
-- 配置文件存在：读取并与默认值深度合并
-- 中间目录不存在：递归创建
-- `override` 参数用于临时覆盖配置（如命令行参数）
+- Config file does not exist + has defaultYaml: Creates file with default values
+- Config file does not exist + no defaultYaml: Throws error
+- Config file exists: Reads and deep merges with defaults
+- Intermediate directories don't exist: Creates them recursively
+- `override` parameter for temporary config overrides (e.g., CLI arguments)
 
-**合并优先级：** override > 配置文件 > defaultYaml
+**Merge priority:** override > config file > defaultYaml
 
 ### `getValues(): T`
 
-获取配置值，返回冻结的对象。
+Returns the configuration values as a frozen object.
 
-## 使用示例
+## Examples
 
 ```typescript
-// 只有默认值
+// Only defaults
 await settings.initialize({
   defaultYaml: `server: { port: 3000 }`,
 });
 
-// 只有 override（配置文件存在时）
+// Only override (when config file exists)
 await settings.initialize({
   override: { server: { port: 9000 } },
 });
 
-// 两者都有
+// Both defaults and override
 await settings.initialize({
   defaultYaml: `server: { port: 3000 }`,
   override: { server: { port: 9000 } },
 });
 
-// 都没有（只读取配置文件）
+// Neither (read config file only)
 await settings.initialize();
 ```
 
-## 开发
+## Development
 
 ```bash
-# 构建
+# Build
 pnpm build
 
-# 测试
+# Test
 pnpm test
 
-# 测试覆盖率
+# Test coverage
 pnpm test:coverage
 ```
 

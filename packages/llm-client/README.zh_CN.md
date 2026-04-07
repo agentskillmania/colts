@@ -1,40 +1,40 @@
 # @agentskillmania/llm-client
 
-[![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
+[![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
-A unified LLM client with multi-provider support, concurrency control, priority queuing, and comprehensive token tracking.
+统一的 LLM 客户端，支持多提供商、并发控制、优先级队列和全面的 Token 统计。
 
-## Features
+## 特性
 
-- **Multi-provider support**: Works with OpenAI, Anthropic, Google, and more via pi-ai
-- **Three-level concurrency control**: Provider → API Key → Model
-- **Priority queue**: Higher priority requests are processed first
-- **Round-robin key selection**: Automatic load balancing across multiple API keys
-- **Retry with exponential backoff**: Automatic retry on rate limits and transient errors
-- **Token tracking**: Comprehensive input/output token statistics
-- **Streaming support**: Real-time streaming with accumulated content tracking
-- **State transparency**: Full visibility into queue state, active requests, and key health
+- **多提供商支持**：通过 pi-ai 支持 OpenAI、Anthropic、Google 等
+- **三级并发控制**：Provider → API Key → Model
+- **优先级队列**：高优先级请求优先处理
+- **轮询密钥选择**：多个 API Key 间自动负载均衡
+- **指数退避重试**：对限流和瞬时错误自动重试
+- **Token 统计**：全面的输入/输出 Token 统计
+- **流式支持**：实时流式传输，支持内容累积追踪
+- **状态透明**：队列状态、活动请求和密钥健康度完全可见
 
-## Installation
+## 安装
 
 ```bash
 pnpm add @agentskillmania/llm-client
 ```
 
-## Quick Start
+## 快速开始
 
 ```typescript
 import { LLMClient } from '@agentskillmania/llm-client';
 
 const client = new LLMClient();
 
-// Register provider
+// 注册提供商
 client.registerProvider({
   name: 'openai',
   maxConcurrency: 10
 });
 
-// Register API key
+// 注册 API 密钥
 client.registerApiKey({
   key: process.env.OPENAI_API_KEY!,
   provider: 'openai',
@@ -45,7 +45,7 @@ client.registerApiKey({
   ]
 });
 
-// Non-streaming call
+// 非流式调用
 const response = await client.call({
   model: 'gpt-4',
   messages: [{ role: 'user', content: 'Hello!' }]
@@ -55,18 +55,18 @@ console.log(response.content);
 console.log(response.tokens); // { input: 9, output: 12 }
 ```
 
-## Streaming Usage
+## 流式使用
 
 ```typescript
 for await (const event of client.stream({
   model: 'gpt-4',
   messages: [{ role: 'user', content: 'Tell me a story' }],
-  priority: 1 // Higher priority
+  priority: 1 // 更高优先级
 })) {
   switch (event.type) {
     case 'text':
-      // event.delta: incremental content
-      // event.accumulatedContent: full content so far
+      // event.delta: 增量内容
+      // event.accumulatedContent: 到目前为止的完整内容
       process.stdout.write(event.delta);
       break;
     case 'thinking':
@@ -86,15 +86,15 @@ for await (const event of client.stream({
 }
 ```
 
-## Priority and Timeouts
+## 优先级和超时
 
 ```typescript
 const response = await client.call({
   model: 'gpt-4',
   messages: [...],
-  priority: 5,              // Higher values processed first
-  requestTimeout: 30000,    // 30s timeout for the actual request
-  totalTimeout: 60000,      // 60s total including queue wait
+  priority: 5,              // 值越大优先级越高
+  requestTimeout: 30000,    // 实际请求超时 30 秒
+  totalTimeout: 60000,      // 包含队列等待的总超时 60 秒
   retryOptions: {
     retries: 3,
     minTimeout: 1000,
@@ -103,10 +103,10 @@ const response = await client.call({
 });
 ```
 
-## State Transparency
+## 状态透明
 
 ```typescript
-// Listen to scheduler events
+// 监听调度器事件
 client.on('state', (event) => {
   console.log('Scheduler event:', event);
   // { type: 'queued', requestId, position, estimatedWait }
@@ -115,17 +115,17 @@ client.on('state', (event) => {
   // { type: 'completed', requestId, duration, tokens }
 });
 
-// Get current stats
+// 获取当前统计
 const stats = client.getStats();
 console.log(stats.queueSize);
 console.log(stats.activeRequests);
 console.log(stats.keyHealth);
 ```
 
-## Multi-Key Configuration
+## 多密钥配置
 
 ```typescript
-// Register multiple keys for load balancing
+// 注册多个密钥进行负载均衡
 client.registerApiKey({
   key: 'sk-key1...',
   provider: 'openai',
@@ -140,7 +140,25 @@ client.registerApiKey({
   models: [{ modelId: 'gpt-4', maxConcurrency: 3 }]
 });
 
-// Requests are automatically load balanced via round-robin
+// 请求自动通过轮询进行负载均衡
+```
+
+## 自定义 Base URL
+
+支持 OpenAI 兼容的 API（如智谱 AI）：
+
+```typescript
+const client = new LLMClient({
+  baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4'
+});
+
+client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+client.registerApiKey({
+  key: 'your-api-key',
+  provider: 'openai',
+  maxConcurrency: 5,
+  models: [{ modelId: 'GLM-4.7', maxConcurrency: 2 }]
+});
 ```
 
 ## License
