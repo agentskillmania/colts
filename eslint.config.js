@@ -7,11 +7,11 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettierConfig,
   {
-    files: ['src/**/*.ts'],
+    files: ['packages/*/src/**/*.ts'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {
-        project: './tsconfig.json',
+        project: './packages/*/tsconfig.json',
       },
     },
     rules: {
@@ -21,6 +21,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/', 'node_modules/', 'coverage/'],
+    ignores: ['**/dist/', '**/node_modules/', '**/coverage/'],
   }
 );
