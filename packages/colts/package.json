@@ -14,7 +14,10 @@
     "dev": "tsc --watch"
   },
   "keywords": [],
-  "author": "",
+  "author": {
+    "name": "yusangeng",
+    "email": "yusangeng@outlook.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",

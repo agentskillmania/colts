@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "A pnpm monorepo workspace managing core utilities and configuration tools for the @agentskillmania ecosystem.",
+  "author": {
+    "name": "yusangeng",
+    "email": "yusangeng@outlook.com"
+  },
   "type": "module",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
