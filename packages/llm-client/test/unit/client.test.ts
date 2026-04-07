@@ -116,7 +116,6 @@ describe('LLMClient', () => {
 
       client.registerProvider({ name: 'test', maxConcurrency: 5 });
 
-      // Events are emitted during execution, not registration
       expect(events).toEqual([]);
     });
   });
@@ -137,6 +136,12 @@ describe('LLMClient', () => {
 
       expect(client.getStats().providerActiveCounts.size).toBe(0);
       expect(client.getStats().keyHealth.size).toBe(0);
+    });
+  });
+
+  describe('streaming', () => {
+    it('should support streaming calls', async () => {
+      expect(typeof client.stream).toBe('function');
     });
   });
 });
