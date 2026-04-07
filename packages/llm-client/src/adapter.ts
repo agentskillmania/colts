@@ -170,11 +170,8 @@ export class PiAiAdapter {
    * If a custom baseUrl was provided in the constructor, it will be used
    * instead of the default OpenAI endpoint.
    *
-   * The fallback configuration assumes:
-   * - OpenAI-compatible API
-   * - 128k context window
-   * - 4096 max output tokens
-   * - Text input only
+   * The fallback configuration uses 'openai-completions' as the API type
+   * which is supported by pi-ai for OpenAI-compatible endpoints.
    *
    * @internal
    */
@@ -192,11 +189,12 @@ export class PiAiAdapter {
       return model as Model<string>;
     }
 
-    // Fallback: create a custom model
+    // Fallback: create a custom model for OpenAI-compatible APIs
+    // Use 'openai-completions' which is the correct API type in pi-ai
     return {
       id: modelId,
       name: modelId,
-      api: 'openai-chat',
+      api: 'openai-completions',
       provider: 'openai',
       baseUrl: this.customBaseUrl ?? 'https://api.openai.com/v1',
       reasoning: false,
@@ -396,25 +394,47 @@ export class PiAiAdapter {
    * Map a pi-ai event to the llm-client StreamEvent format.
    *
    * @param event - Event from pi-ai stream
-   * @returns StreamEvent in llm-client format
+   * @returns StreamEvent in llm-client format, or null to skip
    *
    * @remarks
    * Event type mapping:
-   * - `text_delta` → `text` with delta
-   * - `thinking_delta` → `thinking` with delta
-   * - `toolcall_end` → `tool_call` with tool call details
+   * - `text_start`, `text_delta`, `text_end` → `text` with delta
+   * - `thinking_start`, `thinking_delta`, `thinking_end` → `thinking` with delta
+   * - `toolcall_start`, `toolcall_delta`, `toolcall_end` → `tool_call` with details
    * - `done` → `done` with final token counts
    * - `error` → `error` with error message
+   * - `start` and other control events → skipped (return null)
    * - Unknown types → `error` with unknown type message
    *
    * @internal
    */
-  private mapEvent(event: AssistantMessageEvent): StreamEvent {
+  private mapEvent(event: AssistantMessageEvent): StreamEvent | null {
     switch (event.type) {
+      case 'text_start':
+        // Start of text block, no delta yet
+        return {
+          type: 'text',
+          delta: '',
+        };
+
       case 'text_delta':
         return {
           type: 'text',
           delta: event.delta,
+        };
+
+      case 'text_end':
+        // End of text block, content is complete
+        return {
+          type: 'text',
+          delta: '',
+          accumulatedContent: event.content,
+        };
+
+      case 'thinking_start':
+        return {
+          type: 'thinking',
+          delta: '',
         };
 
       case 'thinking_delta':
@@ -423,6 +443,21 @@ export class PiAiAdapter {
           delta: event.delta,
           thinking: event.delta,
         };
+
+      case 'thinking_end':
+        return {
+          type: 'thinking',
+          delta: '',
+          thinking: event.content,
+        };
+
+      case 'toolcall_start':
+        // Tool call started, no details yet
+        return null;
+
+      case 'toolcall_delta':
+        // Partial tool call data, skip until complete
+        return null;
 
       case 'toolcall_end':
         return {
@@ -447,11 +482,13 @@ export class PiAiAdapter {
           error: event.error.errorMessage || 'Unknown error',
         };
 
+      case 'start':
+        // Control event, skip
+        return null;
+
       default:
-        return {
-          type: 'error',
-          error: `Unknown event type: ${event.type}`,
-        };
+        // Skip unknown event types gracefully
+        return null;
     }
   }
 
@@ -518,6 +555,11 @@ export class PiAiAdapter {
 
       for await (const event of stream) {
         const mapped = this.mapEvent(event);
+
+        // Skip null events (control events we don't expose)
+        if (!mapped) {
+          continue;
+        }
 
         // Update accumulators
         if (mapped.delta && mapped.type === 'text') {
