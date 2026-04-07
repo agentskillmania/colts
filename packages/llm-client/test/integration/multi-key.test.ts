@@ -17,7 +17,7 @@ describe('Integration: Multi-Key Auto Switching (User Story 3)', () => {
   beforeAll(() => {
     client = new LLMClient();
 
-    if (testConfig.enabled && testConfig.openaiApiKey2) {
+    if (testConfig.enabled && testConfig.apiKey2) {
       // Register provider
       client.registerProvider({
         name: 'openai',
@@ -26,7 +26,7 @@ describe('Integration: Multi-Key Auto Switching (User Story 3)', () => {
 
       // Register first key
       client.registerApiKey({
-        key: testConfig.openaiApiKey,
+        key: testConfig.apiKey,
         provider: 'openai',
         maxConcurrency: 5,
         models: [{ modelId: testConfig.testModel, maxConcurrency: 3 }],
@@ -34,7 +34,7 @@ describe('Integration: Multi-Key Auto Switching (User Story 3)', () => {
 
       // Register second key
       client.registerApiKey({
-        key: testConfig.openaiApiKey2,
+        key: testConfig.apiKey2,
         provider: 'openai',
         maxConcurrency: 5,
         models: [{ modelId: testConfig.testModel, maxConcurrency: 3 }],
@@ -42,7 +42,7 @@ describe('Integration: Multi-Key Auto Switching (User Story 3)', () => {
     }
   });
 
-  itif(testConfig.enabled && !!testConfig.openaiApiKey2)(
+  itif(testConfig.enabled && !!testConfig.apiKey2)(
     'should distribute requests across multiple keys via round-robin',
     async () => {
       // Given: Multiple requests
@@ -82,7 +82,7 @@ describe('Integration: Multi-Key Auto Switching (User Story 3)', () => {
     120000
   );
 
-  itif(testConfig.enabled && !!testConfig.openaiApiKey2)(
+  itif(testConfig.enabled && !!testConfig.apiKey2)(
     'should show key health stats after multiple requests',
     async () => {
       // Given: Multiple requests to different keys
@@ -114,7 +114,7 @@ describe('Integration: Multi-Key Auto Switching (User Story 3)', () => {
       const singleKeyClient = new LLMClient();
       singleKeyClient.registerProvider({ name: 'openai', maxConcurrency: 5 });
       singleKeyClient.registerApiKey({
-        key: testConfig.openaiApiKey,
+        key: testConfig.apiKey,
         provider: 'openai',
         maxConcurrency: 3,
         models: [{ modelId: testConfig.testModel, maxConcurrency: 2 }],

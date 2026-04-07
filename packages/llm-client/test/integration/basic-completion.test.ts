@@ -14,19 +14,21 @@ describe('Integration: Basic Completion (User Story 1)', () => {
   let client: LLMClient;
 
   beforeAll(() => {
-    client = new LLMClient();
+    client = new LLMClient({
+      baseUrl: testConfig.baseUrl,
+    });
 
     if (testConfig.enabled) {
-      // Register OpenAI provider with default concurrency
+      // Register provider with default concurrency
       client.registerProvider({
-        name: 'openai',
+        name: testConfig.provider,
         maxConcurrency: 5,
       });
 
       // Register API key
       client.registerApiKey({
-        key: testConfig.openaiApiKey,
-        provider: 'openai',
+        key: testConfig.apiKey,
+        provider: testConfig.provider,
         maxConcurrency: 3,
         models: [
           {

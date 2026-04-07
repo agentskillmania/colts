@@ -23,7 +23,7 @@ describe('Integration: Streaming (User Story 2)', () => {
       });
 
       client.registerApiKey({
-        key: testConfig.openaiApiKey,
+        key: testConfig.apiKey,
         provider: 'openai',
         maxConcurrency: 3,
         models: [

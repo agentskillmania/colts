@@ -23,7 +23,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
       });
 
       client.registerApiKey({
-        key: testConfig.openaiApiKey,
+        key: testConfig.apiKey,
         provider: 'openai',
         maxConcurrency: 3,
         models: [{ modelId: testConfig.testModel, maxConcurrency: 2 }],

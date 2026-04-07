@@ -94,13 +94,13 @@
  * @packageDocumentation
  */
 
-export { LLMClient } from './client.js';
+export { LLMClient, type LLMClientOptions } from './client.js';
 export { RequestScheduler } from './scheduler.js';
-export { PiAiAdapter } from './adapter.js';
+export { PiAiAdapter, type AdapterConfig } from './adapter.js';
 
 // Re-export all types
 export type {
-  /** Configuration for LLMClient default concurrency settings. */
+  /** Configuration for LLMClient default concurrency settings (base interface). */
   LLMClientConfig,
   /** Configuration for LLM providers. */
   ProviderConfig,

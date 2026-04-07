@@ -25,7 +25,7 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
 
       // Key level: 2 concurrent (stricter than provider)
       client.registerApiKey({
-        key: testConfig.openaiApiKey,
+        key: testConfig.apiKey,
         provider: 'openai',
         maxConcurrency: 2, // Only 2 concurrent allowed
         models: [
@@ -132,7 +132,7 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
       });
 
       defaultClient.registerApiKey({
-        key: testConfig.openaiApiKey,
+        key: testConfig.apiKey,
         provider: 'openai',
         // maxConcurrency not specified - should use default (5)
         models: [

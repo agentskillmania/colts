@@ -23,7 +23,7 @@ describe('Integration: Automatic Retry (User Story 6)', () => {
       });
 
       client.registerApiKey({
-        key: testConfig.openaiApiKey,
+        key: testConfig.apiKey,
         provider: 'openai',
         maxConcurrency: 3,
         models: [{ modelId: testConfig.testModel, maxConcurrency: 2 }],

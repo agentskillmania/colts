@@ -25,7 +25,7 @@ describe('Integration: Priority Queue (User Story 5)', () => {
       });
 
       client.registerApiKey({
-        key: testConfig.openaiApiKey,
+        key: testConfig.apiKey,
         provider: 'openai',
         maxConcurrency: 1,
         models: [{ modelId: testConfig.testModel, maxConcurrency: 1 }],

@@ -58,6 +58,14 @@ function isRetryableError(error: unknown): boolean {
 }
 
 /**
+ * Adapter configuration options.
+ */
+export interface AdapterConfig {
+  /** Custom base URL for the API (e.g., for proxy or different provider endpoints) */
+  baseUrl?: string;
+}
+
+/**
  * Adapter for the pi-ai library with retry and token tracking.
  *
  * @remarks
@@ -67,6 +75,7 @@ function isRetryableError(error: unknown): boolean {
  * **Model Management**:
  * - Creates Model instances from model identifiers
  * - Falls back to custom model configuration for unknown models
+ * - Supports custom base URLs for proxy or alternative endpoints
  *
  * **Retry Logic**:
  * - Configurable retry with exponential backoff
@@ -105,6 +114,14 @@ function isRetryableError(error: unknown): boolean {
  * }
  * ```
  *
+ * @example
+ * With custom base URL (e.g., for ZhiPu AI):
+ * ```typescript
+ * const adapter = new PiAiAdapter({
+ *   baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4'
+ * });
+ * ```
+ *
  * @public
  */
 export class PiAiAdapter {
@@ -116,6 +133,29 @@ export class PiAiAdapter {
     factor: 2,
   };
 
+  /** Custom base URL for API requests. */
+  private customBaseUrl?: string;
+
+  /**
+   * Creates a new PiAiAdapter instance.
+   *
+   * @param config - Optional adapter configuration
+   *
+   * @example
+   * ```typescript
+   * // Default adapter
+   * const adapter = new PiAiAdapter();
+   *
+   * // With custom base URL
+   * const adapter = new PiAiAdapter({
+   *   baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4'
+   * });
+   * ```
+   */
+  constructor(config?: AdapterConfig) {
+    this.customBaseUrl = config?.baseUrl;
+  }
+
   /**
    * Create a Model instance for the pi-ai library.
    *
@@ -126,6 +166,9 @@ export class PiAiAdapter {
    * First attempts to retrieve the model from pi-ai's built-in registry.
    * If not found, creates a custom Model configuration with reasonable defaults
    * for OpenAI-compatible APIs.
+   *
+   * If a custom baseUrl was provided in the constructor, it will be used
+   * instead of the default OpenAI endpoint.
    *
    * The fallback configuration assumes:
    * - OpenAI-compatible API
@@ -139,6 +182,13 @@ export class PiAiAdapter {
     // Try to get model from pi-ai registry
     const model = getModel('openai', modelId as never);
     if (model) {
+      // If we have a custom base URL, override the model's baseUrl
+      if (this.customBaseUrl) {
+        return {
+          ...model,
+          baseUrl: this.customBaseUrl,
+        } as Model<string>;
+      }
       return model as Model<string>;
     }
 
@@ -148,7 +198,7 @@ export class PiAiAdapter {
       name: modelId,
       api: 'openai-chat',
       provider: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl: this.customBaseUrl ?? 'https://api.openai.com/v1',
       reasoning: false,
       input: ['text'],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },

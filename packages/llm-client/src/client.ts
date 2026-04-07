@@ -20,6 +20,18 @@ import type {
 } from './types.js';
 
 /**
+ * Configuration options for LLMClient.
+ *
+ * @remarks
+ * Extends the base LLMClientConfig with additional options
+ * for customizing adapter behavior.
+ */
+export interface LLMClientOptions extends LLMClientConfig {
+  /** Custom base URL for the API (e.g., for proxy or different provider endpoints) */
+  baseUrl?: string;
+}
+
+/**
  * Unified LLM client with multi-provider support, concurrency control,
  * priority queuing, and comprehensive token tracking.
  *
@@ -34,6 +46,7 @@ import type {
  * - **Automatic retries**: Configurable retry with exponential backoff
  * - **Streaming support**: Real-time token-by-token responses
  * - **Observability**: State events and statistics for monitoring
+ * - **Custom base URL**: Support for proxy or alternative API endpoints
  *
  * @example
  * Basic usage:
@@ -53,6 +66,22 @@ import type {
  * const response = await client.call({
  *   model: 'gpt-4',
  *   messages: [{ role: 'user', content: 'Hello!' }]
+ * });
+ * ```
+ *
+ * @example
+ * With custom base URL (e.g., for ZhiPu AI):
+ * ```typescript
+ * const client = new LLMClient({
+ *   baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4'
+ * });
+ *
+ * client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+ * client.registerApiKey({
+ *   key: 'your-api-key',
+ *   provider: 'openai',
+ *   maxConcurrency: 5,
+ *   models: [{ modelId: 'GLM-4.7', maxConcurrency: 2 }]
  * });
  * ```
  *
@@ -82,18 +111,19 @@ export class LLMClient extends EventEmitter {
   /**
    * Creates a new LLMClient instance.
    *
-   * @param config - Optional configuration for default concurrency limits
+   * @param config - Optional configuration for default concurrency limits and base URL
    *
    * @example
    * ```typescript
    * const client = new LLMClient({
    *   defaultProviderConcurrency: 10,
    *   defaultKeyConcurrency: 5,
-   *   defaultModelConcurrency: 3
+   *   defaultModelConcurrency: 3,
+   *   baseUrl: 'https://custom-api.example.com/v1'
    * });
    * ```
    */
-  constructor(config?: LLMClientConfig) {
+  constructor(config?: LLMClientOptions) {
     super();
     this.config = {
       defaultProviderConcurrency: config?.defaultProviderConcurrency ?? 10,
@@ -101,7 +131,7 @@ export class LLMClient extends EventEmitter {
       defaultModelConcurrency: config?.defaultModelConcurrency ?? 3,
     };
     this.scheduler = new RequestScheduler(this.config);
-    this.adapter = new PiAiAdapter();
+    this.adapter = new PiAiAdapter({ baseUrl: config?.baseUrl });
 
     // Forward scheduler events to client listeners
     this.scheduler.on('state', (event: SchedulerEvent) => {
