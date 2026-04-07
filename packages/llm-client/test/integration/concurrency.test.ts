@@ -8,25 +8,28 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { LLMClient } from '../../src/client';
-import { testConfig, itif } from './config';
+import { testConfig, itif, logProviderInfo } from './config';
 
 describe('Integration: Concurrency Limiting (User Story 4)', () => {
   let client: LLMClient;
 
   beforeAll(() => {
-    client = new LLMClient();
+    logProviderInfo();
+    client = new LLMClient({
+      baseUrl: testConfig.baseUrl,
+    });
 
     if (testConfig.enabled) {
       // Provider level: 5 concurrent
       client.registerProvider({
-        name: 'openai',
+        name: testConfig.provider,
         maxConcurrency: 5,
       });
 
       // Key level: 2 concurrent (stricter than provider)
       client.registerApiKey({
         key: testConfig.apiKey,
-        provider: 'openai',
+        provider: testConfig.provider,
         maxConcurrency: 2, // Only 2 concurrent allowed
         models: [
           {
@@ -55,8 +58,8 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
       const promises = Array.from({ length: requestCount }, (_, i) =>
         client.call({
           model: testConfig.testModel,
-          messages: [{ role: 'user' as const, content: `Concurrency test ${i + 1}` }],
-          requestTimeout: 60000,
+          messages: [{ role: 'user' as const, content: `Test ${i + 1}` }],
+          requestTimeout: 90000, // Higher timeout for concurrent tests
         })
       );
 
@@ -83,7 +86,7 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
       // This is a rough check, as network latency varies
       expect(totalTime).toBeGreaterThan(1000); // Should take some time due to limiting
     },
-    180000
+    240000
   );
 
   itif(testConfig.enabled)(
@@ -94,6 +97,7 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
         client.call({
           model: testConfig.testModel,
           messages: [{ role: 'user' as const, content: `Stats test ${i + 1}` }],
+          requestTimeout: 60000,
         })
       );
 
@@ -113,7 +117,7 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
 
       console.log('Final stats:', finalStats);
     },
-    60000
+    90000
   );
 
   itif(testConfig.enabled)(
@@ -124,16 +128,17 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
         defaultProviderConcurrency: 10,
         defaultKeyConcurrency: 5,
         defaultModelConcurrency: 3,
+        baseUrl: testConfig.baseUrl,
       });
 
       defaultClient.registerProvider({
-        name: 'openai',
+        name: testConfig.provider,
         // maxConcurrency not specified - should use default (10)
       });
 
       defaultClient.registerApiKey({
         key: testConfig.apiKey,
-        provider: 'openai',
+        provider: testConfig.provider,
         // maxConcurrency not specified - should use default (5)
         models: [
           {
@@ -147,11 +152,12 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
       const response = await defaultClient.call({
         model: testConfig.testModel,
         messages: [{ role: 'user' as const, content: 'Hello with defaults' }],
+        requestTimeout: 60000,
       });
 
       expect(response.content).toBeDefined();
       console.log('Default concurrency config works');
     },
-    60000
+    90000
   );
 });

@@ -8,23 +8,26 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { LLMClient } from '../../src/client';
-import { testConfig, itif } from './config';
+import { testConfig, itif, logProviderInfo } from './config';
 
 describe('Integration: Monitoring and Debugging (User Story 7)', () => {
   let client: LLMClient;
 
   beforeAll(() => {
-    client = new LLMClient();
+    logProviderInfo();
+    client = new LLMClient({
+      baseUrl: testConfig.baseUrl,
+    });
 
     if (testConfig.enabled) {
       client.registerProvider({
-        name: 'openai',
+        name: testConfig.provider,
         maxConcurrency: 5,
       });
 
       client.registerApiKey({
         key: testConfig.apiKey,
-        provider: 'openai',
+        provider: testConfig.provider,
         maxConcurrency: 3,
         models: [{ modelId: testConfig.testModel, maxConcurrency: 2 }],
       });
@@ -41,7 +44,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
       expect(initialStats.queueSize).toBe(0);
       expect(initialStats.activeRequests).toBe(0);
       expect(initialStats.keyHealth.size).toBeGreaterThan(0);
-      expect(initialStats.providerActiveCounts.has('openai')).toBe(true);
+      expect(initialStats.providerActiveCounts.has(testConfig.provider)).toBe(true);
 
       console.log('Initial stats:', {
         queueSize: initialStats.queueSize,
@@ -53,6 +56,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
       const requestPromise = client.call({
         model: testConfig.testModel,
         messages: [{ role: 'user' as const, content: 'Stats test' }],
+        requestTimeout: 60000,
       });
 
       // Check stats during execution (may or may not catch active state)
@@ -74,7 +78,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
         console.log(`Key ${key.slice(0, 8)}...: ${health.success} success`);
       }
     },
-    60000
+    90000
   );
 
   itif(testConfig.enabled)(
@@ -99,6 +103,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
         model: testConfig.testModel,
         messages: [{ role: 'user' as const, content: 'Lifecycle test' }],
         requestId: customRequestId,
+        requestTimeout: 60000,
       });
 
       // Then: Should see complete lifecycle
@@ -117,7 +122,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
       console.log('Request lifecycle:', lifecycle.join(' -> '));
       console.log(`Duration: ${completedEvent?.duration}ms`);
     },
-    60000
+    90000
   );
 
   itif(testConfig.enabled)(
@@ -130,6 +135,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
         await client.call({
           model: testConfig.testModel,
           messages: [{ role: 'user' as const, content: `Health check ${i}` }],
+          requestTimeout: 60000,
         });
       }
 
@@ -145,7 +151,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
 
       expect(totalSuccess).toBeGreaterThanOrEqual(requestCount);
     },
-    60000
+    120000
   );
 
   itif(testConfig.enabled)(
@@ -155,13 +161,13 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
       const stats1 = client.getStats();
 
       // Then: Provider should be registered
-      expect(stats1.providerActiveCounts.has('openai')).toBe(true);
+      expect(stats1.providerActiveCounts.has(testConfig.provider)).toBe(true);
       expect(stats1.keyActiveCounts.size).toBeGreaterThan(0);
 
       console.log('Provider counts:', Object.fromEntries(stats1.providerActiveCounts));
       console.log('Key counts:', Object.fromEntries(stats1.keyActiveCounts));
     },
-    30000
+    60000
   );
 
   itif(testConfig.enabled)(
@@ -171,6 +177,7 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
       await client.call({
         model: testConfig.testModel,
         messages: [{ role: 'user' as const, content: 'Before clear' }],
+        requestTimeout: 60000,
       });
 
       const statsBefore = client.getStats();
@@ -186,6 +193,6 @@ describe('Integration: Monitoring and Debugging (User Story 7)', () => {
 
       console.log('Clear() successfully reset all state');
     },
-    30000
+    60000
   );
 });
