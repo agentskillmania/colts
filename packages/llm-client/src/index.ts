@@ -68,4 +68,5 @@ export type {
   TokenStats,
   ClientStats,
   SchedulerEvent,
+  LLMClientConfig,
 } from './types.js';

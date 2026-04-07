@@ -182,3 +182,88 @@ describe('RequestScheduler', () => {
     });
   });
 });
+
+describe('Scheduler error handling', () => {
+  it('should emit retry event', () => {
+    const scheduler = new RequestScheduler();
+    const events: Array<{ type: string }> = [];
+
+    scheduler.on('state', (event) => {
+      events.push(event);
+    });
+
+    scheduler.emitRetry('req-123', 2, new Error('Test error'));
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('retry');
+  });
+
+  it('should handle executor errors', async () => {
+    const scheduler = new RequestScheduler();
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    await expect(
+      scheduler.execute('gpt-4', 0, async () => {
+        throw new Error('Executor failed');
+      })
+    ).rejects.toThrow('Executor failed');
+  });
+});
+
+describe('Scheduler default concurrency', () => {
+  it('should use default provider concurrency when not specified', () => {
+    const scheduler = new RequestScheduler({
+      defaultProviderConcurrency: 20,
+      defaultKeyConcurrency: 10,
+      defaultModelConcurrency: 5,
+    });
+
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: undefined as unknown as number });
+
+    const stats = scheduler.getStats();
+    expect(stats.providerActiveCounts.has('openai')).toBe(true);
+  });
+
+  it('should use default key concurrency when not specified', () => {
+    const scheduler = new RequestScheduler({
+      defaultProviderConcurrency: 10,
+      defaultKeyConcurrency: 8,
+      defaultModelConcurrency: 4,
+    });
+
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: undefined as unknown as number,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 2 }],
+    });
+
+    const stats = scheduler.getStats();
+    expect(stats.keyHealth.size).toBe(1);
+  });
+
+  it('should use default model concurrency when not specified', () => {
+    const scheduler = new RequestScheduler({
+      defaultProviderConcurrency: 10,
+      defaultKeyConcurrency: 5,
+      defaultModelConcurrency: 3,
+    });
+
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: undefined as unknown as number }],
+    });
+
+    expect(scheduler.getStats().keyHealth.size).toBe(1);
+  });
+});

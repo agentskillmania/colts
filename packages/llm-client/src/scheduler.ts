@@ -2,7 +2,7 @@
  * Request scheduler with three-level semaphore and priority queue
  */
 
-import { EventEmitter } from 'node:events';
+import { EventEmitter } from 'eventemitter3';
 import PQueue from 'p-queue';
 import type {
   ProviderConfig,
@@ -10,6 +10,7 @@ import type {
   SchedulerEvent,
   TrackedProvider,
   TrackedApiKey,
+  LLMClientConfig,
 } from './types.js';
 
 /**
@@ -81,31 +82,41 @@ export class RequestScheduler extends EventEmitter {
   private keyIndex = 0;
   /** Request ID counter */
   private requestIdCounter = 0;
+  /** Default concurrency configuration */
+  private defaultConfig: Required<LLMClientConfig>;
 
-  constructor() {
+  constructor(config?: Required<LLMClientConfig>) {
     super();
+    this.defaultConfig = config ?? {
+      defaultProviderConcurrency: 10,
+      defaultKeyConcurrency: 5,
+      defaultModelConcurrency: 3,
+    };
     this.queue = new PQueue({
       concurrency: Infinity, // We handle concurrency via semaphores
     });
   }
 
   /**
-   * Register a provider
+   * Register a provider with optional default concurrency
    */
   registerProvider(config: ProviderConfig): void {
     if (this.providers.has(config.name)) {
       throw new Error(`Provider ${config.name} already registered`);
     }
 
+    const maxConcurrency = config.maxConcurrency ?? this.defaultConfig.defaultProviderConcurrency;
+
     this.providers.set(config.name, {
       ...config,
+      maxConcurrency,
       activeCount: 0,
     });
-    this.providerSemaphores.set(config.name, new Semaphore(config.maxConcurrency));
+    this.providerSemaphores.set(config.name, new Semaphore(maxConcurrency));
   }
 
   /**
-   * Register an API key
+   * Register an API key with optional default concurrency
    */
   registerApiKey(config: ApiKeyConfig): void {
     const key = config.key;
@@ -117,18 +128,28 @@ export class RequestScheduler extends EventEmitter {
       throw new Error(`Provider ${config.provider} not registered`);
     }
 
+    const keyConcurrency = config.maxConcurrency ?? this.defaultConfig.defaultKeyConcurrency;
+
+    // Apply default model concurrency if not specified
+    const models = config.models.map((m) => ({
+      ...m,
+      maxConcurrency: m.maxConcurrency ?? this.defaultConfig.defaultModelConcurrency,
+    }));
+
     this.apiKeys.set(key, {
       ...config,
+      maxConcurrency: keyConcurrency,
+      models,
       activeCount: 0,
       successCount: 0,
       failCount: 0,
       lastUsed: Date.now(),
     });
 
-    this.keySemaphores.set(key, new Semaphore(config.maxConcurrency));
+    this.keySemaphores.set(key, new Semaphore(keyConcurrency));
 
     // Create model semaphores
-    for (const model of config.models) {
+    for (const model of models) {
       const modelKey = `${key}:${model.modelId}`;
       this.modelSemaphores.set(modelKey, new Semaphore(model.maxConcurrency));
     }

@@ -5,6 +5,18 @@
 import type { Message, Tool } from '@mariozechner/pi-ai';
 
 /**
+ * Global concurrency configuration for LLMClient
+ */
+export interface LLMClientConfig {
+  /** Default maximum concurrent requests for providers (default: 10) */
+  defaultProviderConcurrency?: number;
+  /** Default maximum concurrent requests for API keys (default: 5) */
+  defaultKeyConcurrency?: number;
+  /** Default maximum concurrent requests for models (default: 3) */
+  defaultModelConcurrency?: number;
+}
+
+/**
  * Provider configuration
  */
 export interface ProviderConfig {

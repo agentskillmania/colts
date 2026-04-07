@@ -2,7 +2,7 @@
  * Main LLM Client class
  */
 
-import { EventEmitter } from 'node:events';
+import { EventEmitter } from 'eventemitter3';
 import pTimeout from 'p-timeout';
 import { RequestScheduler } from './scheduler.js';
 import { PiAiAdapter } from './adapter.js';
@@ -14,6 +14,7 @@ import type {
   StreamEvent,
   ClientStats,
   SchedulerEvent,
+  LLMClientConfig,
 } from './types.js';
 
 /**
@@ -23,10 +24,16 @@ import type {
 export class LLMClient extends EventEmitter {
   private scheduler: RequestScheduler;
   private adapter: PiAiAdapter;
+  private config: Required<LLMClientConfig>;
 
-  constructor() {
+  constructor(config?: LLMClientConfig) {
     super();
-    this.scheduler = new RequestScheduler();
+    this.config = {
+      defaultProviderConcurrency: config?.defaultProviderConcurrency ?? 10,
+      defaultKeyConcurrency: config?.defaultKeyConcurrency ?? 5,
+      defaultModelConcurrency: config?.defaultModelConcurrency ?? 3,
+    };
+    this.scheduler = new RequestScheduler(this.config);
     this.adapter = new PiAiAdapter();
 
     // Forward scheduler events
