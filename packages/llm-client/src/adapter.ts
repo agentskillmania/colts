@@ -1,5 +1,11 @@
 /**
  * Pi-ai adapter with retry logic and token tracking
+ *
+ * @module
+ * @remarks
+ * This module provides an adapter layer between the llm-client and the
+ * pi-ai library, handling model creation, retry logic, timeout management,
+ * and event transformation.
  */
 
 import {
@@ -17,7 +23,21 @@ import pTimeout from 'p-timeout';
 import type { CallOptions, LLMResponse, StreamEvent, TokenStats, RetryOptions } from './types.js';
 
 /**
- * Check if error is retryable
+ * Check if an error is retryable.
+ *
+ * @param error - Error to check
+ * @returns True if the error should trigger a retry
+ *
+ * @remarks
+ * Retryable errors include:
+ * - Rate limit errors (HTTP 429)
+ * - Server errors (HTTP 5xx)
+ * - Network errors (timeout, connection refused, reset, etc.)
+ *
+ * Client errors (4xx other than 429) are not retryable as they
+ * indicate a problem with the request that won't be fixed by retrying.
+ *
+ * @internal
  */
 function isRetryableError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -38,9 +58,57 @@ function isRetryableError(error: unknown): boolean {
 }
 
 /**
- * Adapter for pi-ai with retry and token tracking
+ * Adapter for the pi-ai library with retry and token tracking.
+ *
+ * @remarks
+ * The PiAiAdapter provides a bridge between the llm-client's abstract
+ * request model and the pi-ai library's specific APIs. It handles:
+ *
+ * **Model Management**:
+ * - Creates Model instances from model identifiers
+ * - Falls back to custom model configuration for unknown models
+ *
+ * **Retry Logic**:
+ * - Configurable retry with exponential backoff
+ * - Selective retry based on error type
+ * - Callback for retry events
+ *
+ * **Timeout Handling**:
+ * - Request-level timeout support
+ * - Proper cleanup on timeout
+ *
+ * **Event Transformation**:
+ * - Maps pi-ai events to llm-client StreamEvent format
+ * - Accumulates content during streaming
+ * - Tracks token usage
+ *
+ * @example
+ * ```typescript
+ * const adapter = new PiAiAdapter();
+ *
+ * // Non-streaming request
+ * const response = await adapter.complete(
+ *   'gpt-4',
+ *   'sk-...',
+ *   {
+ *     messages: [{ role: 'user', content: 'Hello!' }],
+ *     retryOptions: { retries: 3 }
+ *   },
+ *   (attempt, error) => console.log(`Retry ${attempt}: ${error.message}`)
+ * );
+ *
+ * // Streaming request
+ * for await (const event of adapter.streamWithRetry('gpt-4', 'sk-...', options)) {
+ *   if (event.type === 'text') {
+ *     process.stdout.write(event.delta);
+ *   }
+ * }
+ * ```
+ *
+ * @public
  */
 export class PiAiAdapter {
+  /** Default retry options used when not specified in request. */
   private defaultRetryOptions: Required<RetryOptions> = {
     retries: 3,
     minTimeout: 1000,
@@ -49,7 +117,23 @@ export class PiAiAdapter {
   };
 
   /**
-   * Create a Model instance from config
+   * Create a Model instance for the pi-ai library.
+   *
+   * @param modelId - Model identifier (e.g., 'gpt-4', 'gpt-3.5-turbo')
+   * @returns Model instance configured for the identifier
+   *
+   * @remarks
+   * First attempts to retrieve the model from pi-ai's built-in registry.
+   * If not found, creates a custom Model configuration with reasonable defaults
+   * for OpenAI-compatible APIs.
+   *
+   * The fallback configuration assumes:
+   * - OpenAI-compatible API
+   * - 128k context window
+   * - 4096 max output tokens
+   * - Text input only
+   *
+   * @internal
    */
   private createModel(modelId: string): Model<string> {
     // Try to get model from pi-ai registry
@@ -74,7 +158,12 @@ export class PiAiAdapter {
   }
 
   /**
-   * Build context from messages
+   * Build a Context instance from messages.
+   *
+   * @param messages - Array of conversation messages
+   * @returns Context object for pi-ai
+   *
+   * @internal
    */
   private buildContext(messages: CallOptions['messages']): Context {
     return {
@@ -83,7 +172,12 @@ export class PiAiAdapter {
   }
 
   /**
-   * Merge retry options
+   * Merge request retry options with defaults.
+   *
+   * @param options - Optional retry options from the request
+   * @returns Complete retry options with defaults filled in
+   *
+   * @internal
    */
   private mergeRetryOptions(options?: RetryOptions): Required<RetryOptions> {
     return {
@@ -93,7 +187,22 @@ export class PiAiAdapter {
   }
 
   /**
-   * Execute with retry logic
+   * Execute an operation with retry logic.
+   *
+   * @param operation - Async function to execute
+   * @param retryOptions - Retry configuration
+   * @param onRetry - Optional callback invoked on each retry attempt
+   * @returns Promise resolving to the operation result
+   * @throws Last error if all retries are exhausted
+   *
+   * @remarks
+   * Uses p-retry with exponential backoff. Only retryable errors
+   * (rate limits, server errors, network issues) trigger retries.
+   *
+   * The onRetry callback receives the attempt number (1-indexed) and
+   * the error that triggered the retry.
+   *
+   * @internal
    */
   private async withRetry<T>(
     operation: () => Promise<T>,
@@ -116,7 +225,12 @@ export class PiAiAdapter {
   }
 
   /**
-   * Convert Usage to TokenStats
+   * Convert pi-ai Usage to TokenStats.
+   *
+   * @param usage - Usage object from pi-ai, or undefined
+   * @returns TokenStats with input and output counts
+   *
+   * @internal
    */
   private usageToTokenStats(usage: Usage | undefined): TokenStats {
     if (!usage) {
@@ -129,7 +243,45 @@ export class PiAiAdapter {
   }
 
   /**
-   * Non-streaming completion
+   * Execute a non-streaming completion request.
+   *
+   * @param modelId - Model identifier to use
+   * @param apiKey - API key for authentication
+   * @param options - Request options including messages, tools, timeouts
+   * @param onRetry - Optional callback for retry events
+   * @returns Promise resolving to the complete LLM response
+   * @throws Error on request failure after all retries
+   *
+   * @remarks
+   * This method performs a complete (non-streaming) request to the LLM.
+   * It handles:
+   * - Model creation and configuration
+   * - Retry with exponential backoff
+   * - Optional request timeout
+   * - Response parsing and content extraction
+   * - Token usage tracking
+   *
+   * Content extraction handles multiple content types:
+   * - Text: Concatenated into the main content field
+   * - Thinking: Captured separately if thinkingEnabled
+   * - Tool calls: Parsed into structured tool call objects
+   *
+   * @example
+   * ```typescript
+   * const response = await adapter.complete(
+   *   'gpt-4',
+   *   'sk-...',
+   *   {
+   *     messages: [{ role: 'user', content: 'Hello!' }],
+   *     requestTimeout: 30000,
+   *     retryOptions: { retries: 3 }
+   *   },
+   *   (attempt, error) => console.log(`Retry ${attempt}`)
+   * );
+   *
+   * console.log(response.content);
+   * console.log(response.tokens);
+   * ```
    */
   async complete(
     modelId: string,
@@ -191,7 +343,21 @@ export class PiAiAdapter {
   }
 
   /**
-   * Map pi-ai event to our StreamEvent format
+   * Map a pi-ai event to the llm-client StreamEvent format.
+   *
+   * @param event - Event from pi-ai stream
+   * @returns StreamEvent in llm-client format
+   *
+   * @remarks
+   * Event type mapping:
+   * - `text_delta` → `text` with delta
+   * - `thinking_delta` → `thinking` with delta
+   * - `toolcall_end` → `tool_call` with tool call details
+   * - `done` → `done` with final token counts
+   * - `error` → `error` with error message
+   * - Unknown types → `error` with unknown type message
+   *
+   * @internal
    */
   private mapEvent(event: AssistantMessageEvent): StreamEvent {
     switch (event.type) {
@@ -240,7 +406,44 @@ export class PiAiAdapter {
   }
 
   /**
-   * Streaming completion with proper retry and event accumulation
+   * Execute a streaming completion request with retry logic.
+   *
+   * @param modelId - Model identifier to use
+   * @param apiKey - API key for authentication
+   * @param options - Request options including messages, tools, timeouts
+   * @param onRetry - Optional callback for retry events
+   * @returns Async iterable yielding stream events
+   *
+   * @remarks
+   * This method provides real-time streaming of LLM responses. Due to the
+   * nature of streaming, the retry logic works differently than non-streaming:
+   *
+   * 1. The entire stream is consumed internally
+   * 2. Content is accumulated during streaming
+   * 3. On retry, the stream restarts from the beginning
+   * 4. The final event includes accumulated content and token counts
+   *
+   * **Note**: If a stream fails partway through and retries, the client
+   * will receive the complete content from the successful attempt, not
+   * a partial continuation.
+   *
+   * Yields a single `done` event on successful completion, or an `error`
+   * event if the stream fails after all retries.
+   *
+   * @example
+   * ```typescript
+   * for await (const event of adapter.streamWithRetry('gpt-4', 'sk-...', options)) {
+   *   switch (event.type) {
+   *     case 'done':
+   *       console.log('Content:', event.accumulatedContent);
+   *       console.log('Tokens:', event.roundTotalTokens);
+   *       break;
+   *     case 'error':
+   *       console.error('Stream failed:', event.error);
+   *       break;
+   *   }
+   * }
+   * ```
    */
   async *streamWithRetry(
     modelId: string,

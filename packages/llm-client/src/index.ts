@@ -4,7 +4,31 @@
  * A unified LLM client with multi-provider support, concurrency control,
  * priority queuing, and comprehensive token tracking.
  *
- * @example
+ * @remarks
+ * This package provides a robust, production-ready client for interacting
+ * with various Large Language Model (LLM) providers through a unified interface.
+ *
+ * ## Features
+ *
+ * - **Multi-Provider Support**: Works with OpenAI, Anthropic, and other providers
+ *   through the pi-ai library
+ *
+ * - **Three-Level Concurrency Control**: Prevents cascading failures with
+ *   independent limits at Provider → API Key → Model levels
+ *
+ * - **Priority Queue**: Higher priority requests are processed first,
+ *   enabling latency-sensitive operations
+ *
+ * - **Automatic Retries**: Configurable exponential backoff for transient failures
+ *
+ * - **Streaming Support**: Real-time token-by-token responses with content accumulation
+ *
+ * - **Observability**: Rich events and statistics for monitoring and debugging
+ *
+ * - **Request Tracing**: Optional external request IDs for distributed tracing
+ *
+ * ## Basic Usage
+ *
  * ```typescript
  * import { LLMClient } from '@agentskillmania/llm-client';
  *
@@ -35,8 +59,11 @@
  *
  * console.log(response.content);
  * console.log(response.tokens);
+ * ```
  *
- * // Streaming call
+ * ## Streaming Usage
+ *
+ * ```typescript
  * for await (const event of client.stream({
  *   model: 'gpt-4',
  *   messages: [{ role: 'user', content: 'Hello!' }],
@@ -50,6 +77,21 @@
  *   }
  * }
  * ```
+ *
+ * ## Observability
+ *
+ * ```typescript
+ * // Listen to state events
+ * client.on('state', (event) => {
+ *   console.log(`[${event.requestId}] ${event.type}`);
+ * });
+ *
+ * // Get current statistics
+ * const stats = client.getStats();
+ * console.log(`Queue: ${stats.queueSize}, Active: ${stats.activeRequests}`);
+ * ```
+ *
+ * @packageDocumentation
  */
 
 export { LLMClient } from './client.js';
@@ -58,15 +100,26 @@ export { PiAiAdapter } from './adapter.js';
 
 // Re-export all types
 export type {
-  ProviderConfig,
-  ApiKeyConfig,
-  ModelConstraint,
-  CallOptions,
-  RetryOptions,
-  LLMResponse,
-  StreamEvent,
-  TokenStats,
-  ClientStats,
-  SchedulerEvent,
+  /** Configuration for LLMClient default concurrency settings. */
   LLMClientConfig,
+  /** Configuration for LLM providers. */
+  ProviderConfig,
+  /** Configuration for API keys with model constraints. */
+  ApiKeyConfig,
+  /** Concurrency constraint for a specific model. */
+  ModelConstraint,
+  /** Options for making LLM requests. */
+  CallOptions,
+  /** Options for configuring retry behavior. */
+  RetryOptions,
+  /** Response from non-streaming LLM calls. */
+  LLMResponse,
+  /** Events emitted during streaming responses. */
+  StreamEvent,
+  /** Token usage statistics. */
+  TokenStats,
+  /** Client statistics for monitoring. */
+  ClientStats,
+  /** Scheduler lifecycle events. */
+  SchedulerEvent,
 } from './types.js';
