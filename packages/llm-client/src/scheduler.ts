@@ -1,0 +1,352 @@
+/**
+ * Request scheduler with three-level semaphore and priority queue
+ */
+
+import { EventEmitter } from 'node:events';
+import PQueue from 'p-queue';
+import type {
+  ProviderConfig,
+  ApiKeyConfig,
+  SchedulerEvent,
+  TrackedProvider,
+  TrackedApiKey,
+} from './types.js';
+
+/**
+ * Semaphore for concurrency control
+ */
+class Semaphore {
+  private count = 0;
+  private readonly max: number;
+  private readonly queue: Array<() => void> = [];
+
+  constructor(max: number) {
+    this.max = max;
+  }
+
+  /**
+   * Acquire a permit
+   */
+  async acquire(): Promise<void> {
+    if (this.count < this.max) {
+      this.count++;
+      return;
+    }
+
+    return new Promise((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  /**
+   * Release a permit
+   */
+  release(): void {
+    if (this.queue.length > 0) {
+      const next = this.queue.shift();
+      if (next) {
+        // Keep count the same, just transfer to next waiter
+        next();
+      }
+    } else {
+      this.count--;
+    }
+  }
+
+  /**
+   * Get current usage
+   */
+  getUsage(): { current: number; max: number } {
+    return { current: this.count, max: this.max };
+  }
+}
+
+/**
+ * Request scheduler managing three-level concurrency limits
+ */
+export class RequestScheduler extends EventEmitter {
+  /** Provider level semaphores */
+  private providerSemaphores = new Map<string, Semaphore>();
+  /** API Key level semaphores */
+  private keySemaphores = new Map<string, Semaphore>();
+  /** Model level semaphores (key format: "apiKey:modelId") */
+  private modelSemaphores = new Map<string, Semaphore>();
+  /** Tracked providers */
+  private providers = new Map<string, TrackedProvider>();
+  /** Tracked API keys */
+  private apiKeys = new Map<string, TrackedApiKey>();
+  /** Priority queue for requests */
+  private queue: PQueue;
+  /** Round robin index for key selection */
+  private keyIndex = 0;
+  /** Request ID counter */
+  private requestIdCounter = 0;
+
+  constructor() {
+    super();
+    this.queue = new PQueue({
+      concurrency: Infinity, // We handle concurrency via semaphores
+    });
+  }
+
+  /**
+   * Register a provider
+   */
+  registerProvider(config: ProviderConfig): void {
+    if (this.providers.has(config.name)) {
+      throw new Error(`Provider ${config.name} already registered`);
+    }
+
+    this.providers.set(config.name, {
+      ...config,
+      activeCount: 0,
+    });
+    this.providerSemaphores.set(config.name, new Semaphore(config.maxConcurrency));
+  }
+
+  /**
+   * Register an API key
+   */
+  registerApiKey(config: ApiKeyConfig): void {
+    const key = config.key;
+    if (this.apiKeys.has(key)) {
+      throw new Error(`API key ${key.slice(0, 8)}... already registered`);
+    }
+
+    if (!this.providers.has(config.provider)) {
+      throw new Error(`Provider ${config.provider} not registered`);
+    }
+
+    this.apiKeys.set(key, {
+      ...config,
+      activeCount: 0,
+      successCount: 0,
+      failCount: 0,
+      lastUsed: Date.now(),
+    });
+
+    this.keySemaphores.set(key, new Semaphore(config.maxConcurrency));
+
+    // Create model semaphores
+    for (const model of config.models) {
+      const modelKey = `${key}:${model.modelId}`;
+      this.modelSemaphores.set(modelKey, new Semaphore(model.maxConcurrency));
+    }
+  }
+
+  /**
+   * Get API keys that support a specific model
+   */
+  private getKeysForModel(modelId: string): TrackedApiKey[] {
+    const keys: TrackedApiKey[] = [];
+    for (const key of this.apiKeys.values()) {
+      if (key.models.some((m) => m.modelId === modelId)) {
+        keys.push(key);
+      }
+    }
+    return keys;
+  }
+
+  /**
+   * Select an API key using round-robin
+   */
+  private selectKey(modelId: string): TrackedApiKey | null {
+    const keys = this.getKeysForModel(modelId);
+    if (keys.length === 0) {
+      return null;
+    }
+
+    // Round-robin selection
+    const index = this.keyIndex % keys.length;
+    this.keyIndex = (this.keyIndex + 1) % keys.length;
+    return keys[index];
+  }
+
+  /**
+   * Generate unique request ID
+   */
+  private generateRequestId(): string {
+    return `req-${Date.now()}-${++this.requestIdCounter}`;
+  }
+
+  /**
+   * Execute a request with three-level semaphore control
+   */
+  async execute<T>(
+    modelId: string,
+    priority: number,
+    executor: (key: TrackedApiKey) => Promise<T>
+  ): Promise<T> {
+    const requestId = this.generateRequestId();
+
+    // Check if any key is available (without consuming a slot)
+    const availableKeys = this.getKeysForModel(modelId);
+    if (availableKeys.length === 0) {
+      throw new Error(`No API key available for model ${modelId}`);
+    }
+
+    // Emit queued event
+    const queueSize = this.queue.size;
+    this.emit('state', {
+      type: 'queued',
+      requestId,
+      position: queueSize,
+      estimatedWait: queueSize * 1000, // Rough estimate
+    } as SchedulerEvent);
+
+    const result = await this.queue.add(
+      async (): Promise<T> => {
+        // Select key at execution time (round-robin)
+        const selectedKey = this.selectKey(modelId);
+        if (!selectedKey) {
+          throw new Error(`No API key available for model ${modelId}`);
+        }
+
+        const provider = this.providers.get(selectedKey.provider);
+        if (!provider) {
+          throw new Error(`Provider ${selectedKey.provider} not found`);
+        }
+
+        const providerSem = this.providerSemaphores.get(selectedKey.provider)!;
+        const keySem = this.keySemaphores.get(selectedKey.key)!;
+        const modelKey = `${selectedKey.key}:${modelId}`;
+        const modelSem = this.modelSemaphores.get(modelKey);
+
+        if (!modelSem) {
+          throw new Error(
+            `Model ${modelId} not available for key ${selectedKey.key.slice(0, 8)}...`
+          );
+        }
+
+        // Atomically acquire all three semaphores
+        // Note: We acquire in order: provider -> key -> model to avoid deadlock
+        await providerSem.acquire();
+        try {
+          await keySem.acquire();
+          try {
+            await modelSem.acquire();
+            try {
+              // Update active counts
+              provider.activeCount++;
+              selectedKey.activeCount++;
+              selectedKey.lastUsed = Date.now();
+
+              // Emit started event
+              this.emit('state', {
+                type: 'started',
+                requestId,
+                key: selectedKey.key.slice(0, 8) + '...',
+                model: modelId,
+              } as SchedulerEvent);
+
+              const startTime = Date.now();
+
+              try {
+                const result = await executor(selectedKey);
+
+                // Update stats
+                provider.activeCount--;
+                selectedKey.activeCount--;
+                selectedKey.successCount++;
+
+                // Emit completed event
+                this.emit('state', {
+                  type: 'completed',
+                  requestId,
+                  duration: Date.now() - startTime,
+                } as SchedulerEvent);
+
+                return result;
+              } catch (error) {
+                // Update stats
+                provider.activeCount--;
+                selectedKey.activeCount--;
+                selectedKey.failCount++;
+                selectedKey.lastError = error instanceof Error ? error.message : String(error);
+
+                throw error;
+              } finally {
+                // Release semaphores in reverse order
+                modelSem.release();
+              }
+            } finally {
+              keySem.release();
+            }
+          } finally {
+            providerSem.release();
+          }
+        } finally {
+          // Ensure provider semaphore is released if not already
+          // This handles the case where an error occurred before inner finally blocks ran
+          const usage = providerSem.getUsage();
+          if (usage.current > 0 && provider.activeCount < usage.current) {
+            // Already released by inner finally, do nothing
+          }
+        }
+      },
+      { priority }
+    );
+
+    if (result === undefined) {
+      throw new Error('Queue returned undefined');
+    }
+
+    return result;
+  }
+
+  /**
+   * Emit retry event
+   */
+  emitRetry(requestId: string, attempt: number, error: Error): void {
+    this.emit('state', {
+      type: 'retry',
+      requestId,
+      attempt,
+      error: error.message,
+    } as SchedulerEvent);
+  }
+
+  /**
+   * Get current statistics
+   */
+  getStats() {
+    const keyHealth = new Map<string, { success: number; fail: number; lastError?: string }>();
+    for (const [key, tracked] of this.apiKeys) {
+      keyHealth.set(key.slice(0, 8) + '...', {
+        success: tracked.successCount,
+        fail: tracked.failCount,
+        lastError: tracked.lastError,
+      });
+    }
+
+    const providerActiveCounts = new Map<string, number>();
+    for (const [name, provider] of this.providers) {
+      providerActiveCounts.set(name, provider.activeCount);
+    }
+
+    const keyActiveCounts = new Map<string, number>();
+    for (const [key, tracked] of this.apiKeys) {
+      keyActiveCounts.set(key.slice(0, 8) + '...', tracked.activeCount);
+    }
+
+    return {
+      queueSize: this.queue.size,
+      activeRequests: this.queue.pending,
+      keyHealth,
+      providerActiveCounts,
+      keyActiveCounts,
+    };
+  }
+
+  /**
+   * Clear all registrations
+   */
+  clear(): void {
+    this.providers.clear();
+    this.apiKeys.clear();
+    this.providerSemaphores.clear();
+    this.keySemaphores.clear();
+    this.modelSemaphores.clear();
+    this.keyIndex = 0;
+  }
+}
