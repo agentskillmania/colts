@@ -196,9 +196,10 @@ export class RequestScheduler extends EventEmitter {
   async execute<T>(
     modelId: string,
     priority: number,
-    executor: (key: TrackedApiKey) => Promise<T>
+    executor: (key: TrackedApiKey) => Promise<T>,
+    requestId?: string
   ): Promise<T> {
-    const requestId = this.generateRequestId();
+    const finalRequestId = requestId ?? this.generateRequestId();
 
     // Check if any key is available (without consuming a slot)
     const availableKeys = this.getKeysForModel(modelId);
@@ -210,7 +211,7 @@ export class RequestScheduler extends EventEmitter {
     const queueSize = this.queue.size;
     this.emit('state', {
       type: 'queued',
-      requestId,
+      requestId: finalRequestId,
       position: queueSize,
       estimatedWait: queueSize * 1000, // Rough estimate
     } as SchedulerEvent);
@@ -255,7 +256,7 @@ export class RequestScheduler extends EventEmitter {
               // Emit started event
               this.emit('state', {
                 type: 'started',
-                requestId,
+                requestId: finalRequestId,
                 key: selectedKey.key.slice(0, 8) + '...',
                 model: modelId,
               } as SchedulerEvent);
@@ -273,7 +274,7 @@ export class RequestScheduler extends EventEmitter {
                 // Emit completed event
                 this.emit('state', {
                   type: 'completed',
-                  requestId,
+                  requestId: finalRequestId,
                   duration: Date.now() - startTime,
                 } as SchedulerEvent);
 

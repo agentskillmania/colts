@@ -60,18 +60,18 @@ export class LLMClient extends EventEmitter {
    * Call the LLM (non-streaming)
    */
   async call(options: CallOptions): Promise<LLMResponse> {
-    const { model, priority = 0, totalTimeout } = options;
+    const { model, priority = 0, totalTimeout, requestId } = options;
 
     const execute = async (key: { key: string }): Promise<LLMResponse> => {
       // Emit retry through scheduler
       const onRetry = (attempt: number, error: Error) => {
-        this.scheduler.emitRetry('unknown', attempt, error);
+        this.scheduler.emitRetry(requestId ?? 'unknown', attempt, error);
       };
 
       return this.adapter.complete(model, key.key, options, onRetry);
     };
 
-    const promise = this.scheduler.execute(model, priority, execute);
+    const promise = this.scheduler.execute(model, priority, execute, requestId);
 
     if (totalTimeout) {
       return pTimeout(promise, {
@@ -87,7 +87,7 @@ export class LLMClient extends EventEmitter {
    * Call the LLM (streaming)
    */
   async *stream(options: CallOptions): AsyncIterable<StreamEvent> {
-    const { model, priority = 0, totalTimeout } = options;
+    const { model, priority = 0, totalTimeout, requestId } = options;
 
     // Create a promise that resolves to the stream
     const streamPromise = this.scheduler.execute(
@@ -95,12 +95,13 @@ export class LLMClient extends EventEmitter {
       priority,
       async (key: { key: string }): Promise<AsyncIterable<StreamEvent>> => {
         const onRetry = (attempt: number, error: Error) => {
-          this.scheduler.emitRetry('unknown', attempt, error);
+          this.scheduler.emitRetry(requestId ?? 'unknown', attempt, error);
         };
 
         // Return the async iterable directly
         return this.adapter.streamWithRetry(model, key.key, options, onRetry);
-      }
+      },
+      requestId
     );
 
     // Apply total timeout

@@ -207,3 +207,94 @@ describe('LLMClient priority and retry', () => {
     expect(mockOn).toHaveBeenCalled();
   });
 });
+
+describe('LLMClient requestId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should use custom requestId when provided', async () => {
+    const client = new LLMClient();
+    const customRequestId = 'my-custom-trace-id-123';
+    mockExecute.mockResolvedValue({
+      content: 'Hi',
+      tokens: { input: 1, output: 1 },
+      stopReason: 'stop',
+    });
+
+    client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    client.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    await client.call({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hi' }],
+      requestId: customRequestId,
+    });
+
+    expect(mockExecute).toHaveBeenCalled();
+    const callArgs = mockExecute.mock.calls[0];
+    expect(callArgs[3]).toBe(customRequestId);
+  });
+
+  it('should auto-generate requestId when not provided', async () => {
+    const client = new LLMClient();
+    mockExecute.mockResolvedValue({
+      content: 'Hi',
+      tokens: { input: 1, output: 1 },
+      stopReason: 'stop',
+    });
+
+    client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    client.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    await client.call({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(mockExecute).toHaveBeenCalled();
+    const callArgs = mockExecute.mock.calls[0];
+    expect(callArgs[3]).toBeUndefined();
+  });
+
+  it('should pass requestId to streaming calls', async () => {
+    const client = new LLMClient();
+    const customRequestId = 'stream-trace-456';
+    const mockStream = async function* () {
+      yield { type: 'text', delta: 'Hi' };
+      yield { type: 'done', tokens: { input: 1, output: 1 } };
+    };
+    mockExecute.mockResolvedValue(mockStream());
+
+    client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    client.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    const events: Array<{ type: string }> = [];
+    for await (const event of client.stream({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hi' }],
+      requestId: customRequestId,
+    })) {
+      events.push(event);
+    }
+
+    expect(mockExecute).toHaveBeenCalled();
+    const callArgs = mockExecute.mock.calls[0];
+    expect(callArgs[3]).toBe(customRequestId);
+  });
+});

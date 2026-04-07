@@ -88,6 +88,8 @@ export interface CallOptions {
   tools?: Tool[];
   /** Abort signal for cancellation */
   signal?: AbortSignal;
+  /** Optional external request ID for tracing (auto-generated if not provided) */
+  requestId?: string;
 }
 
 /**
