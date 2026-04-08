@@ -26,7 +26,7 @@ export type Phase =
   | { type: 'idle' }
   | { type: 'preparing'; messages: Message[] }
   | { type: 'calling-llm' }
-  | { type: 'streaming'; token: string }
+  | { type: 'streaming' }
   | { type: 'llm-response'; response: string }
   | { type: 'parsing' }
   | { type: 'parsed'; thought: string; action?: Action }

@@ -653,6 +653,71 @@ export class AgentRunner {
   }
 
   /**
+   * Stream LLM response during calling-llm phase.
+   *
+   * Shared between advanceStream() and stepStream() to avoid duplicate logic.
+   * Yields token events in real-time and stores the complete response in execState.
+   *
+   * @param state - Current agent state
+   * @param execState - Execution state
+   * @param registry - Tool registry
+   * @yields StreamEvent token events
+   *
+   * @private
+   */
+  private async *streamCallingLLM(
+    state: AgentState,
+    execState: ExecutionState,
+    registry?: ToolRegistry
+  ): AsyncGenerator<StreamEvent> {
+    const tools = this.getToolsForLLM(registry);
+    let accumulatedContent = '';
+    let responseContent = '';
+    let responseToolCalls:
+      | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+      | undefined;
+
+    for await (const event of this.options.llmClient.stream({
+      model: this.options.model,
+      messages: execState.preparedMessages ?? this.buildMessages(state),
+      tools,
+      priority: 0,
+      requestTimeout: this.options.requestTimeout,
+    })) {
+      if (event.type === 'text') {
+        accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
+        yield { type: 'token', token: event.delta ?? '' };
+      } else if (event.type === 'tool_call' && event.toolCall) {
+        responseToolCalls = responseToolCalls ?? [];
+        responseToolCalls.push({
+          id: event.toolCall.id,
+          name: event.toolCall.name,
+          arguments: event.toolCall.arguments,
+        });
+      } else if (event.type === 'done') {
+        responseContent = accumulatedContent;
+      }
+    }
+
+    // Store complete response
+    execState.llmResponse = responseContent;
+    if (responseToolCalls && responseToolCalls.length > 0) {
+      const toolCall = responseToolCalls[0];
+      execState.action = {
+        id: toolCall.id,
+        tool: toolCall.name,
+        arguments: toolCall.arguments,
+      };
+      execState.allActions = responseToolCalls.map((tc) => ({
+        id: tc.id,
+        tool: tc.name,
+        arguments: tc.arguments,
+      }));
+    }
+    execState.phase = { type: 'llm-response', response: responseContent };
+  }
+
+  /**
    * 🔬 Micro-step: Stream phase advancement
    *
    * @param state - Current agent state
@@ -670,58 +735,11 @@ export class AgentRunner {
 
     // Handle streaming LLM response
     if (fromPhase.type === 'calling-llm') {
-      yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming', token: '' } };
+      yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 
-      const tools = this.getToolsForLLM(registry);
-      let accumulatedContent = '';
-      let responseContent = '';
-      let responseToolCalls:
-        | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
-        | undefined;
+      yield* this.streamCallingLLM(state, execState, registry);
 
-      // Use single streaming call and capture complete response
-      for await (const event of this.options.llmClient.stream({
-        model: this.options.model,
-        messages: execState.preparedMessages ?? this.buildMessages(state),
-        tools,
-        priority: 0,
-        requestTimeout: this.options.requestTimeout,
-      })) {
-        if (event.type === 'text') {
-          accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
-          yield { type: 'token', token: event.delta ?? '' };
-        } else if (event.type === 'tool_call' && event.toolCall) {
-          // Capture tool call from stream
-          responseToolCalls = responseToolCalls ?? [];
-          responseToolCalls.push({
-            id: event.toolCall.id,
-            name: event.toolCall.name,
-            arguments: event.toolCall.arguments,
-          });
-        } else if (event.type === 'done') {
-          responseContent = accumulatedContent;
-        }
-      }
-
-      // Store the complete response
-      execState.llmResponse = responseContent;
-      if (responseToolCalls && responseToolCalls.length > 0) {
-        const toolCall = responseToolCalls[0];
-        execState.action = {
-          id: toolCall.id,
-          tool: toolCall.name,
-          arguments: toolCall.arguments,
-        };
-        execState.allActions = responseToolCalls.map((tc) => ({
-          id: tc.id,
-          tool: tc.name,
-          arguments: tc.arguments,
-        }));
-      }
-      execState.phase = { type: 'llm-response', response: responseContent };
-
-      yield { type: 'phase-change', from: { type: 'streaming', token: '' }, to: execState.phase };
-      // State not updated during streaming; llm-response is an observation phase
+      yield { type: 'phase-change', from: { type: 'streaming' }, to: execState.phase };
       return { state, phase: execState.phase, done: false };
     }
 
@@ -822,56 +840,11 @@ export class AgentRunner {
 
       // Special: streaming LLM response (single streaming call, no double invocation)
       if (fromPhase.type === 'calling-llm') {
-        yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming', token: '' } };
+        yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 
-        const tools = this.getToolsForLLM(registry);
-        let accumulatedContent = '';
-        let responseContent = '';
-        let responseToolCalls:
-          | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
-          | undefined;
+        yield* this.streamCallingLLM(currentState, execState, registry);
 
-        for await (const event of this.options.llmClient.stream({
-          model: this.options.model,
-          messages: execState.preparedMessages ?? this.buildMessages(currentState),
-          tools,
-          priority: 0,
-          requestTimeout: this.options.requestTimeout,
-        })) {
-          if (event.type === 'text') {
-            accumulatedContent =
-              event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
-            yield { type: 'token', token: event.delta ?? '' };
-          } else if (event.type === 'tool_call' && event.toolCall) {
-            responseToolCalls = responseToolCalls ?? [];
-            responseToolCalls.push({
-              id: event.toolCall.id,
-              name: event.toolCall.name,
-              arguments: event.toolCall.arguments,
-            });
-          } else if (event.type === 'done') {
-            responseContent = accumulatedContent;
-          }
-        }
-
-        // Store complete response without additional API call
-        execState.llmResponse = responseContent;
-        if (responseToolCalls && responseToolCalls.length > 0) {
-          const toolCall = responseToolCalls[0];
-          execState.action = {
-            id: toolCall.id,
-            tool: toolCall.name,
-            arguments: toolCall.arguments,
-          };
-          execState.allActions = responseToolCalls.map((tc) => ({
-            id: tc.id,
-            tool: tc.name,
-            arguments: tc.arguments,
-          }));
-        }
-        execState.phase = { type: 'llm-response', response: responseContent };
-
-        yield { type: 'phase-change', from: { type: 'streaming', token: '' }, to: execState.phase };
+        yield { type: 'phase-change', from: { type: 'streaming' }, to: execState.phase };
         continue;
       }
 
@@ -887,8 +860,7 @@ export class AgentRunner {
       if (phase.type === 'executing-tool') {
         yield {
           type: 'tool:start',
-          action: (phase as { type: 'executing-tool'; action: import('./execution.js').Action })
-            .action,
+          action: phase.action,
         };
       }
 
@@ -897,13 +869,13 @@ export class AgentRunner {
       if (phase.type === 'tool-result') {
         yield {
           type: 'tool:end',
-          result: (phase as { type: 'tool-result'; result: unknown }).result,
+          result: phase.result,
         };
         return {
           state: currentState,
           result: {
             type: 'continue',
-            toolResult: (phase as { type: 'tool-result'; result: unknown }).result,
+            toolResult: phase.result,
           },
         };
       }
@@ -911,7 +883,7 @@ export class AgentRunner {
       if (done && phase.type === 'completed') {
         return {
           state: currentState,
-          result: { type: 'done', answer: (phase as { type: 'completed'; answer: string }).answer },
+          result: { type: 'done', answer: phase.answer },
         };
       }
 
