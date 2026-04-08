@@ -220,23 +220,65 @@ function parseResponse(response: LLMResponse): ParseResult;
 ---
 
 #### Step 3: 工具系统基础
-**目标**: 能定义和执行工具
+**目标**: 能定义和执行工具，使用 Zod 进行参数定义和验证
 
 ```typescript
-interface Tool {
+import { z } from 'zod';
+
+// 工具定义接口
+interface Tool<TParams extends z.ZodTypeAny = z.ZodTypeAny> {
   name: string;
-  execute(args: object): Promise<unknown>;
+  description: string;
+  // 使用 Zod 定义参数结构（自动生成 JSON Schema 给 LLM）
+  parameters: TParams;
+  // 执行函数，参数类型由 Zod 推导
+  execute: (args: z.infer<TParams>) => Promise<unknown>;
 }
 
+// 工具注册表
 class ToolRegistry {
-  register(tool: Tool): void;
-  execute(name: string, args: object): Promise<unknown>;
+  // 注册工具
+  register<T extends z.ZodTypeAny>(tool: Tool<T>): void;
+  
+  // 执行工具（内部自动验证参数）
+  execute(name: string, args: unknown): Promise<unknown>;
+  
+  // 获取工具的 JSON Schema（传给 LLM）
+  getToolSchemas(): Array<{
+    type: 'function';
+    function: {
+      name: string;
+      description: string;
+      parameters: object; // JSON Schema
+    };
+  }>;
 }
+
+// 使用示例
+const calculatorTool: Tool<typeof calculatorSchema> = {
+  name: 'calculate',
+  description: 'Calculate a mathematical expression',
+  parameters: z.object({
+    expression: z.string().describe('Math expression like "15 + 23"'),
+  }),
+  execute: async ({ expression }) => {
+    // 参数已自动验证，类型安全
+    return eval(expression).toString();
+  },
+};
 ```
 
+**设计要点**:
+- **Zod 优先**: 用户使用熟悉的 Zod API 定义参数
+- **类型推导**: `execute` 函数的参数自动获得 TypeScript 类型
+- **自动转换**: 内部使用 `zod-to-json-schema` 转换为 OpenAI 格式
+- **运行时验证**: 执行前自动验证 LLM 返回的参数
+
 **验收标准**:
-- [ ] 能注册一个 calculator 工具
-- [ ] 能执行工具并返回结果
+- [ ] 能用 Zod 定义工具参数
+- [ ] 执行时自动验证参数类型，失败时抛出清晰错误
+- [ ] 自动生成 JSON Schema 给 LLM
+- [ ] 支持可选参数、默认值、枚举等常见 Zod 特性
 - [ ] 工具不存在时抛错
 
 ---
@@ -420,16 +462,24 @@ for await (const event of stream) {
 **目标**: Runner 可配置，支持不同策略，所有方法返回不可变状态
 
 ```typescript
+import { z } from 'zod';
+import { Tool } from './types';
+
 interface RunnerConfig {
   llm: LLMClient;
-  maxSteps?: number;      // 默认 10
-  timeout?: number;       // 单步超时（毫秒）
-  systemPrompt?: string;  // 覆盖默认 ReAct 提示词
-  hooks?: RunnerHooks;    // 生命周期钩子（仅观察）
+  tools?: Tool<z.ZodTypeAny>[];  // Zod 定义的工具列表
+  maxSteps?: number;             // 默认 10
+  timeout?: number;              // 单步超时（毫秒）
+  systemPrompt?: string;         // 覆盖默认 ReAct 提示词
+  hooks?: RunnerHooks;           // 生命周期钩子（仅观察）
 }
 
 class AgentRunner {
   constructor(config: RunnerConfig);
+  
+  // 动态注册/注销工具（运行时扩展）
+  registerTool<T extends z.ZodTypeAny>(tool: Tool<T>): void;
+  unregisterTool(name: string): void;
   
   // 所有执行方法都返回 { state, ... }，state 为不可变新状态
   // - advance() / advanceStream()
@@ -441,6 +491,8 @@ class AgentRunner {
 ```
 
 **验收标准**:
+- [ ] 可在构造时传入工具列表
+- [ ] 支持运行时动态注册/注销工具
 - [ ] 可配置 maxSteps、timeout、systemPrompt
 - [ ] 所有执行方法返回 `{ state, ... }` 结构
 - [ ] 返回的 state 是新的不可变对象（Immer 创建）
