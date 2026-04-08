@@ -1,7 +1,7 @@
 /**
- * Settings YAML 主模块
+ * Settings YAML main module
  *
- * 用于读取和管理 YAML 配置文件
+ * For reading and managing YAML configuration files
  */
 
 import * as fs from 'node:fs/promises';
@@ -11,31 +11,31 @@ import * as yaml from 'js-yaml';
 import { deepMerge } from './deepMerge.js';
 import { mkdirp } from './mkdirp.js';
 
-// 导出工具函数供外部使用
+// Export utility functions for external use
 export { deepMerge } from './deepMerge.js';
 export { mkdirp } from './mkdirp.js';
 
 /**
- * 初始化选项
+ * Initialization options
  */
 export interface InitializeOptions<T extends Record<string, unknown>> {
   /**
-   * 用于覆盖配置的对象（如命令行参数）
-   * 优先级最高
+   * Object for overriding config (e.g., command line args)
+   * Highest priority
    */
   override?: Partial<T>;
 
   /**
-   * 默认配置的 YAML 字符串
-   * 优先级最低
+   * Default configuration as YAML string
+   * Lowest priority
    */
   defaultYaml?: string;
 }
 
 /**
- * Settings 类
+ * Settings class
  *
- * 用于读取和管理 YAML 配置文件，支持默认值和深度合并
+ * For reading and managing YAML configuration files with default values and deep merging
  *
  * @example
  * ```typescript
@@ -52,16 +52,16 @@ export interface InitializeOptions<T extends Record<string, unknown>> {
  * ```
  */
 export class Settings<T extends Record<string, unknown> = Record<string, unknown>> {
-  /** 配置文件路径 */
+  /** Configuration file path */
   private readonly configPath: string;
 
-  /** 配置值（初始化后填充） */
+  /** Configuration values (filled after initialization) */
   private values: T | null = null;
 
   /**
-   * 创建 Settings 实例
+   * Create Settings instance
    *
-   * @param configPath - 配置文件的绝对路径、相对路径或以 ~ 开头的用户目录路径
+   * @param configPath - Absolute path, relative path, or ~-prefixed home directory path to config file
    */
   constructor(configPath: string) {
     this.configPath = configPath.startsWith('~')
@@ -70,25 +70,25 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   }
 
   /**
-   * 初始化配置
+   * Initialize configuration
    *
-   * - 如果配置文件不存在且有 defaultYaml，创建文件并写入默认值
-   * - 如果配置文件不存在且没有 defaultYaml，抛出错误
-   * - 如果配置文件存在，读取并与默认值深度合并
-   * - 如果中间目录不存在，递归创建
-   * - 支持通过 override 参数临时覆盖配置（优先级最高）
+   * - If config file doesn't exist and has defaultYaml, create file with defaults
+   * - If config file doesn't exist and no defaultYaml, throw error
+   * - If config file exists, read and deep merge with defaults
+   * - If parent directories don't exist, create them recursively
+   * - Supports override parameter for temporary config overrides (highest priority)
    *
-   * 合并优先级：override > 配置文件 > defaultYaml
+   * Merge priority: override > config file > defaultYaml
    *
-   * @param options - 初始化选项
+   * @param options - Initialization options
    */
   async initialize(options?: InitializeOptions<T>): Promise<void> {
     const { override, defaultYaml } = options || {};
 
-    // 解析默认值
+    // Parse default values
     const defaultValue = defaultYaml ? (yaml.load(defaultYaml) as T) : ({} as T);
 
-    // 检查配置文件是否存在
+    // Check if config file exists
     let exists = false;
     try {
       await fs.access(this.configPath);
@@ -98,32 +98,32 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
     }
 
     if (!exists) {
-      // 配置文件不存在且没有默认值，抛出错误
+      // Config file doesn't exist and no default, throw error
       if (!defaultYaml) {
         throw new Error(
           `Config file not found: ${this.configPath}. Provide defaultYaml to create it.`
         );
       }
 
-      // 创建中间目录
+      // Create parent directories
       const dir = path.dirname(this.configPath);
       await mkdirp(dir);
 
-      // 写入默认配置
+      // Write default config
       await fs.writeFile(this.configPath, defaultYaml, 'utf-8');
 
-      // 合并：默认值 + override
+      // Merge: defaults + override
       let result = defaultValue;
       if (override) {
         result = deepMerge(override as Record<string, unknown>, defaultValue);
       }
       this.values = Object.freeze(result) as T;
     } else {
-      // 读取现有配置
+      // Read existing config
       const content = await fs.readFile(this.configPath, 'utf-8');
       const userConfig = yaml.load(content) as Record<string, unknown>;
 
-      // 深度合并：默认值 + 用户配置 + override
+      // Deep merge: defaults + user config + override
       let result = deepMerge(userConfig || {}, defaultValue);
       if (override) {
         result = deepMerge(override as Record<string, unknown>, result);
@@ -133,10 +133,10 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   }
 
   /**
-   * 获取配置值
+   * Get configuration values
    *
-   * @returns 冻结的配置对象
-   * @throws Error 如果尚未初始化
+   * @returns Frozen configuration object
+   * @throws Error if not initialized
    */
   getValues(): T {
     if (this.values === null) {

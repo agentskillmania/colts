@@ -1,10 +1,10 @@
 /**
- * @fileoverview Step 0: AgentState 单元测试
+ * @fileoverview Step 0: AgentState Unit Tests
  *
- * 测试目标：
- * - 创建、更新、序列化、反序列化 AgentState
- * - 不可变性：原状态不被修改
- * - 覆盖率目标：90%
+ * Test objectives:
+ * - Create, update, serialize, deserialize AgentState
+ * - Immutability: original state is not modified
+ * - Coverage target: 90%
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

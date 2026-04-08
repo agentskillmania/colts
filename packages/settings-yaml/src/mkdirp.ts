@@ -1,17 +1,17 @@
 /**
- * 目录创建工具函数
+ * Directory creation utility function
  *
- * 用于递归创建目录
+ * For recursively creating directories
  */
 
 import * as fs from 'node:fs/promises';
 
 /**
- * 递归创建目录
+ * Recursively create directory
  *
- * 类似于 `mkdir -p`，如果目录已存在则不会报错
+ * Similar to `mkdir -p`, won't error if directory already exists
  *
- * @param dirPath - 目录路径
+ * @param dirPath - Directory path
  *
  * @example
  * ```typescript

@@ -1,20 +1,20 @@
 /**
- * 深度合并工具函数
+ * Deep merge utility function
  *
- * 用于合并配置对象，支持嵌套对象的递归合并
+ * For merging configuration objects with nested object support
  */
 
 /**
- * 深度合并对象，用 defaultValue 填充 target 中缺失的字段
+ * Deep merge objects, filling missing fields in target with values from defaultValue
  *
- * 合并规则：
- * - 对于嵌套对象，递归合并
- * - 对于数组，直接使用 target 的值（不合并数组元素）
- * - 对于基本类型，直接使用 target 的值
+ * Merge rules:
+ * - For nested objects, recursively merge
+ * - For arrays, use target's value directly (don't merge array elements)
+ * - For primitive types, use target's value directly
  *
- * @param target - 目标对象（用户配置）
- * @param defaultValue - 默认值对象
- * @returns 合并后的对象
+ * @param target - Target object (user config)
+ * @param defaultValue - Default values object
+ * @returns Merged object
  *
  * @example
  * ```typescript
@@ -43,13 +43,13 @@ export function deepMerge<T extends Record<string, unknown>>(
       typeof defaultValueFieldValue === 'object' &&
       !Array.isArray(defaultValueFieldValue)
     ) {
-      // 两个值都是对象，递归合并
+      // Both values are objects, recursively merge
       result[key] = deepMerge(
         targetValue as Record<string, unknown>,
         defaultValueFieldValue as Record<string, unknown>
       );
     } else {
-      // 直接使用 target 的值（包括数组、基本类型等）
+      // Use target's value directly (including arrays, primitives, etc.)
       result[key] = targetValue;
     }
   }

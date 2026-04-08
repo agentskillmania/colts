@@ -16,7 +16,7 @@ export default defineConfig({
         '**/types/**',
         '**/*.d.ts',
       ],
-      // 分支覆盖率 ≥ 90%
+      // Branch coverage >= 90%
       thresholds: {
         lines: 90,
         functions: 90,

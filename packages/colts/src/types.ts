@@ -1,102 +1,102 @@
 /**
- * @fileoverview colts 核心类型定义
+ * @fileoverview colts Core Type Definitions
  *
- * Step 0: AgentState 数据结构
- * - 纯数据、可序列化、不可变
- * - 使用 Immer 进行不可变更新
+ * Step 0: AgentState Data Structure
+ * - Pure data, serializable, immutable
+ * - Use Immer for immutable updates
  */
 
 /**
- * 消息角色
+ * Message role
  */
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 /**
- * 消息类型
+ * Message type
  */
 export type MessageType = 'text' | 'thought' | 'action' | 'tool-result' | 'final';
 
 /**
- * 对话消息
+ * Conversation message
  */
 export interface Message {
-  /** 角色 */
+  /** Role */
   role: MessageRole;
-  /** 内容 */
+  /** Content */
   content: string;
-  /** 消息类型 */
+  /** Message type */
   type?: MessageType;
-  /** 是否对外可见（thought 默认 false） */
+  /** Whether visible externally (thought defaults to false) */
   visible?: boolean;
-  /** 时间戳 */
+  /** Timestamp */
   timestamp?: number;
-  /** 工具调用 ID（仅 role='tool' 时使用） */
+  /** Tool call ID (only used when role='tool') */
   toolCallId?: string;
 }
 
 /**
- * 工具定义
+ * Tool definition
  */
 export interface ToolDefinition {
-  /** 工具名称 */
+  /** Tool name */
   name: string;
-  /** 工具描述 */
+  /** Tool description */
   description: string;
-  /** 参数 JSON Schema */
+  /** Parameter JSON Schema */
   parameters?: Record<string, unknown>;
 }
 
 /**
- * Agent 配置
+ * Agent configuration
  */
 export interface AgentConfig {
-  /** Agent 名称 */
+  /** Agent name */
   name: string;
-  /** 系统提示词/人设 */
+  /** System prompt / persona */
   instructions: string;
-  /** 可用工具列表 */
+  /** Available tools list */
   tools: ToolDefinition[];
 }
 
 /**
- * Agent 状态上下文
+ * Agent context
  */
 export interface AgentContext {
-  /** 对话历史 */
+  /** Conversation history */
   messages: Message[];
-  /** 当前执行步数 */
+  /** Current execution step count */
   stepCount: number;
-  /** 上一步工具执行结果（如果有） */
+  /** Previous tool execution result (if any) */
   lastToolResult?: unknown;
 }
 
 /**
- * Agent 状态（纯数据，不可变）
+ * Agent state (pure data, immutable)
  *
- * 设计原则：
- * 1. 纯数据：无方法，只有字段
- * 2. 可序列化：可 JSON.stringify/parse
- * 3. 不可变：使用 Immer 更新，原对象保持不变
+ * Design principles:
+ * 1. Pure data: no methods, only fields
+ * 2. Serializable: can JSON.stringify/parse
+ * 3. Immutable: use Immer for updates, original object unchanged
  */
 export interface AgentState {
-  /** 唯一标识 */
+  /** Unique identifier */
   id: string;
-  /** 配置（不可变） */
+  /** Configuration (immutable) */
   config: AgentConfig;
-  /** 执行上下文 */
+  /** Execution context */
   context: AgentContext;
 }
 
 /**
- * 状态快照
+ * State snapshot
  */
 export interface Snapshot {
-  /** 版本号 */
+  /** Version number */
   version: string;
-  /** 创建时间戳 */
+  /** Creation timestamp */
   timestamp: number;
-  /** 状态数据 */
+  /** State data */
   state: AgentState;
-  /** 校验和 */
+  /** Checksum */
   checksum: string;
 }

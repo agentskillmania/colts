@@ -334,7 +334,7 @@ describe('Tool Registry (Step 3)', () => {
         required?: string[];
       };
 
-      // Zod 的 required 字段可能包含所有字段或只包含必填字段
+      // Zod's required field may contain all fields or only required fields
       expect(params.required || []).toContain('required');
     });
 
@@ -368,7 +368,7 @@ describe('Tool Registry (Step 3)', () => {
         };
       };
 
-      // Zod enum 转换为 JSON Schema 可能是 anyOf 格式或直接的 enum
+      // Zod enum converted to JSON Schema may be anyOf format or direct enum
       const enumSchema = params.properties.enum;
       const enumValues = enumSchema.enum || enumSchema.anyOf?.[0]?.enum || [];
       expect(enumValues).toEqual(['a', 'b', 'c']);

@@ -1,23 +1,23 @@
 /**
- * @fileoverview AgentState 创建和更新
+ * @fileoverview AgentState creation and updates
  *
- * Step 0: AgentState 数据结构
- * - 使用 Immer 实现不可变更新
- * - 所有更新操作返回新状态，原状态保持不变
+ * Step 0: AgentState data structure
+ * - Use Immer for immutable updates
+ * - All update operations return new state, original state remains unchanged
  */
 
 import { produce, Draft } from 'immer';
 import type { AgentState, AgentConfig, Message, Snapshot } from './types.js';
 
 /**
- * 生成唯一 ID
+ * Generate unique ID
  */
 function generateId(): string {
   return `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
 /**
- * 计算校验和（简单实现，生产环境可用更严格的算法）
+ * Compute checksum (simple implementation, production can use stricter algorithm)
  */
 function computeChecksum(state: AgentState): string {
   const data = JSON.stringify(state);
@@ -31,10 +31,10 @@ function computeChecksum(state: AgentState): string {
 }
 
 /**
- * 创建初始 AgentState
+ * Create initial AgentState
  *
- * @param config - Agent 配置
- * @returns 新的 AgentState（不可变）
+ * @param config - Agent configuration
+ * @returns New AgentState (immutable)
  */
 export function createAgentState(config: AgentConfig): AgentState {
   return {
@@ -48,11 +48,11 @@ export function createAgentState(config: AgentConfig): AgentState {
 }
 
 /**
- * 使用 Immer 更新状态
+ * Update state using Immer
  *
- * @param state - 当前状态（不会被修改）
- * @param recipe - 更新函数（可修改 draft）
- * @returns 新的 AgentState（不可变）
+ * @param state - Current state (not modified)
+ * @param recipe - Update function (can modify draft)
+ * @returns New AgentState (immutable)
  */
 export function updateState(
   state: AgentState,
@@ -62,11 +62,11 @@ export function updateState(
 }
 
 /**
- * 添加用户消息
+ * Add user message
  *
- * @param state - 当前状态
- * @param content - 消息内容
- * @returns 新状态（包含新消息）
+ * @param state - Current state
+ * @param content - Message content
+ * @returns New state (with new message)
  */
 export function addUserMessage(state: AgentState, content: string): AgentState {
   return updateState(state, (draft) => {
@@ -79,12 +79,12 @@ export function addUserMessage(state: AgentState, content: string): AgentState {
 }
 
 /**
- * 添加助手消息
+ * Add assistant message
  *
- * @param state - 当前状态
- * @param content - 消息内容
- * @param options - 可选参数（类型、可见性）
- * @returns 新状态（包含新消息）
+ * @param state - Current state
+ * @param content - Message content
+ * @param options - Optional parameters (type, visibility)
+ * @returns New state (with new message)
  */
 export function addAssistantMessage(
   state: AgentState,
@@ -106,11 +106,11 @@ export function addAssistantMessage(
 }
 
 /**
- * 添加工具消息
+ * Add tool message
  *
- * @param state - 当前状态
- * @param content - 工具返回内容
- * @returns 新状态（包含新消息）
+ * @param state - Current state
+ * @param content - Tool return content
+ * @returns New state (with new message)
  */
 export function addToolMessage(state: AgentState, content: string): AgentState {
   return updateState(state, (draft) => {
@@ -124,10 +124,10 @@ export function addToolMessage(state: AgentState, content: string): AgentState {
 }
 
 /**
- * 增加步数计数器
+ * Increment step counter
  *
- * @param state - 当前状态
- * @returns 新状态（stepCount + 1）
+ * @param state - Current state
+ * @returns New state (stepCount + 1)
  */
 export function incrementStepCount(state: AgentState): AgentState {
   return updateState(state, (draft) => {
@@ -136,11 +136,11 @@ export function incrementStepCount(state: AgentState): AgentState {
 }
 
 /**
- * 设置最后工具结果
+ * Set last tool result
  *
- * @param state - 当前状态
- * @param result - 工具执行结果
- * @returns 新状态
+ * @param state - Current state
+ * @param result - Tool execution result
+ * @returns New state
  */
 export function setLastToolResult(state: AgentState, result: unknown): AgentState {
   return updateState(state, (draft) => {
@@ -149,26 +149,26 @@ export function setLastToolResult(state: AgentState, result: unknown): AgentStat
 }
 
 /**
- * 创建状态快照
+ * Create state snapshot
  *
- * @param state - 当前状态
- * @returns 快照对象（可序列化）
+ * @param state - Current state
+ * @returns Snapshot object (serializable)
  */
 export function createSnapshot(state: AgentState): Snapshot {
   return {
     version: '1.0.0',
     timestamp: Date.now(),
-    state: structuredClone(state), // 深拷贝确保隔离
+    state: structuredClone(state), // Deep clone for isolation
     checksum: computeChecksum(state),
   };
 }
 
 /**
- * 从快照恢复状态
+ * Restore state from snapshot
  *
- * @param snapshot - 快照对象
- * @returns 恢复的 AgentState
- * @throws 如果校验和不匹配
+ * @param snapshot - Snapshot object
+ * @returns Restored AgentState
+ * @throws If checksum mismatch
  */
 export function restoreSnapshot(snapshot: Snapshot): AgentState {
   const restored = structuredClone(snapshot.state);
@@ -182,19 +182,19 @@ export function restoreSnapshot(snapshot: Snapshot): AgentState {
 }
 
 /**
- * 序列化状态为 JSON
+ * Serialize state to JSON
  *
  * @param state - AgentState
- * @returns JSON 字符串
+ * @returns JSON string
  */
 export function serializeState(state: AgentState): string {
   return JSON.stringify(state);
 }
 
 /**
- * 从 JSON 反序列化状态
+ * Deserialize state from JSON
  *
- * @param json - JSON 字符串
+ * @param json - JSON string
  * @returns AgentState
  */
 export function deserializeState(json: string): AgentState {
