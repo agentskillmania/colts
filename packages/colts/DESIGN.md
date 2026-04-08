@@ -215,11 +215,13 @@ function parseResponse(response: LLMResponse): ParseResult;
 - `tool_calls` 为空 → `isFinalAnswer = true`，返回 content 作为答案
 
 **验收标准**:
-- [ ] 能解析带 tool_calls 的响应（需要调用工具）
-- [ ] 能解析纯文本响应（直接给出最终答案）
-- [ ] 支持解析 reasoning_content（思考过程）
-- [ ] 解析失败时抛出明确错误
-- [ ] 工具参数为有效的 JSON 对象
+- [x] 能解析带 tool_calls 的响应（需要调用工具）
+- [x] 能解析纯文本响应（直接给出最终答案）
+- [x] 支持解析 reasoning_content（思考过程）
+- [x] 解析失败时抛出明确错误
+- [x] 工具参数为有效的 JSON 对象
+
+**状态**: ✅ 已完成 (17 个单元测试，100% 覆盖率)
 
 ---
 

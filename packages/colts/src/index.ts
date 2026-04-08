@@ -32,6 +32,16 @@ export {
   deserializeState,
 } from './state.js';
 
+// Parser (Step 2)
+export {
+  parseResponse,
+  requiresToolExecution,
+  formatToolCalls,
+  ParseError,
+  type ToolCall,
+  type ParseResult,
+} from './parser.js';
+
 // Runner
 export {
   AgentRunner,
