@@ -122,13 +122,18 @@ interface AgentState {
 
 ```typescript
 class AgentRunner {
-  async chat(state: AgentState, userInput: string): Promise<string>;
+  // 简单对话，返回更新后的状态（包含对话历史）
+  async chat(state: AgentState, userInput: string): Promise<{
+    state: AgentState;  // 新状态（添加了 user 和 assistant 消息）
+    response: string;    // LLM 的回复内容
+  }>;
 }
 ```
 
 **验收标准**:
-- [ ] 输入 "Hello"，能返回 LLM 的回复
-- [ ] 多次对话能看到历史上下文
+- [ ] 输入 "Hello"，返回 LLM 的回复和新状态
+- [ ] 多次调用能看到历史上下文（通过返回的 state 传递）
+- [ ] 原 state 保持不变（不可变）
 - [ ] stepCount 始终为 0（还没开始 ReAct）
 
 ---
@@ -353,7 +358,7 @@ for await (const event of stream) {
 ---
 
 #### Step 6: Runner 配置化
-**目标**: Runner 可配置，支持不同策略
+**目标**: Runner 可配置，支持不同策略，所有方法返回不可变状态
 
 ```typescript
 interface RunnerConfig {
@@ -361,17 +366,26 @@ interface RunnerConfig {
   maxSteps?: number;      // 默认 10
   timeout?: number;       // 单步超时（毫秒）
   systemPrompt?: string;  // 覆盖默认 ReAct 提示词
+  hooks?: RunnerHooks;    // 生命周期钩子（仅观察）
 }
 
 class AgentRunner {
   constructor(config: RunnerConfig);
+  
+  // 所有执行方法都返回 { state, ... }，state 为不可变新状态
+  // - advance() / advanceStream()
+  // - step() / stepStream()
+  // - run() / runStream()
+  // - chat()
+  // - runInteractive()
 }
 ```
 
 **验收标准**:
-- [ ] 可配置 maxSteps
-- [ ] 可配置单步超时时间
-- [ ] 可配置自定义 System Prompt
+- [ ] 可配置 maxSteps、timeout、systemPrompt
+- [ ] 所有执行方法返回 `{ state, ... }` 结构
+- [ ] 返回的 state 是新的不可变对象（Immer 创建）
+- [ ] 原 state 保持不变
 
 ---
 
@@ -382,10 +396,12 @@ class AgentRunner {
 
 ```typescript
 interface RunnerHooks {
-  beforeStep?: (state: AgentState) => void | Promise<void>;
-  afterStep?: (state: AgentState, result: StepResult) => void;
-  onToolCall?: (call: ToolCall) => void;
-  onToolResult?: (result: ToolResult) => void;
+  // 注意：钩子接收的是当前 state（只读），修改不会生效
+  // 如果需要干预，使用 advance() 手动控制或返回特定值
+  beforeStep?: (state: AgentState, step: number) => void | Promise<void>;
+  afterStep?: (state: AgentState, result: StepResult) => void | Promise<void>;
+  onToolCall?: (state: AgentState, call: ToolCall) => void | Promise<void>;
+  onToolResult?: (state: AgentState, result: ToolResult) => void | Promise<void>;
 }
 
 class AgentRunner {
@@ -393,11 +409,16 @@ class AgentRunner {
 }
 ```
 
+**重要说明**：
+- 钩子仅用于**观察**，不能修改 state
+- state 参数是**新的不可变状态**（每次调用都是最新）
+- 需要干预执行（如暂停、修改）请使用 `advance()` 手动控制
+
 **验收标准**:
-- [ ] beforeStep 在每次 LLM 调用前触发
-- [ ] afterStep 在每次工具执行后触发
+- [ ] beforeStep 在每次 LLM 调用前触发，传入当前 state
+- [ ] afterStep 在每次工具执行后触发，传入新的 state 和 result
 - [ ] 钩子可以异步（支持 await）
-- [ ] 钩子抛错不影响执行（或可选是否中断）
+- [ ] 钩子抛错可选是否中断执行
 
 ---
 
@@ -428,26 +449,42 @@ function restoreSnapshot(snapshot: Snapshot): AgentState;
 **目标**: 开发者能控制执行节奏
 
 ```typescript
-// 使用方式（外部控制循环）
+// 使用方式（外部控制循环，不可变数据）
 const runner = new AgentRunner(config);
-const state = createAgentState({...});
+let state = createAgentState({...});
 
-await runner.step(state);  // 执行一步
-inspect(state);            // 查看状态
-await runner.step(state);  // 再执行一步
+// step 返回新状态，需要显式接收
+const result1 = await runner.step(state);
+state = result1.state;     // 更新 state 引用
+inspect(state);            // 查看新状态
+
+const result2 = await runner.step(state);
+state = result2.state;     // 再次更新
+inspect(state);
+
+// 或者使用 advance 进行更细粒度控制
+const advanceResult = await runner.advance(state);
+state = advanceResult.state;  // 更新引用
+console.log(advanceResult.phase.type);  // 查看当前阶段
 ```
 
+**关键要点**:
+- 每次调用都返回 `{ state, ... }`，必须显式更新 state 引用
+- 原 state 保持不变，可用于对比或回退
+- 可随时停止（不再继续调用）
+
 **验收标准**:
-- [ ] 两次 step() 之间可以插入任意逻辑
-- [ ] 可以查看中间状态
-- [ ] 可以随时停止（不再继续 step）
+- [ ] 每次 step/advance 返回新的 state
+- [ ] 需要显式更新 state 引用才能继续
+- [ ] 可以查看和对比新旧状态
+- [ ] 可以随时停止执行
 
 ---
 
 ### Phase 3: 调试增强（干预能力）
 
 #### Step 10: 工具 Mock 系统
-**目标**: 开发时工具可 Mock
+**目标**: 开发时工具可 Mock，不影响不可变数据设计
 
 ```typescript
 interface ToolMock {
@@ -457,10 +494,18 @@ interface ToolMock {
 }
 
 class AgentRunner {
+  // Mock 配置是 Runner 级别的，不修改 AgentState
   enableMockMode(): void;
   disableMockMode(): void;
   mockTool(name: string, mock: ToolMock): void;
   unmockTool(name: string): void;
+  
+  // 使用方式：创建带 Mock 的 Runner，执行返回正常状态结构
+  const runner = new AgentRunner({ llm, hooks });
+  runner.mockTool('api', { returnValue: 'mocked' });
+  
+  const { state: newState, result } = await runner.step(state);
+  // newState 中的 tool result 是 mocked 值，但 state 本身结构不变
 }
 ```
 
@@ -469,6 +514,7 @@ class AgentRunner {
 - [ ] 未 Mock 的工具正常执行
 - [ ] 可动态切换 Mock/真实模式
 - [ ] Mock 支持延迟模拟
+- [ ] Mock 不影响状态不可变性（只是改变了 tool 执行结果）
 
 ---
 
@@ -478,6 +524,7 @@ class AgentRunner {
 ```typescript
 interface PausePoint {
   type: 'before-tool' | 'before-completion';
+  state: AgentState;     // 当前状态（不可变）
   context: {
     currentStep: number;
     proposedAction?: ToolCall;
@@ -490,15 +537,23 @@ interface PausePoint {
 class AgentRunner {
   async runInteractive(state: AgentState, options: {
     onPause: (point: PausePoint) => void;
-  }): Promise<RunResult>;
+  }): Promise<{
+    state: AgentState;    // 最终状态
+    result: RunResult;
+  }>;
 }
 ```
 
+**重要说明**：
+- `point.state` 是当前状态的**快照**（不可变）
+- 用户选择 resume 或 abort 后，runInteractive 返回最终状态
+- 如果要修改参数后继续，使用 `resume(newArgs)`
+
 **验收标准**:
-- [ ] 工具调用前可暂停
-- [ ] 用户可输入后继续
-- [ ] 用户可中止执行
-- [ ] 暂停时状态不丢失
+- [ ] 工具调用前可暂停，传入当前 state
+- [ ] 用户可输入后继续，返回最终 state
+- [ ] 用户可中止执行，返回当前 state
+- [ ] 暂停时状态不丢失（state 始终不可变）
 
 ---
 
@@ -657,21 +712,38 @@ await runner.step(state); // 重新执行第4步
 
 ### Q2: 工具调用前如何确认？
 
-**不靠步进**，通过钩子或 `runInteractive`：
+**钩子仅观察，控制用 `advance` 或 `runInteractive`**：
 
 ```typescript
-// 钩子拦截（简单确认）
+// 钩子：仅观察，无法修改执行流程
 const runner = new AgentRunner({
   hooks: {
-    onToolCall: async (call, state) => {
-      const confirmed = await showConfirmDialog(call);
-      if (!confirmed) throw new Error('Cancelled');
+    onToolCall: (state, call) => {
+      console.log('准备调用:', call); // 只能观察记录
     }
   }
 });
 
-// runInteractive（支持修改参数）
-await runner.runInteractive(state, {
+// 方式一：使用 advance() 手动控制
+let state = initialState;
+while (true) {
+  const { state: newState, phase, done } = await runner.advance(state);
+  state = newState;
+  
+  if (phase.type === 'parsed' && phase.action) {
+    // 在此暂停，询问用户
+    const confirmed = await confirmWithUser(phase.action);
+    if (!confirmed) {
+      // 修改 state 或中止
+      break;
+    }
+  }
+  
+  if (done) break;
+}
+
+// 方式二：runInteractive（回调方式）
+await runner.runInteractive(initialState, {
   onPause: (point) => {
     if (point.type === 'before-tool') {
       showConfirmUI(point.proposedAction, {
@@ -686,7 +758,7 @@ await runner.runInteractive(state, {
 
 ### Q3: 内部思考 vs 对外展示？
 
-通过消息类型区分，Runner 自动处理：
+通过消息类型区分，Runner 自动处理（新状态返回）：
 
 ```typescript
 interface Message {
@@ -696,16 +768,15 @@ interface Message {
   visible: boolean;            // 对外可见性
 }
 
-// Runner 自动标记
-state.messages.push({
-  role: 'assistant',
-  content: thought,
-  type: 'thought',
-  visible: false  // 内部思考，不展示给用户
-});
+// Runner 在执行过程中自动创建新状态
+const { state: newState, result } = await runner.step(state);
 
-// 获取对外可见的消息
-runner.getVisibleMessages(state); // 过滤 visible=true 的
+// newState 中的 messages 已包含标记
+// thought: visible=false
+// final: visible=true
+
+// 获取对外可见的消息（从新状态过滤）
+const visibleMessages = newState.context.messages.filter(m => m.visible !== false);
 ```
 
 ### Q4: EventEmitter3 事件体系？
