@@ -16,7 +16,14 @@ import {
 } from './state.js';
 import { parseResponse } from './parser.js';
 import { ToolRegistry } from './tools/registry.js';
-import type { StepResult, AdvanceResult, ExecutionState, StreamEvent } from './execution.js';
+import type {
+  StepResult,
+  AdvanceResult,
+  ExecutionState,
+  StreamEvent,
+  RunResult,
+  RunStreamEvent,
+} from './execution.js';
 import { createExecutionState, toolCallToAction, isTerminalPhase } from './execution.js';
 
 /**
@@ -900,5 +907,122 @@ export class AgentRunner {
 
     // Fallback
     return { state: currentState, result: { type: 'done', answer: execState.thought ?? '' } };
+  }
+
+  /**
+   * 🏃 Macro-step: Run until completion
+   *
+   * Automatically loops step() until a final answer is reached or maxSteps exhausted.
+   *
+   * @param state - Current agent state
+   * @param options - Optional run configuration (maxSteps)
+   * @param toolRegistry - Optional tool registry override
+   * @returns Final state and run result
+   *
+   * @example
+   * ```typescript
+   * const { state: finalState, result } = await runner.run(initialState);
+   * if (result.type === 'success') {
+   *   console.log('Answer:', result.answer);
+   * }
+   * ```
+   */
+  async run(
+    state: AgentState,
+    options?: { maxSteps?: number },
+    toolRegistry?: ToolRegistry
+  ): Promise<{ state: AgentState; result: RunResult }> {
+    const registry = toolRegistry ?? this.options.toolRegistry;
+    const maxSteps = options?.maxSteps ?? 10;
+    let currentState = state;
+    let totalSteps = 0;
+
+    while (totalSteps < maxSteps) {
+      const { state: newState, result } = await this.step(currentState, registry);
+      currentState = newState;
+      totalSteps++;
+
+      if (result.type === 'done') {
+        return {
+          state: currentState,
+          result: { type: 'success', answer: result.answer, totalSteps },
+        };
+      }
+
+      // result.type === 'continue' — loop again with updated state
+    }
+
+    return {
+      state: currentState,
+      result: { type: 'max_steps', totalSteps },
+    };
+  }
+
+  /**
+   * 🏃 Macro-step: Stream run until completion
+   *
+   * Loops stepStream() and yields cross-step events including real-time tokens.
+   * Caller can break out at any time to interrupt.
+   *
+   * @param state - Current agent state
+   * @param options - Optional run configuration (maxSteps)
+   * @param toolRegistry - Optional tool registry override
+   * @returns Async generator yielding RunStreamEvent, final return is { state, result }
+   *
+   * @example
+   * ```typescript
+   * for await (const event of runner.runStream(state)) {
+   *   if (event.type === 'token') process.stdout.write(event.token);
+   *   if (event.type === 'complete') console.log('\nDone:', event.result);
+   * }
+   * ```
+   */
+  async *runStream(
+    state: AgentState,
+    options?: { maxSteps?: number },
+    toolRegistry?: ToolRegistry
+  ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
+    const registry = toolRegistry ?? this.options.toolRegistry;
+    const maxSteps = options?.maxSteps ?? 10;
+    let currentState = state;
+    let totalSteps = 0;
+
+    while (totalSteps < maxSteps) {
+      yield { type: 'step:start', step: totalSteps, state: currentState };
+
+      // Use stepStream to get real-time tokens and phase events
+      const iterator = this.stepStream(currentState, registry);
+      let stepResult: { state: AgentState; result: StepResult };
+
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          stepResult = value;
+          break;
+        }
+        // Forward all events from stepStream (token, phase-change, tool:start/end)
+        yield value as RunStreamEvent;
+      }
+
+      currentState = stepResult.state;
+      totalSteps++;
+
+      yield { type: 'step:end', step: totalSteps - 1, result: stepResult.result };
+
+      if (stepResult.result.type === 'done') {
+        const runResult: RunResult = {
+          type: 'success',
+          answer: stepResult.result.answer,
+          totalSteps,
+        };
+        yield { type: 'complete', result: runResult };
+        return { state: currentState, result: runResult };
+      }
+    }
+
+    // maxSteps exhausted
+    const runResult: RunResult = { type: 'max_steps', totalSteps };
+    yield { type: 'complete', result: runResult };
+    return { state: currentState, result: runResult };
   }
 }
