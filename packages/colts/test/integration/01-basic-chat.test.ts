@@ -18,7 +18,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { LLMClient } from '@agentskillmania/llm-client';
-import { testConfig, itif, logProviderInfo } from '../../../llm-client/test/integration/config.js';
+import { testConfig, itif, logProviderInfo } from './config.js';
 import { AgentRunner } from '../../src/runner.js';
 import { createAgentState } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
