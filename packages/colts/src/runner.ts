@@ -510,20 +510,14 @@ export class AgentRunner {
       timestamp: Date.now(),
     }));
     execState.phase = { type: 'preparing', messages: displayMessages };
-    // Return new immutable state with incremented transition counter
-    const newState = produce(state, (draft) => {
-      draft.context.__transition = (state.context.__transition ?? 0) + 1;
-    });
-    return { state: newState, phase: execState.phase, done: false };
+    // Return new immutable state
+    return { state, phase: execState.phase, done: false };
   }
 
   private advanceToCallingLLM(state: AgentState, execState: ExecutionState): AdvanceResult {
     execState.phase = { type: 'calling-llm' };
-    // Return new immutable state with incremented transition counter
-    const newState = produce(state, (draft) => {
-      draft.context.__transition = (state.context.__transition ?? 0) + 1;
-    });
-    return { state: newState, phase: execState.phase, done: false };
+    // Return new immutable state
+    return { state, phase: execState.phase, done: false };
   }
 
   private async advanceToLLMResponse(
@@ -556,19 +550,13 @@ export class AgentRunner {
 
     execState.phase = { type: 'llm-response', response: responseText };
     // Return new immutable state
-    const newState = produce(state, (draft) => {
-      draft.context.__transition = (state.context.__transition ?? 0) + 1;
-    });
-    return { state: newState, phase: execState.phase, done: false };
+    return { state, phase: execState.phase, done: false };
   }
 
   private advanceToParsing(state: AgentState, execState: ExecutionState): AdvanceResult {
     execState.phase = { type: 'parsing' };
     // Return new immutable state
-    const newState = produce(state, (draft) => {
-      draft.context.__transition = (state.context.__transition ?? 0) + 1;
-    });
-    return { state: newState, phase: execState.phase, done: false };
+    return { state, phase: execState.phase, done: false };
   }
 
   private advanceToParsed(state: AgentState, execState: ExecutionState): AdvanceResult {

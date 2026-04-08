@@ -371,44 +371,67 @@ idle → preparing → calling-llm → llm-response → parsing → parsed
 - 只有 `completed` 和 `error` 是终止 phase（`done: true`）
 - `streaming` 不是独立 phase，而是流式变体在 `calling-llm` 内部的观察方式（见下文"流式策略"）
 
-##### ExecutionState 与 AgentState 的职责分离
+##### advance() 的状态更新策略
+
+**核心原则**：advance 是真正的执行单元，每次有实质变更就必须产生新的 AgentState。唯一的例外是流式接收中，在流完成前不更新。
+
+各 phase 对 AgentState 的影响：
+
+| 转换 | AgentState 变更 | 写入内容 | state 引用 |
+|------|----------------|---------|-----------|
+| idle → preparing | 无 | — | 同一引用 |
+| preparing → calling-llm | 无 | — | 同一引用 |
+| calling-llm → llm-response | **有** | assistant 消息（thought 或 content） | **新 state** |
+| llm-response → parsing | 无 | — | 同一引用 |
+| parsing → parsed | 无 | — | 同一引用 |
+| parsed → executing-tool | 无 | — | 同一引用 |
+| executing-tool → tool-result | **有** | tool 消息 | **新 state** |
+| parsed → completed (无 action) | **有** | assistant final 消息 + stepCount++ | **新 state** |
+| tool-result → completed | **有** | assistant final 消息 + stepCount++ | **新 state** |
+
+**state 更新的实际含义**：
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  ExecutionState（可变，由 advance 维护）                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │  phase   │  │llmResponse│  │  action  │  │toolResult│    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
-│  生命周期：一次 step 内部有效，step 结束后丢弃                   │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                     step() 收集结果后
-                     一次性用 Immer 更新
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│  AgentState（不可变，使用 Immer 更新）                         │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │ messages: [..., thought, tool-result/final]       │       │
-│  │ stepCount: n                                      │       │
-│  └──────────────────────────────────────────────────┘       │
-│  生命周期：跨 step 持久化，支持快照和时间旅行                    │
-└─────────────────────────────────────────────────────────────┘
+advance(state, execState) 的处理逻辑：
+
+1. 判断当前 phase，执行对应的转换操作
+2. 如果该转换产生了新数据（LLM 响应 / 工具结果 / 最终答案）：
+   - 用 Immer 的 produce() 创建新 state
+   - 将新数据写入 state.context.messages
+   - 返回新 state
+3. 如果该转换无新数据（中间过渡 phase）：
+   - 直接返回原 state（同一引用）
 ```
 
-**核心原则**:
+**设计要点**：
+- advance 是独立的执行单元，可以脱离 step 单独使用
+- 调用方可以在任意 phase 暂停，此时 AgentState 反映了到该 phase 为止的所有变更
+- ExecutionState 记录的是推进过程中的中间数据（phase、preparedMessages 等），与 AgentState 中的 messages 互补
+- 流式变体在 `calling-llm` 阶段用 `llmClient.stream()` 替代 `llmClient.call()`，**流完成前不更新 AgentState，流完成后一次性写入**
 
-- **`advance()` 是纯观察，不修改 AgentState**。返回的 `state` 与传入的 `state` 是同一引用。中间数据（LLM 响应、解析结果、工具结果）全部记录在 `ExecutionState` 上。
-- **`step()` 负责一次性更新 AgentState**。在 advance 循环结束后，根据收集到的结果，用 Immer 一次性写入 `messages` 和 `stepCount`。
+##### step() 与 advance() 的关系
 
-| 方法 | 对 AgentState 的影响 | 说明 |
-|------|----------------------|------|
-| `advance()` | **无**，透传原 state | 纯观察，调试用 |
-| `step()` | **有**，返回新 state | 内部调用多次 advance，结束后用 Immer 更新 |
+step 是 advance 的便捷组合：
 
-这样设计的好处：
-1. advance 可以反复调用、回退、跳过，不会产生"半成品" state
-2. 调用方可以在任意 phase 干预 ExecutionState（修改 action 等），不影响 AgentState
-3. AgentState 始终处于一致状态
+```
+step(state) {
+  创建 ExecutionState
+  let state = initialState
+  while (true) {
+    const result = advance(state, execState, registry)
+    state = result.state        // advance 可能返回新 state
+    if (result.done) {
+      return { state, result: ... }
+    }
+    // tool-result 也是 step 的终止点（需要外部决定是否继续）
+    if (result.phase.type === 'tool-result') {
+      return { state, result: { type: 'continue', toolResult: ... } }
+    }
+  }
+}
+```
+
+**关键**：step 不负责"补写" state——advance 在执行过程中已经逐步写入了。step 只是把多个 advance 编排成一次完整的 ReAct 循环，并返回合适的 StepResult。
 
 ##### API 签名
 
@@ -426,21 +449,22 @@ type StepResult =
   | { type: 'done'; answer: string };
 
 class AgentRunner {
-  // 微步：细粒度阶段推进（调试用）
+  // 微步：细粒度阶段推进
   // 每调用一次，推进到下一个自然断点
-  // 注意：返回的 state 与传入的是同一引用，advance 不修改 AgentState
+  // 在产生实质变更的 phase（llm-response, tool-result, completed）返回新 state
+  // 在中间过渡 phase 返回原 state（同一引用）
   async advance(
     state: AgentState,
     execState: ExecutionState,
     toolRegistry?: ToolRegistry
   ): Promise<{
-    state: AgentState;      // 透传原 state（同一引用）
+    state: AgentState;      // 有变更时是新 state，无变更时是原 state
     phase: Phase;           // 推进到的 phase
     done: boolean;          // 是否终止 phase
   }>;
 
   // 中步：完整的 ReAct 循环（ Thought → Action → Observation ）
-  // 内部由多个 advance() 组成，结束后一次性更新 AgentState
+  // 由多个 advance() 组成，advance 过程中已逐步更新 AgentState
   async step(
     state: AgentState,
     toolRegistry?: ToolRegistry
@@ -456,53 +480,54 @@ class AgentRunner {
 流式变体（`stepStream`、`advanceStream`）**复用核心逻辑，不重新实现 phase 遍历**：
 
 ```
-stepStream(state) {
-  创建 ExecutionState
-  while (!terminal) {
-    if (phase === 'calling-llm') {
-      // 用流式 API 替代阻塞 API 获取 LLM 响应
-      // 边接收边 yield token 事件
-    } else {
-      // 直接调用 advance()，yield phase-change 事件
-    }
-  }
-  一次性更新 AgentState 并返回
-}
+advanceStream(state, execState) 的处理逻辑：
+
+1. 判断当前 phase
+2. 如果 phase === 'calling-llm'：
+   - 用 llmClient.stream() 替代 llmClient.call()
+   - 流接收过程中：yield token 事件，不更新 state
+   - 流完成后：和阻塞模式一样，写入 state 并进入 llm-response phase
+3. 其他 phase：直接调用 advance() 的逻辑，yield phase-change 事件
 ```
 
 **关键规则**:
 - `streaming` 不是一个独立的 Phase。流式是 `calling-llm` 阶段内部的**读取方式**，不是状态机的节点
 - 流式变体在 `calling-llm` phase 用 `llmClient.stream()` 替代 `llmClient.call()`，其余 phase 全部复用 `advance()` 的逻辑
 - `advanceStream()` = `advance()` 的骨架 + 在 `calling-llm` 时 yield token 事件
+- **流式接收期间不更新 AgentState，流完成后一次性写入**（与"一次问话"的语义一致）
 
 ##### 使用方式对比
 
 ```typescript
 // 微步：细粒度控制（每个阶段都停）
-// 注意：advance 不修改 state，如果需要 state 变化请用 step()
 let state = createAgentState({...});
 const execState = createExecutionState();
 
 while (true) {
-  const { state: sameState, phase, done } = await runner.advance(state, execState);
-  // sameState === state，advance 不产生新 state
+  const { state: newState, phase, done } = await runner.advance(state, execState);
+
+  // 在有变更的 phase，newState !== state（新 state 包含新消息）
+  // 在过渡 phase，newState === state（同一引用）
+  state = newState;
 
   console.log('进入阶段:', phase.type);
+  if (newState !== state) {
+    console.log('state 已更新，消息数:', state.context.messages.length);
+  }
 
-  // 在关键阶段干预（修改 ExecutionState，不影响 AgentState）
+  // 在 parsed phase 干预：修改 action 参数
   if (phase.type === 'parsed' && phase.action) {
-    console.log('准备调用:', phase.action);
     if (userWantsToModify) {
-      execState.action.arguments = newArgs;  // 直接改 execState
+      execState.action.arguments = newArgs;
     }
   }
 
   if (done) break;
 }
 
-// 中步：一次完整的 ReAct 循环（返回新的不可变 state）
+// 中步：一次完整的 ReAct 循环
 const { state: newState, result } = await runner.step(state);
-// newState !== state，step 产生了新的不可变 state
+// newState 是 advance 链中最后一次有变更时产生的 state
 
 // 中步流式：观察完整过程
 for await (const event of runner.stepStream(state)) {
@@ -513,13 +538,14 @@ for await (const event of runner.stepStream(state)) {
 
 ##### 验收标准
 - [ ] `advance()` 每次推进一个自然阶段，返回当前 phase
-- [ ] `advance()` 不修改 AgentState，返回的 state 与传入的是同一引用
-- [ ] 可在任意 phase 暂停、检查、修改 `ExecutionState` 后继续
-- [ ] `step()` 内部由多个 `advance()` 组成，完成后返回新的不可变 AgentState
+- [ ] `advance()` 在产生实质变更的 phase（llm-response, tool-result, completed）用 Immer 返回新 AgentState
+- [ ] `advance()` 在过渡 phase 返回原 state（同一引用）
+- [ ] 可在任意 phase 暂停，此时 AgentState 反映到该 phase 为止的所有变更
+- [ ] `step()` 内部由多个 `advance()` 组成，state 在 advance 过程中已逐步更新
 - [ ] `stepStream()` 复用 `advance()` 核心逻辑，仅在 `calling-llm` 阶段注入流式读取
 - [ ] `stepStream()` 只调用一次 LLM（不重复调用）
 - [ ] `advanceStream()` 不引入 `streaming` 作为独立 phase
-- [ ] 所有非 advance 方法返回的 AgentState 是新的不可变对象（使用 Immer）
+- [ ] 所有方法返回的 AgentState 遵循不可变原则（新 state 由 Immer produce 创建）
 
 ---
 
