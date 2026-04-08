@@ -34,13 +34,12 @@ describe('AgentRunner', () => {
       expect(runner).toBeDefined();
     });
 
-    it('should create AgentRunner with all options', () => {
+    it('should create AgentRunner with optional options', () => {
       const client = createMockClient();
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
         systemPrompt: 'Custom system prompt',
-        priority: 1,
         requestTimeout: 30000,
       });
 
@@ -166,8 +165,32 @@ describe('AgentRunner', () => {
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
-        priority: 5,
         requestTimeout: 30000,
+      });
+
+      const state = createAgentState(defaultConfig);
+      // Pass priority in chat options
+      await runner.chat(state, 'Hello', { priority: 5 });
+
+      expect(client.call).toHaveBeenCalledWith(
+        expect.objectContaining({
+          priority: 5,
+          requestTimeout: 30000,
+        })
+      );
+    });
+
+    it('should use default priority 0 when not specified', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Response',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
       });
 
       const state = createAgentState(defaultConfig);
@@ -175,8 +198,7 @@ describe('AgentRunner', () => {
 
       expect(client.call).toHaveBeenCalledWith(
         expect.objectContaining({
-          priority: 5,
-          requestTimeout: 30000,
+          priority: 0,
         })
       );
     });
@@ -366,6 +388,44 @@ describe('AgentRunner', () => {
 
       // Original state unchanged
       expect(originalState.context.messages).toHaveLength(originalMessageCount);
+    });
+
+    it('should accept priority option in chatStream', async () => {
+      const client = createMockClient();
+
+      async function* mockStream() {
+        yield {
+          type: 'done',
+          accumulatedContent: 'Response',
+          roundTotalTokens: { input: 5, output: 5 },
+        };
+      }
+
+      vi.mocked(client.stream).mockReturnValue(
+        mockStream() as AsyncIterable<{
+          type: string;
+          accumulatedContent?: string;
+          roundTotalTokens?: TokenStats;
+        }>
+      );
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      // Consume the stream
+      for await (const _ of runner.chatStream(state, 'Hello', { priority: 10 })) {
+        // Consume
+      }
+
+      // Verify priority was passed
+      expect(client.stream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          priority: 10,
+        })
+      );
     });
   });
 

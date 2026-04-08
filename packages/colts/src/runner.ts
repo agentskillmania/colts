@@ -20,14 +20,19 @@ export interface RunnerOptions {
   /** LLM client instance */
   llmClient: LLMClient;
 
-  /** System prompt/instructions (optional) */
+  /** System prompt/instructions (optional) - merged with AgentConfig.instructions */
   systemPrompt?: string;
-
-  /** Request priority for LLM calls (default: 0) */
-  priority?: number;
 
   /** Request timeout in milliseconds (optional) */
   requestTimeout?: number;
+}
+
+/**
+ * Options for individual chat calls
+ */
+export interface ChatOptions {
+  /** Request priority for LLM calls (default: 0) */
+  priority?: number;
 }
 
 /**
@@ -80,6 +85,10 @@ export interface ChatStreamChunk {
  * - Easy testing and debugging
  * - Time travel and replay capabilities
  *
+ * Design decisions:
+ * - systemPrompt is set on Runner as a default, merged with AgentConfig.instructions
+ * - priority is per-call, allowing dynamic prioritization of different requests
+ *
  * @example
  * Basic usage:
  * ```typescript
@@ -89,9 +98,12 @@ export interface ChatStreamChunk {
  *   systemPrompt: 'You are a helpful assistant.'
  * });
  *
- * // Blocking chat
+ * // Blocking chat with default priority
  * const result = await runner.chat(state, 'Hello!');
  * console.log(result.response);
+ *
+ * // High priority chat
+ * const urgent = await runner.chat(state, 'Urgent!', { priority: 10 });
  *
  * // Streaming chat
  * for await (const chunk of runner.chatStream(state, 'Hello!')) {
@@ -109,16 +121,22 @@ export class AgentRunner {
    *
    * @param state - Current agent state
    * @param userInput - User's message content
+   * @param chatOptions - Optional chat configuration (priority, etc.)
    * @returns ChatResult with updated state and response
    *
    * @example
    * ```typescript
+   * // Default priority
    * const result = await runner.chat(state, 'What is 2+2?');
+   *
+   * // High priority
+   * const result = await runner.chat(state, 'Urgent!', { priority: 10 });
+   *
    * console.log(result.response); // "4"
    * console.log(result.tokens); // { input: 15, output: 2 }
    * ```
    */
-  async chat(state: AgentState, userInput: string): Promise<ChatResult> {
+  async chat(state: AgentState, userInput: string, chatOptions?: ChatOptions): Promise<ChatResult> {
     // 1. Add user message to state
     let newState = addUserMessage(state, userInput);
 
@@ -129,7 +147,7 @@ export class AgentRunner {
     const response = await this.options.llmClient.call({
       model: this.options.model,
       messages,
-      priority: this.options.priority ?? 0,
+      priority: chatOptions?.priority ?? 0,
       requestTimeout: this.options.requestTimeout,
     });
 
@@ -155,6 +173,7 @@ export class AgentRunner {
    *
    * @param state - Current agent state
    * @param userInput - User's message content
+   * @param chatOptions - Optional chat configuration (priority, etc.)
    * @returns Async iterable of ChatStreamChunk
    *
    * @remarks
@@ -164,6 +183,7 @@ export class AgentRunner {
    *
    * @example
    * ```typescript
+   * // Default priority
    * for await (const chunk of runner.chatStream(state, 'Write a poem')) {
    *   switch (chunk.type) {
    *     case 'text':
@@ -177,9 +197,18 @@ export class AgentRunner {
    *       break;
    *   }
    * }
+   *
+   * // Low priority (background processing)
+   * for await (const chunk of runner.chatStream(state, 'Background task', { priority: -5 })) {
+   *   // ...
+   * }
    * ```
    */
-  async *chatStream(state: AgentState, userInput: string): AsyncIterable<ChatStreamChunk> {
+  async *chatStream(
+    state: AgentState,
+    userInput: string,
+    chatOptions?: ChatOptions
+  ): AsyncIterable<ChatStreamChunk> {
     // 1. Add user message to state (initial state for streaming)
     const currentState = addUserMessage(state, userInput);
 
@@ -193,7 +222,7 @@ export class AgentRunner {
       for await (const event of this.options.llmClient.stream({
         model: this.options.model,
         messages,
-        priority: this.options.priority ?? 0,
+        priority: chatOptions?.priority ?? 0,
         requestTimeout: this.options.requestTimeout,
       })) {
         switch (event.type) {

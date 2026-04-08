@@ -36,6 +36,7 @@ export {
 export {
   AgentRunner,
   type RunnerOptions,
+  type ChatOptions,
   type ChatResult,
   type ChatStreamChunk,
 } from './runner.js';
