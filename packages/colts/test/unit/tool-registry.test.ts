@@ -440,6 +440,52 @@ describe('Tool Registry (Step 3)', () => {
       );
     });
 
+    it('should reject division by zero (Infinity)', async () => {
+      await expect(calculatorTool.execute({ expression: '1 / 0' })).rejects.toThrow(
+        'invalid number'
+      );
+    });
+
+    it('should reject 0/0 (NaN)', async () => {
+      await expect(calculatorTool.execute({ expression: '0 / 0' })).rejects.toThrow(
+        'invalid number'
+      );
+    });
+
+    it('should handle syntax errors in expression', async () => {
+      await expect(calculatorTool.execute({ expression: '2 + * 3' })).rejects.toThrow(
+        'Failed to evaluate expression'
+      );
+    });
+
+    it('should handle incomplete expressions', async () => {
+      await expect(calculatorTool.execute({ expression: '2 +' })).rejects.toThrow(
+        'Failed to evaluate expression'
+      );
+    });
+
+    it('should handle non-Error exceptions', async () => {
+      // Mock Function constructor to throw non-Error
+      const originalFunction = global.Function;
+      global.Function = class MockFunction extends originalFunction {
+        constructor(...args: string[]) {
+          super(...args);
+          // Return a function that throws non-Error
+          return (() => {
+            throw 'string error'; // Non-Error exception
+          }) as unknown as MockFunction;
+        }
+      } as unknown as typeof originalFunction;
+
+      try {
+        await expect(calculatorTool.execute({ expression: '1 + 1' })).rejects.toThrow(
+          'Failed to evaluate expression'
+        );
+      } finally {
+        global.Function = originalFunction;
+      }
+    });
+
     it('should be usable with registry', async () => {
       registry.register(calculatorTool);
 
