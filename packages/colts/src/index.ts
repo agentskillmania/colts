@@ -1,10 +1,11 @@
 /**
- * @fileoverview colts - 面向开发调试的 ReAct Agent 框架
+ * @fileoverview colts - ReAct Agent Framework for Development and Debugging
  *
- * Step 0: AgentState 数据结构
- * 纯数据、可序列化、不可变
+ * Step 0: AgentState Data Structure
+ * Step 1: Basic LLM Chat
  */
 
+// Types
 export type {
   AgentState,
   AgentConfig,
@@ -16,6 +17,7 @@ export type {
   Snapshot,
 } from './types.js';
 
+// State operations
 export {
   createAgentState,
   updateState,
@@ -29,3 +31,11 @@ export {
   serializeState,
   deserializeState,
 } from './state.js';
+
+// Runner
+export {
+  AgentRunner,
+  type RunnerOptions,
+  type ChatResult,
+  type ChatStreamChunk,
+} from './runner.js';

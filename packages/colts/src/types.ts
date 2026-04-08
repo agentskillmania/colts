@@ -30,6 +30,8 @@ export interface Message {
   visible?: boolean;
   /** 时间戳 */
   timestamp?: number;
+  /** 工具调用 ID（仅 role='tool' 时使用） */
+  toolCallId?: string;
 }
 
 /**
