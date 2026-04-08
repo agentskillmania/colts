@@ -563,14 +563,14 @@ for await (const event of runner.stepStream(state)) {
 // 运行结果
 type RunResult = 
   | { type: 'success'; answer: string; totalSteps: number }
-  | { type: 'max_steps'; partialAnswer?: string; totalSteps: number }
+  | { type: 'max_steps'; totalSteps: number }  // partialAnswer 暂不提供
   | { type: 'error'; error: Error; totalSteps: number };
 
 // 跨步骤的流式事件
 type RunStreamEvent =
   | { type: 'step:start'; step: number; state: AgentState }
   | { type: 'step:end'; step: number; result: StepResult }
-  | StreamEvent  // step 内部的所有事件
+  | StreamEvent  // step 内部的所有事件（token、phase-change、tool:start/end）
   | { type: 'complete'; result: RunResult };
 
 class AgentRunner {
@@ -599,21 +599,17 @@ class AgentRunner {
 const { state: finalState, result } = await runner.run(initialState);
 console.log(result.answer);
 
-// 跑步流式：观察但不干预
-const stream = runner.runStream(initialState);
-for await (const event of stream) {
+// 跑步流式：逐字输出
+for await (const event of runner.runStream(initialState)) {
   switch (event.type) {
-    case 'step:start':
-      console.log(`Step ${event.step} started`);
-      break;
     case 'token':
-      process.stdout.write(event.token);
+      process.stdout.write(event.token);  // 逐字输出
       break;
-    case 'action':
-      console.log('Action:', event.tool);
+    case 'step:end':
+      console.log(`\nStep ${event.step} done`);
       break;
     case 'complete':
-      console.log('Done:', event.result.answer);
+      console.log('Finished:', event.result);
       break;
   }
 }
@@ -622,13 +618,20 @@ for await (const event of stream) {
 **实现关系**:
 - `run()` = 循环调用 `step()` 直到完成
 - `step()` = 循环调用 `advance()` 直到一个 ReAct 完成
-- `runStream()` = 包装 `run()`，在内部 emit 事件
+- `runStream()` = 循环调用 `stepStream()` 直到完成（**不是**包装 `run()`）
+- `run()` 和 `runStream()` 是**平行关系**，各自循环对应的 step 方法
+
+**maxSteps 行为**:
+- 达到 maxSteps 时返回 `{ type: 'max_steps', totalSteps }`，不提供 partialAnswer
+- 每次 `step()` 调用计为一步（无论是否执行工具）
 
 **验收标准**:
-- [ ] `run()` 自动循环直到完成，返回最终 state
-- [ ] `runStream()` 实时产生跨步骤的事件流
-- [ ] 支持流式中断（`break` 跳出循环）
-- [ ] 返回不可变的最终 state（使用 Immer）
+- [x] `run()` 自动循环直到完成，返回最终 state
+- [x] `runStream()` 实时产生跨步骤的事件流（含逐字 token）
+- [x] `runStream()` 内部调用 `stepStream()`，能逐字转发 LLM 输出
+- [x] 支持流式中断（`break` 跳出循环）
+- [x] 返回不可变的最终 state（使用 Immer）
+- [x] 达到 maxSteps 时正确返回 `max_steps` 结果
 
 ---
 
