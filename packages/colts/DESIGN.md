@@ -177,27 +177,47 @@ class ToolRegistry {
 
 ---
 
-#### Step 4: 单步推进（Step）
-**目标**: 完成一次 ReAct 循环
+#### Step 4: 三级执行控制
+**目标**: 支持细粒度到粗粒度的多种控制方式
 
 ```typescript
-// 流式事件类型
+// 执行阶段（微步粒度）
+type Phase =
+  | { type: 'idle' }                                      // 初始状态
+  | { type: 'preparing'; messages: Message[] }            // 准备 Prompt
+  | { type: 'calling-llm' }                               // 正在调用 LLM
+  | { type: 'streaming'; token: string }                  // 流式接收中
+  | { type: 'llm-response'; response: string }            // 收到完整响应
+  | { type: 'parsing' }                                   // 解析响应中
+  | { type: 'parsed'; thought: string; action?: Action }  // 解析完成
+  | { type: 'executing-tool'; action: Action }            // 执行工具中
+  | { type: 'tool-result'; result: unknown }              // 工具返回结果
+  | { type: 'completed'; answer: string }                 // 任务完成
+  | { type: 'error'; error: Error };                      // 执行错误
+
+// 流式事件（用于 observe，不改变状态）
 type StreamEvent =
-  | { type: 'token'; token: string }                    // LLM 实时 token
-  | { type: 'thought'; text: string }                   // 解析出的思考
-  | { type: 'action'; tool: string; args: object }      // 检测到的 Action
-  | { type: 'tool:start'; tool: string; args: object }  // 开始执行工具
-  | { type: 'tool:end'; result: unknown }               // 工具执行完成
-  | { type: 'error'; error: Error };                    // 执行错误
+  | { type: 'phase-change'; from: Phase; to: Phase }
+  | { type: 'token'; token: string }
+  | { type: 'tool:start'; action: Action }
+  | { type: 'tool:end'; result: unknown };
 
 class AgentRunner {
-  // 标准用法：等待完整结果
-  async step(state: AgentState): Promise<{
-    state: AgentState;
-    result: StepResult;
+  // 🔬 微步：细粒度阶段推进（调试用）
+  // 每调用一次，推进到下一个自然断点
+  async advance(state: AgentState): Promise<{
+    state: AgentState;  // 新状态
+    phase: Phase;       // 当前所处阶段
+    done: boolean;      // 是否已完成（completed/error）
   }>;
   
-  // 流式用法：实时观察执行过程
+  // 🦶 中步：完整的 ReAct 循环（ Thought → Action → Observation ）
+  async step(state: AgentState): Promise<{
+    state: AgentState;
+    result: StepResult;  // { type: 'continue' | 'done', ... }
+  }>;
+  
+  // 中步流式：观察完整的 ReAct 循环过程
   async *stepStream(state: AgentState): AsyncGenerator<
     StreamEvent,
     { state: AgentState; result: StepResult }
@@ -208,18 +228,43 @@ class AgentRunner {
 //            | { type: 'done', answer }
 ```
 
-**执行流程**:
-1. 调用 LLM（流式接收 token）
-2. 实时 emit token 事件（调试用）
-3. 完整响应后解析 Thought + Action
-4. 如果有 Action，emit action 事件，执行 Tool
-5. 返回新 state 和 result（不可变数据，使用 Immer）
+**使用方式对比**:
+
+```typescript
+// 🔬 微步：细粒度控制（每个阶段都停）
+let state = createAgentState({...});
+while (true) {
+  const { state: newState, phase, done } = await runner.advance(state);
+  state = newState;
+  
+  console.log('进入阶段:', phase.type);
+  
+  // 在关键阶段干预
+  if (phase.type === 'parsed' && phase.action) {
+    console.log('准备调用:', phase.action);
+    if (userWantsToModify) {
+      state = modifyAction(state, newAction);  // 修改后继续
+    }
+  }
+  
+  if (done) break;
+}
+
+// 🦶 中步：一次完整的 ReAct 循环
+const { state: newState, result } = await runner.step(state);
+
+// 中步流式：观察但不控制
+for await (const event of runner.stepStream(state)) {
+  console.log(event.type, event);
+}
+```
 
 **验收标准**:
-- [ ] `step()` 等待完整结果，返回新 state
-- [ ] `stepStream()` 实时产生 token/action 事件
-- [ ] 流式可以在任意时刻 `break` 中断
-- [ ] 两种方法都返回不可变的 AgentState（使用 Immer）
+- [ ] `advance()` 每次推进一个自然阶段，返回当前 phase
+- [ ] 可在任意 phase 暂停、检查、修改后继续
+- [ ] `step()` 内部由多个 `advance()` 组成，完成完整 ReAct 循环
+- [ ] `stepStream()` 提供观察能力，不改变控制流
+- [ ] 所有方法返回不可变的 AgentState（使用 Immer）
 
 ---
 
@@ -236,12 +281,12 @@ type RunResult =
 // 跨步骤的流式事件
 type RunStreamEvent =
   | { type: 'step:start'; step: number; state: AgentState }
-  | StreamEvent  // 包含 step 内部的所有事件
   | { type: 'step:end'; step: number; result: StepResult }
+  | StreamEvent  // step 内部的所有事件
   | { type: 'complete'; result: RunResult };
 
 class AgentRunner {
-  // 标准用法：等待完整运行结束
+  // 🏃 跑步：自动循环直到完成
   async run(state: AgentState, options?: {
     maxSteps?: number;  // 默认 10
   }): Promise<{
@@ -249,7 +294,7 @@ class AgentRunner {
     result: RunResult;
   }>;
   
-  // 流式用法：观察整个运行过程
+  // 跑步流式：观察整个运行过程（多轮 step）
   async *runStream(state: AgentState, options?: {
     maxSteps?: number;
   }): AsyncGenerator<
@@ -262,11 +307,11 @@ class AgentRunner {
 **使用示例**:
 
 ```typescript
-// 标准用法
+// 🏃 跑步：全自动运行
 const { state: finalState, result } = await runner.run(initialState);
 console.log(result.answer);
 
-// 流式用法（调试）
+// 跑步流式：观察但不干预
 const stream = runner.runStream(initialState);
 for await (const event of stream) {
   switch (event.type) {
@@ -274,10 +319,10 @@ for await (const event of stream) {
       console.log(`Step ${event.step} started`);
       break;
     case 'token':
-      process.stdout.write(event.token);  // 实时显示思考
+      process.stdout.write(event.token);
       break;
     case 'action':
-      console.log('Action:', event.tool); // 准备调用工具
+      console.log('Action:', event.tool);
       break;
     case 'complete':
       console.log('Done:', event.result.answer);
@@ -285,6 +330,11 @@ for await (const event of stream) {
   }
 }
 ```
+
+**实现关系**:
+- `run()` = 循环调用 `step()` 直到完成
+- `step()` = 循环调用 `advance()` 直到一个 ReAct 完成
+- `runStream()` = 包装 `run()`，在内部 emit 事件
 
 **验收标准**:
 - [ ] `run()` 自动循环直到完成，返回最终 state
