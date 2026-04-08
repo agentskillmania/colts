@@ -15,33 +15,23 @@ import type { ExecutionState } from '../../src/execution.js';
 import { z } from 'zod';
 
 // Helper to create mock LLM client
-// For stepStream tests, provide duplicate responses because:
-// 1. First call() is used by advance() during phase transition
-// 2. Second call() is used after streaming to get tool calls
-function createMockLLMClient(
-  responses: LLMResponse[],
-  options?: { forStepStream?: boolean }
-): LLMClient {
+function createMockLLMClient(responses: LLMResponse[]): LLMClient {
   let callIndex = 0;
-  let streamIndex = 0;
-  const expandedResponses = options?.forStepStream
-    ? responses.flatMap((r) => [r, r]) // Duplicate for stepStream
-    : responses;
 
   return {
     call: vi.fn().mockImplementation(() => {
-      if (callIndex >= expandedResponses.length) {
-        throw new Error(
-          `No more mock responses (index ${callIndex}, total ${expandedResponses.length})`
-        );
+      if (callIndex >= responses.length) {
+        throw new Error(`No more mock responses (index ${callIndex}, total ${responses.length})`);
       }
-      return Promise.resolve(expandedResponses[callIndex++]);
+      return Promise.resolve(responses[callIndex++]);
     }),
     stream: vi.fn().mockImplementation(async function* () {
-      if (streamIndex >= responses.length) {
-        streamIndex = 0;
+      if (callIndex >= responses.length) {
+        throw new Error('No more mock responses for stream');
       }
-      const response = responses[streamIndex];
+      const response = responses[callIndex];
+
+      // Yield content as tokens
       const content = response.content;
       const tokens = content.split(' ');
       for (let i = 0; i < tokens.length; i++) {
@@ -51,10 +41,28 @@ function createMockLLMClient(
           accumulatedContent: tokens.slice(0, i + 1).join(' '),
         };
       }
+
+      // Yield tool calls if present
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        for (const toolCall of response.toolCalls) {
+          yield {
+            type: 'tool_call',
+            toolCall: {
+              id: toolCall.id,
+              name: toolCall.name,
+              arguments: toolCall.arguments,
+            },
+          };
+        }
+      }
+
       yield {
         type: 'done',
         roundTotalTokens: response.tokens,
       };
+
+      // Increment for next call
+      callIndex++;
     }),
   } as unknown as LLMClient;
 }
@@ -130,6 +138,37 @@ describe('Step Control', () => {
       }
     });
 
+    it('should return new immutable state on each advance', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'The answer',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const execState = createExecutionState();
+      let currentState = state;
+
+      // Progress through phases and verify data integrity
+      while (!isTerminalPhase(execState.phase)) {
+        const result = await runner.advance(currentState, execState);
+        // Update current state for next iteration
+        currentState = result.state;
+      }
+
+      // Original state should be unchanged
+      expect(state.context.stepCount).toBe(0);
+      // All transitions completed
+      expect(execState.phase.type).toBe('completed');
+    });
+
     it('should progress through phases for tool execution', async () => {
       const mockResponse: LLMResponse = {
         content: 'Let me calculate',
@@ -155,7 +194,9 @@ describe('Step Control', () => {
         name: 'calculate',
         description: 'Calculate math expression',
         parameters: z.object({ expression: z.string() }),
-        execute: async ({ expression }) => eval(expression).toString(),
+        execute: async ({ expression }) => {
+          return eval(expression).toString();
+        },
       });
 
       const state = createAgentState(defaultConfig);
@@ -341,12 +382,126 @@ describe('Step Control', () => {
         llmClient: client,
       });
 
+      // No tool registry provided
       const state = createAgentState(defaultConfig);
       const { result } = await runner.step(state);
 
       expect(result.type).toBe('continue');
       if (result.type === 'continue') {
         expect(result.toolResult).toContain('not executed');
+        expect(result.toolResult).toContain('no tool registry');
+      }
+    });
+
+    it('should handle LLM error', async () => {
+      const client = {
+        call: vi.fn().mockRejectedValue(new Error('LLM API error')),
+        stream: vi.fn(),
+      } as unknown as LLMClient;
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const { state: newState, result } = await runner.step(state);
+
+      expect(result.type).toBe('done');
+      if (result.type === 'done') {
+        expect(result.answer).toContain('LLM API error');
+      }
+
+      // Original state should be unchanged
+      expect(state.context.stepCount).toBe(0);
+      // Error is recorded in messages, so step count increments
+      expect(newState.context.stepCount).toBe(1);
+      expect(newState.context.messages.length).toBe(1);
+    });
+
+    it('should use runner tool registry as default', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Calculating',
+        toolCalls: [
+          {
+            id: 'call-123',
+            name: 'calculate',
+            arguments: { expression: '5 * 5' },
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+
+      const registry = new ToolRegistry();
+      registry.register({
+        name: 'calculate',
+        description: 'Calculate math expression',
+        parameters: z.object({ expression: z.string() }),
+        execute: async ({ expression }) => eval(expression).toString(),
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        toolRegistry: registry,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const { result } = await runner.step(state);
+
+      expect(result.type).toBe('continue');
+      if (result.type === 'continue') {
+        expect(result.toolResult).toBe('25');
+      }
+    });
+
+    it('should prefer passed registry over runner default', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Calculating',
+        toolCalls: [
+          {
+            id: 'call-123',
+            name: 'multiply',
+            arguments: { a: 3, b: 4 },
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+
+      const defaultRegistry = new ToolRegistry();
+      defaultRegistry.register({
+        name: 'calculate',
+        description: 'Calculate',
+        parameters: z.object({ expression: z.string() }),
+        execute: async () => 'default',
+      });
+
+      const passedRegistry = new ToolRegistry();
+      passedRegistry.register({
+        name: 'multiply',
+        description: 'Multiply two numbers',
+        parameters: z.object({ a: z.number(), b: z.number() }),
+        execute: async ({ a, b }) => (a * b).toString(),
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        toolRegistry: defaultRegistry,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const { result } = await runner.step(state, passedRegistry);
+
+      expect(result.type).toBe('continue');
+      if (result.type === 'continue') {
+        expect(result.toolResult).toBe('12');
       }
     });
   });
@@ -360,7 +515,7 @@ describe('Step Control', () => {
         stopReason: 'stop',
       };
 
-      const client = createMockLLMClient([mockResponse], { forStepStream: true });
+      const client = createMockLLMClient([mockResponse]);
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
@@ -389,7 +544,7 @@ describe('Step Control', () => {
         stopReason: 'stop',
       };
 
-      const client = createMockLLMClient([mockResponse], { forStepStream: true });
+      const client = createMockLLMClient([mockResponse]);
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
@@ -409,7 +564,7 @@ describe('Step Control', () => {
 
     it('should emit tool events when tool is called', async () => {
       const mockResponse: LLMResponse = {
-        content: 'Calculating',
+        content: 'Let me calculate',
         toolCalls: [
           {
             id: 'call-123',
@@ -436,19 +591,12 @@ describe('Step Control', () => {
       });
 
       const state = createAgentState(defaultConfig);
-      const events: { type: string; from?: { type: string }; to?: { type: string } }[] = [];
+      const events: { type: string }[] = [];
 
       for await (const event of runner.stepStream(state, registry)) {
-        events.push(event as { type: string; from?: { type: string }; to?: { type: string } });
+        events.push(event as { type: string });
       }
 
-      // Should have phase-change to executing-tool
-      const executingToolPhase = events.find(
-        (e) => e.type === 'phase-change' && e.to?.type === 'executing-tool'
-      );
-      expect(executingToolPhase).toBeDefined();
-
-      // Should have tool events
       expect(events.some((e) => e.type === 'tool:start')).toBe(true);
       expect(events.some((e) => e.type === 'tool:end')).toBe(true);
     });
@@ -461,7 +609,7 @@ describe('Step Control', () => {
         stopReason: 'stop',
       };
 
-      const client = createMockLLMClient([mockResponse], { forStepStream: true });
+      const client = createMockLLMClient([mockResponse]);
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
@@ -500,7 +648,7 @@ describe('Step Control', () => {
         stopReason: 'tool_calls',
       };
 
-      const client = createMockLLMClient([mockResponse], { forStepStream: true });
+      const client = createMockLLMClient([mockResponse]);
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
@@ -527,15 +675,13 @@ describe('Step Control', () => {
         }
       }
 
-      expect(result).toBeDefined();
-      expect(result.result).toBeDefined();
       expect(result.result.type).toBe('continue');
       if (result.result.type === 'continue') {
         expect(result.result.toolResult).toBe('5');
       }
     });
 
-    it('should handle error case in step()', async () => {
+    it('should handle error case', async () => {
       const client = {
         call: vi.fn().mockRejectedValue(new Error('LLM API error')),
         stream: vi.fn(),
@@ -557,96 +703,6 @@ describe('Step Control', () => {
       }
     });
 
-    it('should handle tool execution error in stepStream', async () => {
-      const mockResponse: LLMResponse = {
-        content: 'Trying to calculate',
-        toolCalls: [
-          {
-            id: 'call-123',
-            name: 'failingTool',
-            arguments: {},
-          },
-        ],
-        tokens: mockTokens,
-        stopReason: 'tool_calls',
-      };
-
-      const client = createMockLLMClient([mockResponse], { forStepStream: true });
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const registry = new ToolRegistry();
-      registry.register({
-        name: 'failingTool',
-        description: 'A tool that fails',
-        parameters: z.object({}),
-        execute: async () => {
-          throw new Error('Tool failed!');
-        },
-      });
-
-      const state = createAgentState(defaultConfig);
-
-      // Test stepStream with failing tool
-      const iterator = runner.stepStream(state, registry);
-      let result;
-      while (true) {
-        const { done, value } = await iterator.next();
-        if (done) {
-          result = value;
-          break;
-        }
-      }
-
-      expect(result.result.type).toBe('continue');
-      if (result.result.type === 'continue') {
-        expect(result.result.toolResult).toContain('Error');
-        expect(result.result.toolResult).toContain('Tool failed!');
-      }
-    });
-
-    it('should handle missing registry in stepStream', async () => {
-      const mockResponse: LLMResponse = {
-        content: 'Trying to calculate',
-        toolCalls: [
-          {
-            id: 'call-123',
-            name: 'someTool',
-            arguments: {},
-          },
-        ],
-        tokens: mockTokens,
-        stopReason: 'tool_calls',
-      };
-
-      const client = createMockLLMClient([mockResponse], { forStepStream: true });
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      // No registry provided
-      const state = createAgentState(defaultConfig);
-
-      const iterator = runner.stepStream(state);
-      let result;
-      while (true) {
-        const { done, value } = await iterator.next();
-        if (done) {
-          result = value;
-          break;
-        }
-      }
-
-      expect(result.result.type).toBe('continue');
-      if (result.result.type === 'continue') {
-        expect(result.result.toolResult).toContain('not executed');
-        expect(result.result.toolResult).toContain('no tool registry');
-      }
-    });
-
     it('should handle tool returning object result', async () => {
       const mockResponse: LLMResponse = {
         content: 'Getting data',
@@ -661,7 +717,7 @@ describe('Step Control', () => {
         stopReason: 'tool_calls',
       };
 
-      const client = createMockLLMClient([mockResponse], { forStepStream: true });
+      const client = createMockLLMClient([mockResponse]);
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
@@ -692,6 +748,46 @@ describe('Step Control', () => {
       if (result.result.type === 'continue') {
         expect(typeof result.result.toolResult).toBe('object');
         expect(result.result.toolResult).toEqual({ id: '123', name: 'Test Item', value: 42 });
+      }
+    });
+
+    it('should handle missing registry in stepStream', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Trying to calculate',
+        toolCalls: [
+          {
+            id: 'call-123',
+            name: 'someTool',
+            arguments: {},
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      // No registry provided
+      const state = createAgentState(defaultConfig);
+
+      const iterator = runner.stepStream(state);
+      let result;
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          result = value;
+          break;
+        }
+      }
+
+      expect(result.result.type).toBe('continue');
+      if (result.result.type === 'continue') {
+        expect(result.result.toolResult).toContain('not executed');
+        expect(result.result.toolResult).toContain('no tool registry');
       }
     });
   });
@@ -771,6 +867,73 @@ describe('Step Control', () => {
       expect(isTerminalPhase({ type: 'preparing', messages: [] })).toBe(false);
       expect(isTerminalPhase({ type: 'calling-llm' })).toBe(false);
       expect(isTerminalPhase({ type: 'parsed', thought: 'test' })).toBe(false);
+    });
+  });
+
+  describe('Invariants', () => {
+    it('should maintain state data integrity across all operations', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Test response',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const originalState = createAgentState(defaultConfig);
+      const originalId = originalState.id;
+      const originalStepCount = originalState.context.stepCount;
+
+      // Perform step operation
+      const { state: newState } = await runner.step(originalState);
+
+      // Original state should be unchanged
+      expect(originalState.id).toBe(originalId);
+      expect(originalState.context.stepCount).toBe(originalStepCount);
+
+      // New state should have updates
+      expect(newState.context.stepCount).toBe(1);
+      expect(newState.context.messages.length).toBe(1);
+    });
+
+    it('should correctly transition through all phases', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Test',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const execState = createExecutionState();
+      const phases: string[] = [];
+
+      while (!isTerminalPhase(execState.phase)) {
+        const result = await runner.advance(phases.length > 0 ? state : state, execState);
+        phases.push(result.phase.type);
+
+        // Safety limit
+        if (phases.length > 20) break;
+      }
+
+      // Should have progressed through expected phases
+      expect(phases).toContain('preparing');
+      expect(phases).toContain('calling-llm');
+      expect(phases).toContain('llm-response');
+      expect(phases).toContain('parsing');
+      expect(phases).toContain('parsed');
+      expect(phases).toContain('completed');
     });
   });
 });

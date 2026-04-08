@@ -68,6 +68,8 @@ export interface AgentContext {
   stepCount: number;
   /** Previous tool execution result (if any) */
   lastToolResult?: unknown;
+  /** Internal transition counter for immutability tracking */
+  __transition?: number;
 }
 
 /**

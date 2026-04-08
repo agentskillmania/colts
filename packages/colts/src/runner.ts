@@ -8,6 +8,7 @@
 import type { LLMClient, TokenStats } from '@agentskillmania/llm-client';
 import type { Message, TextContent, Tool } from '@mariozechner/pi-ai';
 import type { AgentState } from './types.js';
+import { produce } from 'immer';
 import {
   addUserMessage,
   addAssistantMessage,
@@ -420,12 +421,11 @@ export class AgentRunner {
   /**
    * 🔬 Micro-step: Advance one execution phase
    *
-   * Each call progresses to the next natural breakpoint:
-   * idle → preparing → calling-llm → llm-response → parsing → parsed
-   * → executing-tool (if action) → tool-result → completed
+   * Each call progresses to the next natural breakpoint and returns an immutable
+   * new AgentState. The original state is never modified.
    *
-   * @param state - Current agent state
-   * @param execState - Execution state tracking current phase
+   * @param state - Current agent state (immutable)
+   * @param execState - Execution state tracking current phase (caller managed)
    * @param toolRegistry - Optional tool registry
    * @returns Updated state, current phase, and completion status
    *
@@ -436,14 +436,14 @@ export class AgentRunner {
    *
    * while (true) {
    *   const { state: newState, phase, done } = await runner.advance(state, execState);
-   *   state = newState;
+   *   state = newState; // Always use the new state
    *
    *   console.log('Entered phase:', phase.type);
    *
    *   // Intervene at specific phases
    *   if (phase.type === 'parsed' && phase.action) {
    *     console.log('About to execute:', phase.action);
-   *     // Can modify action here before continuing
+   *     // Can modify action in execState before continuing
    *   }
    *
    *   if (done) break;
@@ -486,7 +486,7 @@ export class AgentRunner {
 
         case 'completed':
         case 'error':
-          // Already terminal
+          // Already terminal - return current state unchanged
           return { state, phase: currentPhase, done: true };
 
         default:
@@ -510,12 +510,20 @@ export class AgentRunner {
       timestamp: Date.now(),
     }));
     execState.phase = { type: 'preparing', messages: displayMessages };
-    return { state, phase: execState.phase, done: false };
+    // Return new immutable state with incremented transition counter
+    const newState = produce(state, (draft) => {
+      draft.context.__transition = (state.context.__transition ?? 0) + 1;
+    });
+    return { state: newState, phase: execState.phase, done: false };
   }
 
   private advanceToCallingLLM(state: AgentState, execState: ExecutionState): AdvanceResult {
     execState.phase = { type: 'calling-llm' };
-    return { state, phase: execState.phase, done: false };
+    // Return new immutable state with incremented transition counter
+    const newState = produce(state, (draft) => {
+      draft.context.__transition = (state.context.__transition ?? 0) + 1;
+    });
+    return { state: newState, phase: execState.phase, done: false };
   }
 
   private async advanceToLLMResponse(
@@ -533,23 +541,34 @@ export class AgentRunner {
       requestTimeout: this.options.requestTimeout,
     });
 
-    // Store LLM response
+    // Store LLM response in execution state
     const responseText = response.content;
     execState.llmResponse = responseText;
 
-    // Also store tool calls if present
+    // Store all tool calls, not just the first
     if (response.toolCalls && response.toolCalls.length > 0) {
+      // Store first action for execution (parallel execution can be added later)
       const toolCall = response.toolCalls[0];
       execState.action = toolCallToAction(toolCall);
+      // Store all actions for future use
+      execState.allActions = response.toolCalls.map(toolCallToAction);
     }
 
     execState.phase = { type: 'llm-response', response: responseText };
-    return { state, phase: execState.phase, done: false };
+    // Return new immutable state
+    const newState = produce(state, (draft) => {
+      draft.context.__transition = (state.context.__transition ?? 0) + 1;
+    });
+    return { state: newState, phase: execState.phase, done: false };
   }
 
   private advanceToParsing(state: AgentState, execState: ExecutionState): AdvanceResult {
     execState.phase = { type: 'parsing' };
-    return { state, phase: execState.phase, done: false };
+    // Return new immutable state
+    const newState = produce(state, (draft) => {
+      draft.context.__transition = (state.context.__transition ?? 0) + 1;
+    });
+    return { state: newState, phase: execState.phase, done: false };
   }
 
   private advanceToParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
@@ -571,22 +590,28 @@ export class AgentRunner {
 
     execState.thought = parseResult.thought;
 
-    if (parseResult.toolCalls.length > 0) {
-      const action = toolCallToAction(parseResult.toolCalls[0]);
-      execState.action = action;
-      execState.phase = { type: 'parsed', thought: parseResult.thought, action };
+    if (parseResult.toolCalls.length > 0 && execState.action) {
+      execState.phase = { type: 'parsed', thought: parseResult.thought, action: execState.action };
     } else {
       execState.phase = { type: 'parsed', thought: parseResult.thought };
     }
 
-    return { state, phase: execState.phase, done: false };
+    // Return new immutable state
+    const newState = produce(state, (draft) => {
+      draft.context.stepCount = state.context.stepCount;
+    });
+    return { state: newState, phase: execState.phase, done: false };
   }
 
   private advanceFromParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
     if (execState.action) {
       // Need to execute tool
       execState.phase = { type: 'executing-tool', action: execState.action };
-      return { state, phase: execState.phase, done: false };
+      // Return new immutable state
+      const newState = produce(state, (draft) => {
+        draft.context.stepCount = state.context.stepCount;
+      });
+      return { state: newState, phase: execState.phase, done: false };
     } else {
       // No tool needed, complete this step
       return this.advanceToCompleted(state, execState);
@@ -618,13 +643,23 @@ export class AgentRunner {
     execState.toolResult = result;
     execState.phase = { type: 'tool-result', result };
 
-    return { state, phase: execState.phase, done: false };
+    // Create new immutable state with tool result
+    const newState = produce(state, (draft) => {
+      draft.context.stepCount = state.context.stepCount;
+      draft.context.lastToolResult = result;
+    });
+
+    return { state: newState, phase: execState.phase, done: false };
   }
 
   private advanceToCompleted(state: AgentState, execState: ExecutionState): AdvanceResult {
     const answer = execState.thought ?? '';
     execState.phase = { type: 'completed', answer };
-    return { state, phase: execState.phase, done: true };
+    // Return new immutable state
+    const newState = produce(state, (draft) => {
+      draft.context.stepCount = state.context.stepCount;
+    });
+    return { state: newState, phase: execState.phase, done: true };
   }
 
   /**
@@ -643,22 +678,18 @@ export class AgentRunner {
     const registry = toolRegistry ?? this.options.toolRegistry;
     const fromPhase = execState.phase;
 
-    // Emit phase change at start
-    if (fromPhase.type === 'idle') {
-      // Will transition to preparing
-    }
-
-    // For now, delegate to advance() and emit synthetic events
-    // A full streaming implementation would need LLM client support
-    // for streaming with tool calls
-
+    // Handle streaming LLM response
     if (fromPhase.type === 'calling-llm') {
-      // Stream LLM response
-      const tools = this.getToolsForLLM(registry);
-      let accumulatedContent = '';
-
       yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming', token: '' } };
 
+      const tools = this.getToolsForLLM(registry);
+      let accumulatedContent = '';
+      let responseContent = '';
+      let responseToolCalls:
+        | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+        | undefined;
+
+      // Use single streaming call and capture complete response
       for await (const event of this.options.llmClient.stream({
         model: this.options.model,
         messages: execState.preparedMessages ?? this.buildMessages(state),
@@ -669,14 +700,46 @@ export class AgentRunner {
         if (event.type === 'text') {
           accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
           yield { type: 'token', token: event.delta ?? '' };
+        } else if (event.type === 'tool_call' && event.toolCall) {
+          // Capture tool call from stream
+          responseToolCalls = responseToolCalls ?? [];
+          responseToolCalls.push({
+            id: event.toolCall.id,
+            name: event.toolCall.name,
+            arguments: event.toolCall.arguments,
+          });
+        } else if (event.type === 'done') {
+          responseContent = accumulatedContent;
         }
       }
 
-      execState.llmResponse = accumulatedContent;
-      execState.phase = { type: 'streaming', token: accumulatedContent };
+      // Store the complete response
+      execState.llmResponse = responseContent;
+      if (responseToolCalls && responseToolCalls.length > 0) {
+        const toolCall = responseToolCalls[0];
+        execState.action = {
+          id: toolCall.id,
+          tool: toolCall.name,
+          arguments: toolCall.arguments,
+        };
+        execState.allActions = responseToolCalls.map((tc) => ({
+          id: tc.id,
+          tool: tc.name,
+          arguments: tc.arguments,
+        }));
+      }
+      execState.phase = { type: 'llm-response', response: responseContent };
+
+      // Create new immutable state
+      const newState = produce(state, (draft) => {
+        draft.context.stepCount = state.context.stepCount;
+      });
+
+      yield { type: 'phase-change', from: { type: 'streaming', token: '' }, to: execState.phase };
+      return { state: newState, phase: execState.phase, done: false };
     }
 
-    // Delegate remaining to advance()
+    // For other phases, delegate to advance()
     const result = await this.advance(state, execState, registry);
     yield { type: 'phase-change', from: fromPhase, to: result.phase };
 
@@ -705,6 +768,7 @@ export class AgentRunner {
    * // Step with tool execution
    * if (result.type === 'continue') {
    *   console.log('Tool result:', result.toolResult);
+   *   // Call step again with new state
    *   const final = await runner.step(newState);
    * }
    * ```
@@ -717,14 +781,19 @@ export class AgentRunner {
     const execState = createExecutionState();
 
     // Execute phases until completion
+    let currentState = state;
     while (!isTerminalPhase(execState.phase)) {
-      const { state: newState, phase, done } = await this.advance(state, execState, registry);
-      state = newState;
+      const {
+        state: newState,
+        phase,
+        done,
+      } = await this.advance(currentState, execState, registry);
+      currentState = newState;
 
       if (done && phase.type === 'completed') {
-        // Final answer
+        // Final answer - add to messages
         const newState = incrementStepCount(
-          addAssistantMessage(state, phase.answer, {
+          addAssistantMessage(currentState, phase.answer, {
             type: 'final',
             visible: true,
           })
@@ -733,9 +802,9 @@ export class AgentRunner {
       }
 
       if (done && phase.type === 'error') {
-        // Error occurred
+        // Error occurred - add error message
         const newState = incrementStepCount(
-          addAssistantMessage(state, phase.error.message, {
+          addAssistantMessage(currentState, phase.error.message, {
             type: 'final',
             visible: true,
           })
@@ -747,7 +816,7 @@ export class AgentRunner {
       if (phase.type === 'tool-result') {
         // Add assistant thought and tool result to state
         const thought = execState.thought ?? '';
-        let newState = addAssistantMessage(state, thought, {
+        let newState = addAssistantMessage(currentState, thought, {
           type: 'thought',
           visible: false,
         });
@@ -762,7 +831,7 @@ export class AgentRunner {
     }
 
     // Should not reach here, but handle gracefully
-    return { state, result: { type: 'done', answer: execState.thought ?? '' } };
+    return { state: currentState, result: { type: 'done', answer: execState.thought ?? '' } };
   }
 
   /**
@@ -783,6 +852,7 @@ export class AgentRunner {
     yield { type: 'phase-change', from: { type: 'idle' }, to: { type: 'preparing', messages: [] } };
 
     // Execute phases until completion, emitting events
+    let currentState = state;
     while (!isTerminalPhase(execState.phase)) {
       const fromPhase = execState.phase;
 
@@ -792,10 +862,15 @@ export class AgentRunner {
 
         const tools = this.getToolsForLLM(registry);
         let accumulatedContent = '';
+        let responseContent = '';
+        let responseToolCalls:
+          | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+          | undefined;
 
+        // Single streaming call - no double invocation
         for await (const event of this.options.llmClient.stream({
           model: this.options.model,
-          messages: execState.preparedMessages ?? this.buildMessages(state),
+          messages: execState.preparedMessages ?? this.buildMessages(currentState),
           tools,
           priority: 0,
           requestTimeout: this.options.requestTimeout,
@@ -804,33 +879,41 @@ export class AgentRunner {
             accumulatedContent =
               event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
             yield { type: 'token', token: event.delta ?? '' };
+          } else if (event.type === 'tool_call' && event.toolCall) {
+            responseToolCalls = responseToolCalls ?? [];
+            responseToolCalls.push({
+              id: event.toolCall.id,
+              name: event.toolCall.name,
+              arguments: event.toolCall.arguments,
+            });
+          } else if (event.type === 'done') {
+            responseContent = accumulatedContent;
           }
         }
 
-        // After streaming, we need to get the full response including tool calls
-        // For now, use non-streaming call to get complete response
-        const response = await this.options.llmClient.call({
-          model: this.options.model,
-          messages: execState.preparedMessages ?? this.buildMessages(state),
-          tools,
-          priority: 0,
-          requestTimeout: this.options.requestTimeout,
-        });
-
-        execState.llmResponse = response.content;
-        if (response.toolCalls && response.toolCalls.length > 0) {
-          const toolCall = response.toolCalls[0];
+        // Store response without additional API call
+        execState.llmResponse = responseContent;
+        if (responseToolCalls && responseToolCalls.length > 0) {
+          const toolCall = responseToolCalls[0];
           execState.action = {
             id: toolCall.id,
             tool: toolCall.name,
             arguments: toolCall.arguments,
           };
+          execState.allActions = responseToolCalls.map((tc) => ({
+            id: tc.id,
+            tool: tc.name,
+            arguments: tc.arguments,
+          }));
         }
-        // Skip streaming phase and go directly to llm-response
-        // (streaming was already observed via tokens)
-        execState.phase = { type: 'llm-response', response: accumulatedContent };
+        execState.phase = { type: 'llm-response', response: responseContent };
 
-        // Continue to next phase
+        // Create new immutable state
+        currentState = produce(currentState, (draft) => {
+          draft.context.stepCount = currentState.context.stepCount;
+        });
+
+        yield { type: 'phase-change', from: { type: 'streaming', token: '' }, to: execState.phase };
         continue;
       }
 
@@ -862,7 +945,7 @@ export class AgentRunner {
 
         // Build state with tool result and return
         const thought = execState.thought ?? '';
-        let newState = addAssistantMessage(state, thought, {
+        let newState = addAssistantMessage(currentState, thought, {
           type: 'thought',
           visible: false,
         });
@@ -875,9 +958,9 @@ export class AgentRunner {
         return { state: newState, result: stepResult };
       }
 
-      // Normal advance
-      const { state: newState, phase } = await this.advance(state, execState, registry);
-      state = newState;
+      // Normal advance for other phases
+      const { state: newState, phase } = await this.advance(currentState, execState, registry);
+      currentState = newState;
 
       yield { type: 'phase-change', from: fromPhase, to: phase };
     }
@@ -886,7 +969,7 @@ export class AgentRunner {
     if (execState.phase.type === 'completed') {
       const answer = execState.phase.answer;
       const newState = incrementStepCount(
-        addAssistantMessage(state, answer, {
+        addAssistantMessage(currentState, answer, {
           type: 'final',
           visible: true,
         })
@@ -898,7 +981,7 @@ export class AgentRunner {
     if (execState.phase.type === 'error') {
       const errorMessage = execState.phase.error.message;
       const newState = incrementStepCount(
-        addAssistantMessage(state, errorMessage, {
+        addAssistantMessage(currentState, errorMessage, {
           type: 'final',
           visible: true,
         })
@@ -907,6 +990,6 @@ export class AgentRunner {
     }
 
     // Fallback
-    return { state, result: { type: 'done', answer: execState.thought ?? '' } };
+    return { state: currentState, result: { type: 'done', answer: execState.thought ?? '' } };
   }
 }

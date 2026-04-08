@@ -84,8 +84,10 @@ export interface ExecutionState {
   llmResponse?: string;
   /** Parsed thought */
   thought?: string;
-  /** Tool call to execute */
+  /** Tool call to execute (first action) */
   action?: Action;
+  /** All tool calls from LLM response (for parallel execution support) */
+  allActions?: Action[];
   /** Tool execution result */
   toolResult?: unknown;
   /** Accumulated tokens during streaming */
