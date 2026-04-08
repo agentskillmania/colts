@@ -42,6 +42,16 @@ export {
   type ParseResult,
 } from './parser.js';
 
+// Tools (Step 3)
+export {
+  ToolRegistry,
+  ToolNotFoundError,
+  ToolParameterError,
+  calculatorTool,
+  type Tool,
+  type ToolSchema,
+} from './tools/index.js';
+
 // Runner
 export {
   AgentRunner,
