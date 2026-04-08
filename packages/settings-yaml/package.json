@@ -28,8 +28,9 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest watch"
+    "test:unit": "vitest run test/unit",
+    "test:coverage": "vitest run test/unit --coverage",
+    "test:watch": "vitest watch test/unit"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

@@ -27,9 +27,10 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest watch",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:unit": "vitest run test/unit",
+    "test:intg": "vitest run test/integration",
+    "test:coverage": "vitest run test/unit --coverage",
+    "test:watch": "vitest watch test/unit"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.65.0",

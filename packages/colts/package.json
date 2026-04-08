@@ -13,8 +13,10 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest watch"
+    "test:unit": "vitest run test/unit",
+    "test:intg": "vitest run test/integration",
+    "test:coverage": "vitest run test/unit --coverage",
+    "test:watch": "vitest watch test/unit"
   },
   "keywords": [],
   "author": {
