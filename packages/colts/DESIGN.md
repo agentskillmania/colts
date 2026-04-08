@@ -277,15 +277,53 @@ const calculatorTool: Tool<typeof calculatorSchema> = {
 **设计要点**:
 - **Zod 优先**: 用户使用熟悉的 Zod API 定义参数
 - **类型推导**: `execute` 函数的参数自动获得 TypeScript 类型
-- **自动转换**: 内部使用 `zod-to-json-schema` 转换为 OpenAI 格式
+- **自动转换**: 内部使用 `zod-to-json-schema` 转换为标准格式
 - **运行时验证**: 执行前自动验证 LLM 返回的参数
+- **Provider 无关**: 返回 OpenAI 标准格式，pi-ai 内部自动转换给其他 Provider
+
+**API 设计**:
+```typescript
+class ToolRegistry {
+  // 注册工具
+  register<T extends z.ZodTypeAny>(tool: Tool<T>): void;
+  
+  // 获取工具
+  get(name: string): Tool | undefined;
+  has(name: string): boolean;
+  getToolNames(): string[];
+  
+  // 执行工具（自动验证参数）
+  async execute(name: string, args: unknown): Promise<unknown>;
+  
+  // 生成工具 Schema（给 LLM 用）
+  toToolSchemas(): Array<{
+    type: 'function';
+    function: {
+      name: string;
+      description: string;
+      parameters: object; // JSON Schema
+    };
+  }>;
+}
+```
+
+**新增依赖**:
+```json
+{
+  "dependencies": {
+    "zod": "^3.22.0",
+    "zod-to-json-schema": "^3.22.0"
+  }
+}
+```
 
 **验收标准**:
 - [ ] 能用 Zod 定义工具参数
 - [ ] 执行时自动验证参数类型，失败时抛出清晰错误
-- [ ] 自动生成 JSON Schema 给 LLM
+- [ ] 自动生成 JSON Schema 给 LLM (toToolSchemas)
 - [ ] 支持可选参数、默认值、枚举等常见 Zod 特性
 - [ ] 工具不存在时抛错
+- [ ] 内置 calculator 工具作为示例
 
 ---
 
