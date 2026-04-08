@@ -211,6 +211,14 @@ class AgentRunner {
     done: boolean;      // 是否已完成（completed/error）
   }>;
   
+  // 🔬 微步流式：观察阶段推进过程
+  async *advanceStream(state: AgentState): AsyncGenerator<
+    | { type: 'phase-change'; from: Phase; to: Phase }
+    | { type: 'token'; token: string }              // LLM 实时 token
+    | { type: 'tool-chunk'; chunk: string },        // 工具流式输出
+    { state: AgentState; phase: Phase; done: boolean }
+  >;
+  
   // 🦶 中步：完整的 ReAct 循环（ Thought → Action → Observation ）
   async step(state: AgentState): Promise<{
     state: AgentState;
