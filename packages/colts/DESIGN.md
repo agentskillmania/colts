@@ -381,13 +381,20 @@ idle → preparing → calling-llm → llm-response → parsing → parsed
 |------|----------------|---------|-----------|
 | idle → preparing | 无 | — | 同一引用 |
 | preparing → calling-llm | 无 | — | 同一引用 |
-| calling-llm → llm-response | **有** | assistant 消息（thought 或 content） | **新 state** |
+| calling-llm → llm-response | 无 | — | 同一引用 |
 | llm-response → parsing | 无 | — | 同一引用 |
 | parsing → parsed | 无 | — | 同一引用 |
-| parsed → executing-tool | 无 | — | 同一引用 |
-| executing-tool → tool-result | **有** | tool 消息 | **新 state** |
-| parsed → completed (无 action) | **有** | assistant final 消息 + stepCount++ | **新 state** |
-| tool-result → completed | **有** | assistant final 消息 + stepCount++ | **新 state** |
+| parsed → executing-tool (有 action) | **有** | assistant thought 消息 (visible: false) | **新 state** |
+| executing-tool → tool-result | **有** | tool 消息 + stepCount++ | **新 state** |
+| parsed → completed (无 action) | **有** | assistant final 消息 (visible: true) + stepCount++ | **新 state** |
+| tool-result → completed | 无 | — | 同一引用 |
+
+**写入时机的选择理由**：
+- `llm-response` 不写入：此时尚未解析，不知道是 thought 还是 final answer
+- `parsed → executing-tool` 写入 thought：此时已解析出 thought，且即将执行工具
+- `tool-result` 写入 tool 消息：工具执行完毕，结果已知
+- `completed`（直接回答路径）写入 final 消息：确认是最终答案
+- `tool-result → completed` 不写入：消息已在前面写入，避免重复
 
 **state 更新的实际含义**：
 
@@ -395,11 +402,11 @@ idle → preparing → calling-llm → llm-response → parsing → parsed
 advance(state, execState) 的处理逻辑：
 
 1. 判断当前 phase，执行对应的转换操作
-2. 如果该转换产生了新数据（LLM 响应 / 工具结果 / 最终答案）：
-   - 用 Immer 的 produce() 创建新 state
-   - 将新数据写入 state.context.messages
+2. 如果该转换需要写入消息（parsed→executing-tool, executing-tool→tool-result, parsed→completed）：
+   - 使用 state.ts 中的 addAssistantMessage / addToolMessage / incrementStepCount 创建新 state
+   - 这些函数内部使用 Immer produce() 保证不可变
    - 返回新 state
-3. 如果该转换无新数据（中间过渡 phase）：
+3. 如果该转换无新数据（过渡 phase）：
    - 直接返回原 state（同一引用）
 ```
 
@@ -431,7 +438,7 @@ step(state) {
 }
 ```
 
-**关键**：step 不负责"补写" state——advance 在执行过程中已经逐步写入了。step 只是把多个 advance 编排成一次完整的 ReAct 循环，并返回合适的 StepResult。
+**关键**：step 不负责"补写" state——advance 在执行过程中已经逐步写入了（thought、tool message、final answer）。step 只是把多个 advance 编排成一次完整的 ReAct 循环，并返回合适的 StepResult。唯一的例外是 error 路径，step 负责将错误信息写入 state。
 
 ##### API 签名
 

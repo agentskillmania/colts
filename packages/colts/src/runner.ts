@@ -8,7 +8,6 @@
 import type { LLMClient, TokenStats } from '@agentskillmania/llm-client';
 import type { Message, TextContent, Tool } from '@mariozechner/pi-ai';
 import type { AgentState } from './types.js';
-import { produce } from 'immer';
 import {
   addUserMessage,
   addAssistantMessage,
@@ -503,20 +502,18 @@ export class AgentRunner {
   private advanceToPreparing(state: AgentState, execState: ExecutionState): AdvanceResult {
     const messages = this.buildMessages(state);
     execState.preparedMessages = messages;
-    // For the phase, we convert to our Message type for display
+    // Convert pi-ai Message format to colts internal format for phase display
     const displayMessages: import('./types.js').Message[] = messages.map((m) => ({
       role: m.role as import('./types.js').MessageRole,
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       timestamp: Date.now(),
     }));
     execState.phase = { type: 'preparing', messages: displayMessages };
-    // Return new immutable state
     return { state, phase: execState.phase, done: false };
   }
 
   private advanceToCallingLLM(state: AgentState, execState: ExecutionState): AdvanceResult {
     execState.phase = { type: 'calling-llm' };
-    // Return new immutable state
     return { state, phase: execState.phase, done: false };
   }
 
@@ -584,24 +581,24 @@ export class AgentRunner {
       execState.phase = { type: 'parsed', thought: parseResult.thought };
     }
 
-    // Return new immutable state
-    const newState = produce(state, (draft) => {
-      draft.context.stepCount = state.context.stepCount;
-    });
-    return { state: newState, phase: execState.phase, done: false };
+    // Parsing complete: thought is known, but path not yet decided
+    // (has action -> execute tool, no action -> complete directly)
+    // State is not written here; advanceFromParsed / advanceToCompleted handle it
+    return { state, phase: execState.phase, done: false };
   }
 
   private advanceFromParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
     if (execState.action) {
-      // Need to execute tool
-      execState.phase = { type: 'executing-tool', action: execState.action };
-      // Return new immutable state
-      const newState = produce(state, (draft) => {
-        draft.context.stepCount = state.context.stepCount;
+      // Has tool call: write thought message, then enter executing-tool
+      const thought = execState.thought ?? '';
+      const newState = addAssistantMessage(state, thought, {
+        type: 'thought',
+        visible: false,
       });
+      execState.phase = { type: 'executing-tool', action: execState.action };
       return { state: newState, phase: execState.phase, done: false };
     } else {
-      // No tool needed, complete this step
+      // No tool call: complete directly, advanceToCompleted writes final message
       return this.advanceToCompleted(state, execState);
     }
   }
@@ -631,11 +628,9 @@ export class AgentRunner {
     execState.toolResult = result;
     execState.phase = { type: 'tool-result', result };
 
-    // Create new immutable state with tool result
-    const newState = produce(state, (draft) => {
-      draft.context.stepCount = state.context.stepCount;
-      draft.context.lastToolResult = result;
-    });
+    // Write tool message + increment step count
+    const toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
+    const newState = incrementStepCount(addToolMessage(state, toolResultContent));
 
     return { state: newState, phase: execState.phase, done: false };
   }
@@ -643,11 +638,18 @@ export class AgentRunner {
   private advanceToCompleted(state: AgentState, execState: ExecutionState): AdvanceResult {
     const answer = execState.thought ?? '';
     execState.phase = { type: 'completed', answer };
-    // Return new immutable state
-    const newState = produce(state, (draft) => {
-      draft.context.stepCount = state.context.stepCount;
-    });
-    return { state: newState, phase: execState.phase, done: true };
+
+    // Two paths to completed:
+    // 1. Direct answer (parsed -> completed): write final message + stepCount
+    // 2. After tool execution (tool-result -> completed): messages already written by advanceToToolResult
+    if (execState.toolResult === undefined) {
+      const newState = incrementStepCount(
+        addAssistantMessage(state, answer, { type: 'final', visible: true })
+      );
+      return { state: newState, phase: execState.phase, done: true };
+    }
+
+    return { state, phase: execState.phase, done: true };
   }
 
   /**
@@ -718,13 +720,9 @@ export class AgentRunner {
       }
       execState.phase = { type: 'llm-response', response: responseContent };
 
-      // Create new immutable state
-      const newState = produce(state, (draft) => {
-        draft.context.stepCount = state.context.stepCount;
-      });
-
       yield { type: 'phase-change', from: { type: 'streaming', token: '' }, to: execState.phase };
-      return { state: newState, phase: execState.phase, done: false };
+      // State not updated during streaming; llm-response is an observation phase
+      return { state, phase: execState.phase, done: false };
     }
 
     // For other phases, delegate to advance()
@@ -768,7 +766,7 @@ export class AgentRunner {
     const registry = toolRegistry ?? this.options.toolRegistry;
     const execState = createExecutionState();
 
-    // Execute phases until completion
+    // Loop advance() until a natural stopping point
     let currentState = state;
     while (!isTerminalPhase(execState.phase)) {
       const {
@@ -778,47 +776,29 @@ export class AgentRunner {
       } = await this.advance(currentState, execState, registry);
       currentState = newState;
 
+      // Terminal: completed (direct answer, state already updated by advance)
       if (done && phase.type === 'completed') {
-        // Final answer - add to messages
-        const newState = incrementStepCount(
-          addAssistantMessage(currentState, phase.answer, {
-            type: 'final',
-            visible: true,
-          })
-        );
-        return { state: newState, result: { type: 'done', answer: phase.answer } };
+        return { state: currentState, result: { type: 'done', answer: phase.answer } };
       }
 
+      // Terminal: error (write error message to state)
       if (done && phase.type === 'error') {
-        // Error occurred - add error message
-        const newState = incrementStepCount(
+        const errorState = incrementStepCount(
           addAssistantMessage(currentState, phase.error.message, {
             type: 'final',
             visible: true,
           })
         );
-        return { state: newState, result: { type: 'done', answer: phase.error.message } };
+        return { state: errorState, result: { type: 'done', answer: phase.error.message } };
       }
 
-      // If we reached tool-result, we need to continue the step
+      // Non-terminal stopping point: tool-result (state already updated by advance)
       if (phase.type === 'tool-result') {
-        // Add assistant thought and tool result to state
-        const thought = execState.thought ?? '';
-        let newState = addAssistantMessage(currentState, thought, {
-          type: 'thought',
-          visible: false,
-        });
-
-        const toolResultContent =
-          typeof phase.result === 'string' ? phase.result : JSON.stringify(phase.result);
-        newState = addToolMessage(newState, toolResultContent);
-        newState = incrementStepCount(newState);
-
-        return { state: newState, result: { type: 'continue', toolResult: phase.result } };
+        return { state: currentState, result: { type: 'continue', toolResult: phase.result } };
       }
     }
 
-    // Should not reach here, but handle gracefully
+    // Fallback (should not reach here)
     return { state: currentState, result: { type: 'done', answer: execState.thought ?? '' } };
   }
 
@@ -836,15 +816,11 @@ export class AgentRunner {
     const registry = toolRegistry ?? this.options.toolRegistry;
     const execState = createExecutionState();
 
-    // Emit initial phase change
-    yield { type: 'phase-change', from: { type: 'idle' }, to: { type: 'preparing', messages: [] } };
-
-    // Execute phases until completion, emitting events
     let currentState = state;
     while (!isTerminalPhase(execState.phase)) {
       const fromPhase = execState.phase;
 
-      // Special handling for streaming LLM response
+      // Special: streaming LLM response (single streaming call, no double invocation)
       if (fromPhase.type === 'calling-llm') {
         yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming', token: '' } };
 
@@ -855,7 +831,6 @@ export class AgentRunner {
           | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
           | undefined;
 
-        // Single streaming call - no double invocation
         for await (const event of this.options.llmClient.stream({
           model: this.options.model,
           messages: execState.preparedMessages ?? this.buildMessages(currentState),
@@ -879,7 +854,7 @@ export class AgentRunner {
           }
         }
 
-        // Store response without additional API call
+        // Store complete response without additional API call
         execState.llmResponse = responseContent;
         if (responseToolCalls && responseToolCalls.length > 0) {
           const toolCall = responseToolCalls[0];
@@ -896,85 +871,59 @@ export class AgentRunner {
         }
         execState.phase = { type: 'llm-response', response: responseContent };
 
-        // Create new immutable state
-        currentState = produce(currentState, (draft) => {
-          draft.context.stepCount = currentState.context.stepCount;
-        });
-
         yield { type: 'phase-change', from: { type: 'streaming', token: '' }, to: execState.phase };
         continue;
       }
 
-      // Handle tool execution
-      if (fromPhase.type === 'executing-tool' && execState.action) {
-        yield { type: 'tool:start', action: execState.action };
-
-        let result: unknown;
-        if (registry) {
-          try {
-            result = await registry.execute(execState.action.tool, execState.action.arguments);
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            result = `Error: ${errorMessage}`;
-          }
-        } else {
-          result = `Tool '${execState.action.tool}' not executed: no tool registry provided`;
-        }
-
-        execState.toolResult = result;
-        execState.phase = { type: 'tool-result', result };
-
-        yield { type: 'tool:end', result };
-        yield {
-          type: 'phase-change',
-          from: fromPhase,
-          to: execState.phase,
-        };
-
-        // Build state with tool result and return
-        const thought = execState.thought ?? '';
-        let newState = addAssistantMessage(currentState, thought, {
-          type: 'thought',
-          visible: false,
-        });
-
-        const toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
-        newState = addToolMessage(newState, toolResultContent);
-        newState = incrementStepCount(newState);
-
-        const stepResult: StepResult = { type: 'continue', toolResult: result };
-        return { state: newState, result: stepResult };
-      }
-
-      // Normal advance for other phases
-      const { state: newState, phase } = await this.advance(currentState, execState, registry);
+      // All other phases: delegate to advance() (no duplicate logic)
+      const {
+        state: newState,
+        phase,
+        done,
+      } = await this.advance(currentState, execState, registry);
       currentState = newState;
 
+      // Emit tool events based on phase transitions
+      if (phase.type === 'executing-tool') {
+        yield {
+          type: 'tool:start',
+          action: (phase as { type: 'executing-tool'; action: import('./execution.js').Action })
+            .action,
+        };
+      }
+
       yield { type: 'phase-change', from: fromPhase, to: phase };
-    }
 
-    // Completed
-    if (execState.phase.type === 'completed') {
-      const answer = execState.phase.answer;
-      const newState = incrementStepCount(
-        addAssistantMessage(currentState, answer, {
-          type: 'final',
-          visible: true,
-        })
-      );
-      return { state: newState, result: { type: 'done', answer } };
-    }
+      if (phase.type === 'tool-result') {
+        yield {
+          type: 'tool:end',
+          result: (phase as { type: 'tool-result'; result: unknown }).result,
+        };
+        return {
+          state: currentState,
+          result: {
+            type: 'continue',
+            toolResult: (phase as { type: 'tool-result'; result: unknown }).result,
+          },
+        };
+      }
 
-    // Error case
-    if (execState.phase.type === 'error') {
-      const errorMessage = execState.phase.error.message;
-      const newState = incrementStepCount(
-        addAssistantMessage(currentState, errorMessage, {
-          type: 'final',
-          visible: true,
-        })
-      );
-      return { state: newState, result: { type: 'done', answer: errorMessage } };
+      if (done && phase.type === 'completed') {
+        return {
+          state: currentState,
+          result: { type: 'done', answer: (phase as { type: 'completed'; answer: string }).answer },
+        };
+      }
+
+      if (done && phase.type === 'error') {
+        const errorState = incrementStepCount(
+          addAssistantMessage(currentState, phase.error.message, {
+            type: 'final',
+            visible: true,
+          })
+        );
+        return { state: errorState, result: { type: 'done', answer: phase.error.message } };
+      }
     }
 
     // Fallback

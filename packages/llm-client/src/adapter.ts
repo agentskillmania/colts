@@ -499,31 +499,35 @@ export class PiAiAdapter {
    * @param apiKey - API key for authentication
    * @param options - Request options including messages, tools, timeouts
    * @param onRetry - Optional callback for retry events
-   * @returns Async iterable yielding stream events
+   * @returns Async iterable yielding stream events in real-time
    *
    * @remarks
-   * This method provides real-time streaming of LLM responses. Due to the
-   * nature of streaming, the retry logic works differently than non-streaming:
+   * This method provides real-time streaming of LLM responses by yielding
+   * events as they arrive from the underlying provider.
    *
-   * 1. The entire stream is consumed internally
-   * 2. Content is accumulated during streaming
-   * 3. On retry, the stream restarts from the beginning
-   * 4. The final event includes accumulated content and token counts
+   * **Event types yielded:**
+   * - `text`: Incremental text content (delta + accumulatedContent)
+   * - `thinking`: Reasoning content (when thinkingEnabled is true)
+   * - `tool_call`: Complete tool/function call from the model
+   * - `done`: Stream completed with final token counts
+   * - `error`: An error occurred during streaming
    *
-   * **Note**: If a stream fails partway through and retries, the client
-   * will receive the complete content from the successful attempt, not
-   * a partial continuation.
-   *
-   * Yields a single `done` event on successful completion, or an `error`
-   * event if the stream fails after all retries.
+   * **Retry behavior:**
+   * Retry uses p-retry with exponential backoff for connection-level
+   * failures (before any events are yielded). The connection is verified
+   * by awaiting the first event from the stream. Once streaming begins,
+   * errors are yielded as error events without retry — this avoids sending
+   * duplicate events to the caller.
    *
    * @example
    * ```typescript
    * for await (const event of adapter.streamWithRetry('gpt-4', 'sk-...', options)) {
    *   switch (event.type) {
+   *     case 'text':
+   *       process.stdout.write(event.delta);
+   *       break;
    *     case 'done':
-   *       console.log('Content:', event.accumulatedContent);
-   *       console.log('Tokens:', event.roundTotalTokens);
+   *       console.log('\nTokens:', event.roundTotalTokens);
    *       break;
    *     case 'error':
    *       console.error('Stream failed:', event.error);
@@ -540,45 +544,38 @@ export class PiAiAdapter {
   ): AsyncIterable<StreamEvent> {
     const model = this.createModel(modelId);
     const context = this.buildContext(options.messages);
-
-    let accumulatedContent = '';
-    let currentTokens: TokenStats = { input: 0, output: 0 };
-    let isDone = false;
-
-    const runStream = async (): Promise<void> => {
-      const stream = piStream(model, context, {
-        apiKey,
-        thinkingEnabled: options.thinkingEnabled,
-        tools: options.tools as Tool[],
-        signal: options.signal,
-      });
-
-      for await (const event of stream) {
-        const mapped = this.mapEvent(event);
-
-        // Skip null events (control events we don't expose)
-        if (!mapped) {
-          continue;
-        }
-
-        // Update accumulators
-        if (mapped.delta && mapped.type === 'text') {
-          accumulatedContent += mapped.delta;
-        }
-        if (mapped.tokens) {
-          currentTokens = mapped.tokens;
-        }
-
-        if (mapped.type === 'done') {
-          isDone = true;
-        }
-      }
-    };
-
     const retryOpts = this.mergeRetryOptions(options.retryOptions);
 
+    // Phase 1: Establish connection with p-retry
+    // Verify the connection by awaiting the first event from the stream.
+    // p-retry handles retries for connection-level failures automatically.
+    let iterator: AsyncIterator<AssistantMessageEvent>;
+    let firstEvent: AssistantMessageEvent;
+
     try {
-      await this.withRetry(runStream, retryOpts, onRetry);
+      const result = await this.withRetry(
+        async (): Promise<{
+          iterator: AsyncIterator<AssistantMessageEvent>;
+          firstEvent: AssistantMessageEvent;
+        }> => {
+          const stream = piStream(model, context, {
+            apiKey,
+            thinkingEnabled: options.thinkingEnabled,
+            tools: options.tools as Tool[],
+            signal: options.signal,
+          });
+          const iter = stream[Symbol.asyncIterator]();
+          const { done, value } = await iter.next();
+          if (done) {
+            throw new Error('Stream ended immediately without events');
+          }
+          return { iterator: iter, firstEvent: value };
+        },
+        retryOpts,
+        onRetry
+      );
+      iterator = result.iterator;
+      firstEvent = result.firstEvent;
     } catch (error) {
       yield {
         type: 'error',
@@ -587,13 +584,25 @@ export class PiAiAdapter {
       return;
     }
 
-    // Yield final state
-    if (isDone) {
+    // Phase 2: Yield events in real-time (no retry for mid-stream failures)
+    // First event (already read during connection verification)
+    let mapped = this.mapEvent(firstEvent);
+    if (mapped) {
+      yield mapped;
+    }
+
+    // Remaining events
+    try {
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) break;
+        mapped = this.mapEvent(value);
+        if (mapped) yield mapped;
+      }
+    } catch (error) {
       yield {
-        type: 'done',
-        accumulatedContent,
-        tokens: { ...currentTokens },
-        roundTotalTokens: { ...currentTokens },
+        type: 'error',
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
