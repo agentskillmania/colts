@@ -168,24 +168,54 @@ class AgentRunner {
 ---
 
 #### Step 2: Response 解析器
-**目标**: 从 LLM 回复中提取 Thought 和 Action
+**目标**: 解析 LLM 的 Function Calling 响应，提取 Thought 和 Tool Call
 
 ```typescript
-function parseReActResponse(content: string): {
-  thought: string;
-  action: { tool: string; args: object } | null;
-  isFinalAnswer: boolean;
+// LLM 返回的工具调用
+interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+// 解析结果
+interface ParseResult {
+  thought: string;           // LLM 的思考过程（reasoning_content 或 content）
+  toolCalls: ToolCall[];     // 工具调用列表（可能为空）
+  isFinalAnswer: boolean;    // 是否直接给出最终答案
+}
+
+// 解析函数
+function parseResponse(response: LLMResponse): ParseResult;
+```
+
+**输入格式**（OpenAI Function Calling 标准）：
+```json
+{
+  "content": "Let me calculate that for you.",
+  "tool_calls": [
+    {
+      "id": "call_abc123",
+      "type": "function",
+      "function": {
+        "name": "calculate",
+        "arguments": "{\"expression\": \"15 + 23\"}"
+      }
+    }
+  ]
 }
 ```
 
-**支持格式**（可配置）：
-- ReAct 经典格式：`Thought: ... Action: ...`
-- XML 格式：`<thought>...</thought> <action>...</action>`
+**判断逻辑**:
+- `tool_calls` 存在且非空 → `isFinalAnswer = false`，执行工具
+- `tool_calls` 为空 → `isFinalAnswer = true`，返回 content 作为答案
 
 **验收标准**:
-- [ ] 能解析带 Action 的回复
-- [ ] 能解析纯文本回答（isFinalAnswer=true）
+- [ ] 能解析带 tool_calls 的响应（需要调用工具）
+- [ ] 能解析纯文本响应（直接给出最终答案）
+- [ ] 支持解析 reasoning_content（思考过程）
 - [ ] 解析失败时抛出明确错误
+- [ ] 工具参数为有效的 JSON 对象
 
 ---
 
