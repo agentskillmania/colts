@@ -9,7 +9,7 @@
 ### 分离原则：状态 vs 运行
 
 ```typescript
-// AgentState = 纯数据（可序列化，无逻辑）
+// AgentState = 纯数据（可序列化，无逻辑，不可变）
 interface AgentState {
   id: string;
   config: AgentConfig;      // 人设、工具列表
@@ -23,18 +23,40 @@ interface AgentState {
 class AgentRunner {
   constructor(config: RunnerConfig);
   
-  // 推进指定 AgentState 一步
-  async step(state: AgentState): Promise<StepResult>;
+  // 推进指定 AgentState 一步，返回新状态（不可变）
+  async step(state: AgentState): Promise<{
+    state: AgentState;      // 新状态（使用 Immer 创建）
+    result: StepResult;
+  }>;
   
-  // 运行指定 AgentState 到结束
-  async run(state: AgentState, options?: RunOptions): Promise<RunResult>;
+  // 运行指定 AgentState 到结束，返回最终状态（不可变）
+  async run(state: AgentState, options?: RunOptions): Promise<{
+    state: AgentState;      // 最终状态
+    result: RunResult;
+  }>;
 }
 ```
 
 **关键特性**：
 - 一个 Runner 实例可同时运行多个 AgentState
-- AgentState 可完整序列化（快照、恢复、传输）
+- AgentState 是**不可变数据**（使用 [Immer](https://immerjs.github.io/immer/)）
+- 每次 `step()` / `run()` 返回**新状态**，原状态保持不变
+- 快照免费（O(1) 引用保存），天然支持时间旅行
 - Runner 配置（LLM、钩子）与 Agent 状态解耦
+
+### 不可变数据与流式
+
+```typescript
+// 流式不修改状态，只是观察
+for await (const event of runner.stepStream(state)) {
+  // event 包含实时 token，但 state 始终是最初的引用
+  console.log(event.token);  // 实时显示
+}
+
+// 流结束后，获取新状态
+const { state: newState, result } = await streamResult;
+// state 还是原来的，newState 是更新后的
+```
 
 ---
 
@@ -65,9 +87,12 @@ class AgentRunner {
 ### Phase 1: 核心引擎（可运行的 Agent）
 
 #### Step 0: AgentState 数据结构
-**目标**: 定义纯状态结构，可序列化
+**目标**: 定义纯状态结构，可序列化，不可变
 
 ```typescript
+import { produce, Draft } from 'immer';
+
+// AgentState 是纯数据，无方法
 interface AgentState {
   id: string;
   config: {
@@ -86,6 +111,8 @@ interface AgentState {
 - [ ] 能创建初始状态
 - [ ] 能 `JSON.stringify` 序列化
 - [ ] 能 `JSON.parse` 反序列化并恢复
+- [ ] 使用 Immer 进行不可变更新
+- [ ] 更新后原状态保持不变（`oldState !== newState`）
 - [ ] 包含对话历史数组
 
 ---
@@ -154,8 +181,27 @@ class ToolRegistry {
 **目标**: 完成一次 ReAct 循环
 
 ```typescript
+// 流式事件类型
+type StreamEvent =
+  | { type: 'token'; token: string }                    // LLM 实时 token
+  | { type: 'thought'; text: string }                   // 解析出的思考
+  | { type: 'action'; tool: string; args: object }      // 检测到的 Action
+  | { type: 'tool:start'; tool: string; args: object }  // 开始执行工具
+  | { type: 'tool:end'; result: unknown }               // 工具执行完成
+  | { type: 'error'; error: Error };                    // 执行错误
+
 class AgentRunner {
-  async step(state: AgentState): Promise<StepResult>;
+  // 标准用法：等待完整结果
+  async step(state: AgentState): Promise<{
+    state: AgentState;
+    result: StepResult;
+  }>;
+  
+  // 流式用法：实时观察执行过程
+  async *stepStream(state: AgentState): AsyncGenerator<
+    StreamEvent,
+    { state: AgentState; result: StepResult }
+  >;
 }
 
 // StepResult = { type: 'continue', toolResult } 
@@ -163,17 +209,17 @@ class AgentRunner {
 ```
 
 **执行流程**:
-1. 调用 LLM（基于当前 messages）
-2. 解析 Response（Thought + Action）
-3. 如果有 Action，执行 Tool
-4. 更新 state（messages, stepCount）
-5. 返回结果类型
+1. 调用 LLM（流式接收 token）
+2. 实时 emit token 事件（调试用）
+3. 完整响应后解析 Thought + Action
+4. 如果有 Action，emit action 事件，执行 Tool
+5. 返回新 state 和 result（不可变数据，使用 Immer）
 
 **验收标准**:
-- [ ] 第一次 step：userInput → LLM → Tool Call → Tool Result
-- [ ] state.stepCount 增加到 1
-- [ ] state.messages 增加了 2-3 条（assistant + 可能的 tool）
-- [ ] 返回明确指示：是继续还是完成
+- [ ] `step()` 等待完整结果，返回新 state
+- [ ] `stepStream()` 实时产生 token/action 事件
+- [ ] 流式可以在任意时刻 `break` 中断
+- [ ] 两种方法都返回不可变的 AgentState（使用 Immer）
 
 ---
 
@@ -181,22 +227,70 @@ class AgentRunner {
 **目标**: 自动循环直到完成
 
 ```typescript
+// 运行结果
+type RunResult = 
+  | { type: 'success'; answer: string; totalSteps: number }
+  | { type: 'max_steps'; partialAnswer?: string; totalSteps: number }
+  | { type: 'error'; error: Error; totalSteps: number };
+
+// 跨步骤的流式事件
+type RunStreamEvent =
+  | { type: 'step:start'; step: number; state: AgentState }
+  | StreamEvent  // 包含 step 内部的所有事件
+  | { type: 'step:end'; step: number; result: StepResult }
+  | { type: 'complete'; result: RunResult };
+
 class AgentRunner {
+  // 标准用法：等待完整运行结束
   async run(state: AgentState, options?: {
     maxSteps?: number;  // 默认 10
-  }): Promise<RunResult>;
+  }): Promise<{
+    state: AgentState;
+    result: RunResult;
+  }>;
+  
+  // 流式用法：观察整个运行过程
+  async *runStream(state: AgentState, options?: {
+    maxSteps?: number;
+  }): AsyncGenerator<
+    RunStreamEvent,
+    { state: AgentState; result: RunResult }
+  >;
 }
+```
 
-// RunResult = { type: 'success', answer, totalSteps } 
-//           | { type: 'max_steps', totalSteps }
-//           | { type: 'error', error, totalSteps }
+**使用示例**:
+
+```typescript
+// 标准用法
+const { state: finalState, result } = await runner.run(initialState);
+console.log(result.answer);
+
+// 流式用法（调试）
+const stream = runner.runStream(initialState);
+for await (const event of stream) {
+  switch (event.type) {
+    case 'step:start':
+      console.log(`Step ${event.step} started`);
+      break;
+    case 'token':
+      process.stdout.write(event.token);  // 实时显示思考
+      break;
+    case 'action':
+      console.log('Action:', event.tool); // 准备调用工具
+      break;
+    case 'complete':
+      console.log('Done:', event.result.answer);
+      break;
+  }
+}
 ```
 
 **验收标准**:
-- [ ] "25 * 4" 能自动完成（多轮 Step）
-- [ ] "Hello" 一轮就完成
-- [ ] 超过 maxSteps 自动停止
-- [ ] 返回最终答案
+- [ ] `run()` 自动循环直到完成，返回最终 state
+- [ ] `runStream()` 实时产生跨步骤的事件流
+- [ ] 支持流式中断（`break` 跳出循环）
+- [ ] 返回不可变的最终 state（使用 Immer）
 
 ---
 
