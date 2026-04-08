@@ -60,9 +60,27 @@ const { state: newState, result } = await streamResult;
 
 ---
 
-## Step 定义
+## 执行粒度定义
 
-### 什么是 "一次 Step"？
+### 三级控制粒度
+
+| 粒度 | 方法 | 描述 | 适用场景 |
+|------|------|------|----------|
+| **微步** | `advance()` / `advanceStream()` | 推进一个执行阶段（Phase） | 精细调试、断点、单步跟踪 |
+| **中步** | `step()` / `stepStream()` | 完成一次完整 ReAct 循环 | 标准调试、观察一轮思考-行动 |
+| **宏步** | `run()` / `runStream()` | 自动运行直到完成 | 全自动执行、观察整体过程 |
+
+### Phase（微步阶段）
+
+微步将执行拆分为以下阶段：
+
+```
+idle → preparing → calling-llm → streaming → llm-response → parsing → parsed
+                                                                          ↓
+completed ← tool-result ← executing-tool ← [if action]
+```
+
+### 什么是 "一次 Step（中步）"？
 
 一次 Step = **一次完整的 ReAct 循环**：
 
@@ -72,7 +90,9 @@ const { state: newState, result } = await streamResult;
 4. 更新 AgentState（messages、stepCount）
 5. 返回结果类型（继续 或 完成）
 
-### 什么时候 "Run 结束"？
+**实现**：`step()` 内部由多个 `advance()` 组成
+
+### 什么时候 "Run（宏步）结束"？
 
 满足任一条件即结束：
 - ✅ **正常结束**：LLM 直接给出最终答案（无 Action）
@@ -127,6 +147,14 @@ class AgentRunner {
     state: AgentState;  // 新状态（添加了 user 和 assistant 消息）
     response: string;    // LLM 的回复内容
   }>;
+  
+  // 流式对话：实时观察 LLM 输出
+  async *chatStream(state: AgentState, userInput: string): AsyncGenerator<{
+    type: 'token' | 'complete';
+    token?: string;
+    state?: AgentState;
+    response?: string;
+  }>;
 }
 ```
 
@@ -135,6 +163,7 @@ class AgentRunner {
 - [ ] 多次调用能看到历史上下文（通过返回的 state 传递）
 - [ ] 原 state 保持不变（不可变）
 - [ ] stepCount 始终为 0（还没开始 ReAct）
+- [ ] `chatStream()` 实时产生 token，最终返回完整 state
 
 ---
 
@@ -376,7 +405,7 @@ class AgentRunner {
   // - advance() / advanceStream()
   // - step() / stepStream()
   // - run() / runStream()
-  // - chat()
+  // - chat() / chatStream()
   // - runInteractive()
 }
 ```
@@ -690,6 +719,15 @@ class AgentRunner {
 3. **Runner 无状态**：同一 Runner 可并发执行多个 AgentState
 4. **长期记忆不做**：Phase 1-2 专注对话历史的短期管理
 5. **事件驱动调试**：通过钩子而非侵入式代码实现调试能力
+6. **流式全覆盖**：所有执行方法都有对应的流式版本（`*Stream`）
+   - `chat()` / `chatStream()`
+   - `advance()` / `advanceStream()`
+   - `step()` / `stepStream()`
+   - `run()` / `runStream()`
+7. **流式仅观察**：流式方法不改变控制流，只提供观察能力
+   - 控制流仍由调用方通过 `for-await` 控制
+   - 可随时 `break` 中断流式接收
+   - 流式结束后仍需获取最终状态
 
 ---
 
