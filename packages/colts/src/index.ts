@@ -3,6 +3,9 @@
  *
  * Step 0: AgentState Data Structure
  * Step 1: Basic LLM Chat
+ * Step 2: Response Parser
+ * Step 3: Tool Registry
+ * Step 4: Step Control
  */
 
 // Types
@@ -60,3 +63,16 @@ export {
   type ChatResult,
   type ChatStreamChunk,
 } from './runner.js';
+
+// Execution Control (Step 4)
+export {
+  createExecutionState,
+  toolCallToAction,
+  isTerminalPhase,
+  type Phase,
+  type Action,
+  type StepResult,
+  type StreamEvent,
+  type AdvanceResult,
+  type ExecutionState,
+} from './execution.js';

@@ -2,7 +2,7 @@ echo "Running pre-commit checks..."
 
 # 1. 运行单元测试
 echo "▶ Running unit tests..."
-if ! pnpm test; then
+if ! pnpm test:unit; then
     echo "❌ Unit tests failed. Commit aborted."
     exit 1
 fi

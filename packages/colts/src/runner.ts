@@ -1,14 +1,23 @@
 /**
- * @fileoverview AgentRunner - Step 1: Basic LLM Chat
+ * @fileoverview AgentRunner - Step 1 & 4: Basic LLM Chat and Step Control
  *
  * Stateless runner that executes AgentState with LLM integration.
- * Supports both blocking and streaming chat modes.
+ * Supports both blocking/streaming chat and fine-grained step control.
  */
 
 import type { LLMClient, TokenStats } from '@agentskillmania/llm-client';
-import type { Message, TextContent } from '@mariozechner/pi-ai';
+import type { Message, TextContent, Tool } from '@mariozechner/pi-ai';
 import type { AgentState } from './types.js';
-import { addUserMessage, addAssistantMessage, incrementStepCount } from './state.js';
+import {
+  addUserMessage,
+  addAssistantMessage,
+  addToolMessage,
+  incrementStepCount,
+} from './state.js';
+import { parseResponse } from './parser.js';
+import { ToolRegistry } from './tools/registry.js';
+import type { StepResult, AdvanceResult, ExecutionState, StreamEvent } from './execution.js';
+import { createExecutionState, toolCallToAction, isTerminalPhase } from './execution.js';
 
 /**
  * Configuration options for AgentRunner
@@ -25,6 +34,9 @@ export interface RunnerOptions {
 
   /** Request timeout in milliseconds (optional) */
   requestTimeout?: number;
+
+  /** Tool registry for function calling (optional) */
+  toolRegistry?: ToolRegistry;
 }
 
 /**
@@ -385,5 +397,516 @@ export class AgentRunner {
     }
 
     return messages;
+  }
+
+  /**
+   * Convert ToolRegistry schemas to pi-ai Tool format
+   *
+   * @param registry - Tool registry
+   * @returns Tools in pi-ai format
+   * @private
+   */
+  private getToolsForLLM(registry?: ToolRegistry): Tool[] | undefined {
+    if (!registry) return undefined;
+
+    const schemas = registry.toToolSchemas();
+    return schemas.map((schema) => ({
+      name: schema.function.name,
+      description: schema.function.description,
+      parameters: schema.function.parameters as unknown as Tool['parameters'],
+    }));
+  }
+
+  /**
+   * 🔬 Micro-step: Advance one execution phase
+   *
+   * Each call progresses to the next natural breakpoint:
+   * idle → preparing → calling-llm → llm-response → parsing → parsed
+   * → executing-tool (if action) → tool-result → completed
+   *
+   * @param state - Current agent state
+   * @param execState - Execution state tracking current phase
+   * @param toolRegistry - Optional tool registry
+   * @returns Updated state, current phase, and completion status
+   *
+   * @example
+   * ```typescript
+   * let state = createAgentState({...});
+   * let execState = createExecutionState();
+   *
+   * while (true) {
+   *   const { state: newState, phase, done } = await runner.advance(state, execState);
+   *   state = newState;
+   *
+   *   console.log('Entered phase:', phase.type);
+   *
+   *   // Intervene at specific phases
+   *   if (phase.type === 'parsed' && phase.action) {
+   *     console.log('About to execute:', phase.action);
+   *     // Can modify action here before continuing
+   *   }
+   *
+   *   if (done) break;
+   * }
+   * ```
+   */
+  async advance(
+    state: AgentState,
+    execState: ExecutionState,
+    toolRegistry?: ToolRegistry
+  ): Promise<AdvanceResult> {
+    const registry = toolRegistry ?? this.options.toolRegistry;
+    const currentPhase = execState.phase;
+
+    try {
+      switch (currentPhase.type) {
+        case 'idle':
+          return this.advanceToPreparing(state, execState);
+
+        case 'preparing':
+          return this.advanceToCallingLLM(state, execState);
+
+        case 'calling-llm':
+          return await this.advanceToLLMResponse(state, execState, registry);
+
+        case 'llm-response':
+          return this.advanceToParsing(state, execState);
+
+        case 'parsing':
+          return this.advanceToParsed(state, execState);
+
+        case 'parsed':
+          return this.advanceFromParsed(state, execState);
+
+        case 'executing-tool':
+          return await this.advanceToToolResult(state, execState, registry);
+
+        case 'tool-result':
+          return this.advanceToCompleted(state, execState);
+
+        case 'completed':
+        case 'error':
+          // Already terminal
+          return { state, phase: currentPhase, done: true };
+
+        default:
+          execState.phase = { type: 'error', error: new Error(`Unknown phase: ${currentPhase}`) };
+          return { state, phase: execState.phase, done: true };
+      }
+    } catch (error) {
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      execState.phase = { type: 'error', error: errorObj };
+      return { state, phase: execState.phase, done: true };
+    }
+  }
+
+  private advanceToPreparing(state: AgentState, execState: ExecutionState): AdvanceResult {
+    const messages = this.buildMessages(state);
+    execState.preparedMessages = messages;
+    // For the phase, we convert to our Message type for display
+    const displayMessages: import('./types.js').Message[] = messages.map((m) => ({
+      role: m.role as import('./types.js').MessageRole,
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      timestamp: Date.now(),
+    }));
+    execState.phase = { type: 'preparing', messages: displayMessages };
+    return { state, phase: execState.phase, done: false };
+  }
+
+  private advanceToCallingLLM(state: AgentState, execState: ExecutionState): AdvanceResult {
+    execState.phase = { type: 'calling-llm' };
+    return { state, phase: execState.phase, done: false };
+  }
+
+  private async advanceToLLMResponse(
+    state: AgentState,
+    execState: ExecutionState,
+    registry?: ToolRegistry
+  ): Promise<AdvanceResult> {
+    const tools = this.getToolsForLLM(registry);
+
+    const response = await this.options.llmClient.call({
+      model: this.options.model,
+      messages: execState.preparedMessages ?? this.buildMessages(state),
+      tools,
+      priority: 0,
+      requestTimeout: this.options.requestTimeout,
+    });
+
+    // Store LLM response
+    const responseText = response.content;
+    execState.llmResponse = responseText;
+
+    // Also store tool calls if present
+    if (response.toolCalls && response.toolCalls.length > 0) {
+      const toolCall = response.toolCalls[0];
+      execState.action = toolCallToAction(toolCall);
+    }
+
+    execState.phase = { type: 'llm-response', response: responseText };
+    return { state, phase: execState.phase, done: false };
+  }
+
+  private advanceToParsing(state: AgentState, execState: ExecutionState): AdvanceResult {
+    execState.phase = { type: 'parsing' };
+    return { state, phase: execState.phase, done: false };
+  }
+
+  private advanceToParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
+    const parseResult = parseResponse({
+      content: execState.llmResponse ?? '',
+      thinking: undefined,
+      toolCalls: execState.action
+        ? [
+            {
+              id: execState.action.id,
+              name: execState.action.tool,
+              arguments: execState.action.arguments,
+            },
+          ]
+        : [],
+      tokens: { input: 0, output: 0 },
+      stopReason: 'stop',
+    });
+
+    execState.thought = parseResult.thought;
+
+    if (parseResult.toolCalls.length > 0) {
+      const action = toolCallToAction(parseResult.toolCalls[0]);
+      execState.action = action;
+      execState.phase = { type: 'parsed', thought: parseResult.thought, action };
+    } else {
+      execState.phase = { type: 'parsed', thought: parseResult.thought };
+    }
+
+    return { state, phase: execState.phase, done: false };
+  }
+
+  private advanceFromParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
+    if (execState.action) {
+      // Need to execute tool
+      execState.phase = { type: 'executing-tool', action: execState.action };
+      return { state, phase: execState.phase, done: false };
+    } else {
+      // No tool needed, complete this step
+      return this.advanceToCompleted(state, execState);
+    }
+  }
+
+  private async advanceToToolResult(
+    state: AgentState,
+    execState: ExecutionState,
+    registry?: ToolRegistry
+  ): Promise<AdvanceResult> {
+    const action = execState.action;
+    if (!action) {
+      throw new Error('No action to execute');
+    }
+
+    let result: unknown;
+    if (registry) {
+      try {
+        result = await registry.execute(action.tool, action.arguments);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        result = `Error: ${errorMessage}`;
+      }
+    } else {
+      result = `Tool '${action.tool}' not executed: no tool registry provided`;
+    }
+
+    execState.toolResult = result;
+    execState.phase = { type: 'tool-result', result };
+
+    return { state, phase: execState.phase, done: false };
+  }
+
+  private advanceToCompleted(state: AgentState, execState: ExecutionState): AdvanceResult {
+    const answer = execState.thought ?? '';
+    execState.phase = { type: 'completed', answer };
+    return { state, phase: execState.phase, done: true };
+  }
+
+  /**
+   * 🔬 Micro-step: Stream phase advancement
+   *
+   * @param state - Current agent state
+   * @param execState - Execution state
+   * @param toolRegistry - Optional tool registry
+   * @returns Async generator of stream events
+   */
+  async *advanceStream(
+    state: AgentState,
+    execState: ExecutionState,
+    toolRegistry?: ToolRegistry
+  ): AsyncGenerator<StreamEvent, AdvanceResult> {
+    const registry = toolRegistry ?? this.options.toolRegistry;
+    const fromPhase = execState.phase;
+
+    // Emit phase change at start
+    if (fromPhase.type === 'idle') {
+      // Will transition to preparing
+    }
+
+    // For now, delegate to advance() and emit synthetic events
+    // A full streaming implementation would need LLM client support
+    // for streaming with tool calls
+
+    if (fromPhase.type === 'calling-llm') {
+      // Stream LLM response
+      const tools = this.getToolsForLLM(registry);
+      let accumulatedContent = '';
+
+      yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming', token: '' } };
+
+      for await (const event of this.options.llmClient.stream({
+        model: this.options.model,
+        messages: execState.preparedMessages ?? this.buildMessages(state),
+        tools,
+        priority: 0,
+        requestTimeout: this.options.requestTimeout,
+      })) {
+        if (event.type === 'text') {
+          accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
+          yield { type: 'token', token: event.delta ?? '' };
+        }
+      }
+
+      execState.llmResponse = accumulatedContent;
+      execState.phase = { type: 'streaming', token: accumulatedContent };
+    }
+
+    // Delegate remaining to advance()
+    const result = await this.advance(state, execState, registry);
+    yield { type: 'phase-change', from: fromPhase, to: result.phase };
+
+    return result;
+  }
+
+  /**
+   * 🦶 Meso-step: Complete one ReAct cycle
+   *
+   * Internally composed of multiple advance() calls:
+   * preparing → calling-llm → llm-response → parsing → parsed
+   * → [executing-tool → tool-result if action] → completed
+   *
+   * @param state - Current agent state
+   * @param toolRegistry - Optional tool registry
+   * @returns Updated state and step result
+   *
+   * @example
+   * ```typescript
+   * // Step with no tools needed
+   * const { state: newState, result } = await runner.step(state);
+   * if (result.type === 'done') {
+   *   console.log('Answer:', result.answer);
+   * }
+   *
+   * // Step with tool execution
+   * if (result.type === 'continue') {
+   *   console.log('Tool result:', result.toolResult);
+   *   const final = await runner.step(newState);
+   * }
+   * ```
+   */
+  async step(
+    state: AgentState,
+    toolRegistry?: ToolRegistry
+  ): Promise<{ state: AgentState; result: StepResult }> {
+    const registry = toolRegistry ?? this.options.toolRegistry;
+    const execState = createExecutionState();
+
+    // Execute phases until completion
+    while (!isTerminalPhase(execState.phase)) {
+      const { state: newState, phase, done } = await this.advance(state, execState, registry);
+      state = newState;
+
+      if (done && phase.type === 'completed') {
+        // Final answer
+        const newState = incrementStepCount(
+          addAssistantMessage(state, phase.answer, {
+            type: 'final',
+            visible: true,
+          })
+        );
+        return { state: newState, result: { type: 'done', answer: phase.answer } };
+      }
+
+      if (done && phase.type === 'error') {
+        // Error occurred
+        const newState = incrementStepCount(
+          addAssistantMessage(state, phase.error.message, {
+            type: 'final',
+            visible: true,
+          })
+        );
+        return { state: newState, result: { type: 'done', answer: phase.error.message } };
+      }
+
+      // If we reached tool-result, we need to continue the step
+      if (phase.type === 'tool-result') {
+        // Add assistant thought and tool result to state
+        const thought = execState.thought ?? '';
+        let newState = addAssistantMessage(state, thought, {
+          type: 'thought',
+          visible: false,
+        });
+
+        const toolResultContent =
+          typeof phase.result === 'string' ? phase.result : JSON.stringify(phase.result);
+        newState = addToolMessage(newState, toolResultContent);
+        newState = incrementStepCount(newState);
+
+        return { state: newState, result: { type: 'continue', toolResult: phase.result } };
+      }
+    }
+
+    // Should not reach here, but handle gracefully
+    return { state, result: { type: 'done', answer: execState.thought ?? '' } };
+  }
+
+  /**
+   * 🦶 Meso-step: Stream one ReAct cycle with observation
+   *
+   * @param state - Current agent state
+   * @param toolRegistry - Optional tool registry
+   * @returns Async generator of stream events
+   */
+  async *stepStream(
+    state: AgentState,
+    toolRegistry?: ToolRegistry
+  ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
+    const registry = toolRegistry ?? this.options.toolRegistry;
+    const execState = createExecutionState();
+
+    // Emit initial phase change
+    yield { type: 'phase-change', from: { type: 'idle' }, to: { type: 'preparing', messages: [] } };
+
+    // Execute phases until completion, emitting events
+    while (!isTerminalPhase(execState.phase)) {
+      const fromPhase = execState.phase;
+
+      // Special handling for streaming LLM response
+      if (fromPhase.type === 'calling-llm') {
+        yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming', token: '' } };
+
+        const tools = this.getToolsForLLM(registry);
+        let accumulatedContent = '';
+
+        for await (const event of this.options.llmClient.stream({
+          model: this.options.model,
+          messages: execState.preparedMessages ?? this.buildMessages(state),
+          tools,
+          priority: 0,
+          requestTimeout: this.options.requestTimeout,
+        })) {
+          if (event.type === 'text') {
+            accumulatedContent =
+              event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
+            yield { type: 'token', token: event.delta ?? '' };
+          }
+        }
+
+        // After streaming, we need to get the full response including tool calls
+        // For now, use non-streaming call to get complete response
+        const response = await this.options.llmClient.call({
+          model: this.options.model,
+          messages: execState.preparedMessages ?? this.buildMessages(state),
+          tools,
+          priority: 0,
+          requestTimeout: this.options.requestTimeout,
+        });
+
+        execState.llmResponse = response.content;
+        if (response.toolCalls && response.toolCalls.length > 0) {
+          const toolCall = response.toolCalls[0];
+          execState.action = {
+            id: toolCall.id,
+            tool: toolCall.name,
+            arguments: toolCall.arguments,
+          };
+        }
+        // Skip streaming phase and go directly to llm-response
+        // (streaming was already observed via tokens)
+        execState.phase = { type: 'llm-response', response: accumulatedContent };
+
+        // Continue to next phase
+        continue;
+      }
+
+      // Handle tool execution
+      if (fromPhase.type === 'executing-tool' && execState.action) {
+        yield { type: 'tool:start', action: execState.action };
+
+        let result: unknown;
+        if (registry) {
+          try {
+            result = await registry.execute(execState.action.tool, execState.action.arguments);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            result = `Error: ${errorMessage}`;
+          }
+        } else {
+          result = `Tool '${execState.action.tool}' not executed: no tool registry provided`;
+        }
+
+        execState.toolResult = result;
+        execState.phase = { type: 'tool-result', result };
+
+        yield { type: 'tool:end', result };
+        yield {
+          type: 'phase-change',
+          from: fromPhase,
+          to: execState.phase,
+        };
+
+        // Build state with tool result and return
+        const thought = execState.thought ?? '';
+        let newState = addAssistantMessage(state, thought, {
+          type: 'thought',
+          visible: false,
+        });
+
+        const toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
+        newState = addToolMessage(newState, toolResultContent);
+        newState = incrementStepCount(newState);
+
+        const stepResult: StepResult = { type: 'continue', toolResult: result };
+        return { state: newState, result: stepResult };
+      }
+
+      // Normal advance
+      const { state: newState, phase } = await this.advance(state, execState, registry);
+      state = newState;
+
+      yield { type: 'phase-change', from: fromPhase, to: phase };
+    }
+
+    // Completed
+    if (execState.phase.type === 'completed') {
+      const answer = execState.phase.answer;
+      const newState = incrementStepCount(
+        addAssistantMessage(state, answer, {
+          type: 'final',
+          visible: true,
+        })
+      );
+      return { state: newState, result: { type: 'done', answer } };
+    }
+
+    // Error case
+    if (execState.phase.type === 'error') {
+      const errorMessage = execState.phase.error.message;
+      const newState = incrementStepCount(
+        addAssistantMessage(state, errorMessage, {
+          type: 'final',
+          visible: true,
+        })
+      );
+      return { state: newState, result: { type: 'done', answer: errorMessage } };
+    }
+
+    // Fallback
+    return { state, result: { type: 'done', answer: execState.thought ?? '' } };
   }
 }
