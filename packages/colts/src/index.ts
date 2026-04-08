@@ -64,7 +64,7 @@ export {
   type ChatStreamChunk,
 } from './runner.js';
 
-// Execution Control (Step 4)
+// Execution Control (Step 4-5)
 export {
   createExecutionState,
   toolCallToAction,
@@ -75,4 +75,6 @@ export {
   type StreamEvent,
   type AdvanceResult,
   type ExecutionState,
+  type RunResult,
+  type RunStreamEvent,
 } from './execution.js';

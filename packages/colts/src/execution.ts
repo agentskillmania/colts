@@ -120,3 +120,20 @@ export function toolCallToAction(toolCall: ToolCall): Action {
 export function isTerminalPhase(phase: Phase): boolean {
   return phase.type === 'completed' || phase.type === 'error';
 }
+
+/**
+ * Result of a complete run (multiple ReAct cycles)
+ */
+export type RunResult =
+  | { type: 'success'; answer: string; totalSteps: number }
+  | { type: 'max_steps'; totalSteps: number }
+  | { type: 'error'; error: Error; totalSteps: number };
+
+/**
+ * Events emitted during runStream()
+ */
+export type RunStreamEvent =
+  | { type: 'step:start'; step: number; state: import('./types.js').AgentState }
+  | { type: 'step:end'; step: number; result: StepResult }
+  | StreamEvent
+  | { type: 'complete'; result: RunResult };
