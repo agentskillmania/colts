@@ -1248,29 +1248,9 @@ const runner = new AgentRunner({
 
 ---
 
-#### Step 13: 执行回放（Replay）
-**目标**: 能重现一次执行过程
+#### Step 13: 执行回放（Replay）（⏭️ 跳过 — 暂不需要）
 
-```typescript
-interface ExecutionEvent {
-  timestamp: number;
-  type: 'step-start' | 'llm-call' | 'tool-call' | 'step-end' | 'error';
-  payload: unknown;
-}
-
-class ExecutionRecorder {
-  start(): void;
-  record(event: ExecutionEvent): void;
-  stop(): ExecutionLog;
-  replay(log: ExecutionLog, runner: AgentRunner): Promise<void>;
-}
-```
-
-**验收标准**:
-- [ ] 记录完整执行过程（含时间戳）
-- [ ] 回放时按原速度或加速播放
-- [ ] 回放时触发相同的钩子事件
-- [ ] 可从任意快照开始回放
+**跳过原因**: 核心能力已被 `runStream` 事件流 + `createSnapshot` 快照覆盖。收集 `RunStreamEvent` 数组即为录制，遍历展示即为回放。需要时再设计。
 
 ---
 
