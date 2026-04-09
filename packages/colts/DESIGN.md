@@ -1068,29 +1068,183 @@ Ask concise, specific questions. Prefer structured types (single-select, multi-s
 ---
 
 #### Step 12: 上下文压缩
-**目标**: 防止对话历史无限增长
+**目标**: 防止对话历史无限增长，支持自动和手动压缩
+
+##### 核心设计原则
+
+**messages 是"发生了什么"，LLM 收到的是"需要知道什么"。** 压缩不修改 messages，而是在 AgentState 中存储压缩元数据，`buildMessages()` 根据元数据构造 LLM 视图。
+
+##### AgentState 变更
 
 ```typescript
-interface CompressionStrategy {
-  shouldCompress(state: AgentState): boolean;
-  compress(messages: Message[]): Message[];
+interface AgentContext {
+  messages: Message[];           // 完整历史，永远不删
+  stepCount: number;
+  lastToolResult?: unknown;
+  /** 压缩元数据（有值表示已压缩） */
+  compression?: {
+    /** messages[0..anchor-1] 的摘要文本 */
+    summary: string;
+    /** 分界线索引：此索引之前的消息已被摘要，不再发给 LLM */
+    anchor: number;
+  };
+}
+```
+
+**buildMessages() 行为变化**：
+
+```
+无压缩：messages 全部发给 LLM（现有行为不变）
+
+有压缩：构造 [摘要 system 消息] + messages[anchor..end]
+  ┌─────────────────────────────────────────────────────┐
+  │ [System] 对话历史摘要：用户询问了天气，Agent 查询了... │  ← summary
+  │ [Assistant] Understood.                               │
+  │ [User] 再查一下明天的                                  │  ← messages[anchor]
+  │ [Assistant] 明天晴天...                               │  ← messages[anchor+1]
+  └─────────────────────────────────────────────────────┘
+```
+
+##### 压缩器接口（依赖倒置）
+
+```typescript
+interface CompressResult {
+  /** 被压缩消息的摘要文本 */
+  summary: string;
+  /** 分界线索引：messages[0..anchor-1] 被压缩，messages[anchor..] 保留原文 */
+  anchor: number;
 }
 
-class AgentRunner {
-  constructor(config: {
-    compression?: {
-      threshold: number;  // 超过多少条压缩
-      strategy: 'drop' | 'summarize' | CompressionStrategy;
-    };
+interface IContextCompressor {
+  /** 判断是否需要压缩 */
+  shouldCompress(state: AgentState): boolean;
+  /** 执行压缩，返回元数据（不改 messages） */
+  compress(state: AgentState): Promise<CompressResult>;
+}
+```
+
+##### 内置默认压缩器
+
+```typescript
+interface CompressionConfig {
+  /** 压缩阈值（配合 thresholdType 使用，默认 50） */
+  threshold?: number;
+  /** 阈值类型（默认 'message-count'） */
+  thresholdType?: 'message-count' | 'estimated-tokens';
+  /** 压缩策略（默认 'sliding-window'） */
+  strategy?: 'truncate' | 'sliding-window' | 'summarize' | 'hybrid';
+  /** sliding-window / hybrid 保留最近 N 条消息（默认 10） */
+  keepRecent?: number;
+}
+
+class DefaultContextCompressor implements IContextCompressor {
+  constructor(config?: CompressionConfig, llmProvider?: ILLMProvider, model?: string);
+  // truncate:     summary = '', anchor = messages.length - keepRecent
+  // sliding-window: 同 truncate（不生成摘要）
+  // summarize:    调 LLM 生成摘要，anchor = messages.length - keepRecent
+  // hybrid:       summarize + sliding-window（摘要老消息 + 保留最近原文）
+}
+```
+
+- `truncate`：直接截断，不生成摘要
+- `sliding-window`：同 truncate，语义更清晰
+- `summarize`：需要 `llmProvider`，调用 LLM 生成摘要
+- `hybrid`：摘要老消息 + 保留最近原文
+
+##### RunnerOptions 变更
+
+```typescript
+interface RunnerOptions {
+  // ... 现有字段
+  /** 压缩器：传 CompressionConfig 使用默认实现，传 IContextCompressor 使用自定义 */
+  compressor?: CompressionConfig | IContextCompressor;
+}
+```
+
+##### 调用机制
+
+**自动压缩**：每个 advance() 执行后，在 step()/run() 循环内自动检查：
+
+```typescript
+// step() 内部
+while (!isTerminalPhase(execState.phase)) {
+  const { state: newState } = await this.advance(currentState, execState, registry);
+  currentState = await this.maybeCompress(newState);  // 每步后检查
+  // ...
+}
+
+private async maybeCompress(state: AgentState): Promise<AgentState> {
+  if (!this.compressor || !this.compressor.shouldCompress(state)) return state;
+  const result = await this.compressor.compress(state);
+  return produce(state, draft => {
+    draft.context.compression = { summary: result.summary, anchor: result.anchor };
   });
 }
 ```
 
-**验收标准**:
-- [ ] 超过阈值自动触发压缩
-- [ ] 支持直接丢弃旧消息
-- [ ] 支持保留但摘要旧消息
-- [ ] 压缩前触发钩子（可观察）
+**手动压缩**：
+
+```typescript
+class AgentRunner {
+  /** 手动触发压缩，返回新的 AgentState（不可变） */
+  async compress(state: AgentState): Promise<AgentState>;
+}
+```
+
+##### 压缩事件（流式通知）
+
+```typescript
+type StreamEvent =
+  | ... 现有事件
+  | { type: 'compressing' }
+  | { type: 'compressed'; summary: string; removedCount: number };
+```
+
+##### 使用示例
+
+```typescript
+// 使用默认压缩器
+const runner = new AgentRunner({
+  model: 'gpt-4',
+  llmClient: client,
+  compressor: {
+    threshold: 50,
+    strategy: 'hybrid',
+    keepRecent: 10,
+  },
+});
+
+// 自动压缩：run/step 内部自动触发，调用方无需干预
+const { result } = await runner.run(state);
+
+// 手动压缩
+const compressedState = await runner.compress(state);
+
+// 自定义压缩器
+class MyCompressor implements IContextCompressor {
+  shouldCompress(state) { return state.context.messages.length > 100; }
+  async compress(state) {
+    // 自定义压缩逻辑
+    return { summary: '...', anchor: state.context.messages.length - 20 };
+  }
+}
+const runner = new AgentRunner({
+  model: 'gpt-4',
+  llmClient: client,
+  compressor: new MyCompressor(),
+});
+```
+
+##### 验收标准:
+- [ ] `IContextCompressor` 接口定义，支持依赖倒置
+- [ ] 内置 `DefaultContextCompressor`，支持 truncate / sliding-window / summarize / hybrid 四种策略
+- [ ] `AgentContext.compression` 存储压缩元数据，`messages` 不被修改
+- [ ] `buildMessages()` 根据 compression 元数据构造 LLM 视图
+- [ ] 每个 advance() 后自动检查并执行压缩（step / run 内部）
+- [ ] `runner.compress(state)` 支持手动触发
+- [ ] 压缩产生 `compressing` / `compressed` 流式事件
+- [ ] `compressor` 参数支持传配置对象（用默认实现）或传实例（自定义）
+- [ ] 不传 compressor 时行为与现有完全一致
 
 ---
 
