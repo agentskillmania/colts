@@ -82,6 +82,187 @@ const mockTokens = {
 
 describe('Step Control', () => {
   describe('advance()', () => {
+    it('should expose internal providers via getter methods', async () => {
+      const client = createMockLLMClient([]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      // When: Get providers
+      const llmProvider = runner.getLLMProvider();
+      const toolRegistry = runner.getToolRegistry();
+
+      // Then: Should return valid providers
+      expect(llmProvider).toBeDefined();
+      expect(typeof llmProvider.call).toBe('function');
+      expect(typeof llmProvider.stream).toBe('function');
+
+      expect(toolRegistry).toBeDefined();
+      expect(typeof toolRegistry.execute).toBe('function');
+      expect(typeof toolRegistry.toToolSchemas).toBe('function');
+    });
+
+    it('should register and unregister tools at runtime', async () => {
+      const client = createMockLLMClient([]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      // Register a tool
+      const testTool = {
+        name: 'testTool',
+        description: 'Test tool',
+        parameters: z.object({ value: z.number() }),
+        execute: async ({ value }: { value: number }) => value * 2,
+      };
+      runner.registerTool(testTool);
+      expect(runner.getToolRegistry().has('testTool')).toBe(true);
+
+      // Unregister the tool
+      const removed = runner.unregisterTool('testTool');
+      expect(removed).toBe(true);
+      expect(runner.getToolRegistry().has('testTool')).toBe(false);
+
+      // Unregister non-existent tool returns false
+      const notRemoved = runner.unregisterTool('nonexistent');
+      expect(notRemoved).toBe(false);
+    });
+
+    it('should use default values for LLM quick init', async () => {
+      // This test verifies the default branch coverage for createLLMFromQuickInit
+      // Note: We cannot fully test this without real API credentials,
+      // but we can verify the runner accepts the config
+      expect(() => {
+        new AgentRunner({
+          model: 'gpt-4',
+          llm: {
+            apiKey: 'test-key',
+            // Not providing provider and maxConcurrency to test defaults
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle empty tools array', async () => {
+      const client = createMockLLMClient([]);
+
+      // Create runner with empty tools array
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        tools: [], // Empty array should not throw
+      });
+
+      // Registry should be created but empty
+      expect(runner.getToolRegistry()).toBeDefined();
+      expect(runner.getToolRegistry().getToolNames()).toHaveLength(0);
+    });
+
+    it('should return unchanged when advancing from error phase', async () => {
+      const client = createMockLLMClient([]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const execState = createExecutionState();
+
+      // Set phase to error
+      const testError = new Error('Test error');
+      execState.phase = { type: 'error', error: testError };
+
+      // When: Advance from error phase
+      const result = await runner.advance(state, execState);
+
+      // Then: Should return unchanged with done=true
+      expect(result.phase.type).toBe('error');
+      expect(result.done).toBe(true);
+      expect(result.state).toBe(state); // Same state reference
+    });
+
+    it('should handle unknown phase by converting to error', async () => {
+      const client = createMockLLMClient([]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const execState = createExecutionState();
+
+      // Set an invalid phase type
+      (execState.phase as any) = { type: 'unknown-phase' };
+
+      // When: Advance with unknown phase
+      const result = await runner.advance(state, execState);
+
+      // Then: Should convert to error phase
+      expect(result.phase.type).toBe('error');
+      expect(result.done).toBe(true);
+      if (result.phase.type === 'error') {
+        expect(result.phase.error.message).toContain('Unknown phase');
+      }
+    });
+
+    it('should convert missing action error to error phase', async () => {
+      // Given: An execState in executing-tool phase but without action
+      const registry = new ToolRegistry();
+      registry.register({
+        name: 'calculate',
+        description: 'Calculate',
+        parameters: z.object({ expression: z.string() }),
+        execute: async ({ expression }) => eval(expression).toString(),
+      });
+
+      const mockResponse: LLMResponse = {
+        content: 'Let me calculate',
+        toolCalls: [
+          {
+            id: 'call-123',
+            name: 'calculate',
+            arguments: { expression: '2+2' },
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const execState = createExecutionState();
+
+      // Progress to executing-tool phase
+      await runner.advance(state, execState); // idle -> preparing
+      await runner.advance(state, execState); // preparing -> calling-llm
+      await runner.advance(state, execState, registry); // calling-llm -> llm-response
+      await runner.advance(state, execState); // llm-response -> parsing
+      await runner.advance(state, execState); // parsing -> parsed
+      await runner.advance(state, execState, registry); // parsed -> executing-tool
+
+      expect(execState.phase.type).toBe('executing-tool');
+
+      // Manually clear action to simulate invalid state
+      execState.action = undefined;
+
+      // When: Advance to tool-result without action
+      const result = await runner.advance(state, execState, registry);
+
+      // Then: Error should be caught and converted to error phase
+      expect(result.phase.type).toBe('error');
+      expect(result.done).toBe(true);
+      if (result.phase.type === 'error') {
+        expect(result.phase.error.message).toBe('No action to execute');
+      }
+    });
+
     it('should progress through phases for direct answer', async () => {
       const mockResponse: LLMResponse = {
         content: 'The answer is 42',
@@ -791,6 +972,35 @@ describe('Step Control', () => {
         expect(result.result.toolResult).toContain('Error');
         expect(result.result.toolResult).toContain('Tool not found');
       }
+    });
+
+    it('should handle chatStream default event type', async () => {
+      // Test the default case in chatStream's event handling
+      const client = {
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          // Yield an unknown event type to hit default case
+          yield { type: 'unknown_event', data: 'test' };
+          yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
+        }),
+      } as unknown as LLMClient;
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const chunks = [];
+
+      for await (const chunk of runner.chatStream(state, 'Hello')) {
+        chunks.push(chunk);
+        if (chunk.type === 'done') break;
+      }
+
+      // Should ignore unknown event and still complete
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks[chunks.length - 1].type).toBe('done');
     });
   });
 

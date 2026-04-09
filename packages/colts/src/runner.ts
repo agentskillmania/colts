@@ -722,19 +722,13 @@ export class AgentRunner {
       throw new Error('No action to execute');
     }
 
+    // Execute tool - registry is always provided after Step 6 refactor
     let result: unknown;
-    if (registry) {
-      try {
-        result = await registry.execute(action.tool, action.arguments);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        result = `Error: ${errorMessage}`;
-      }
-    } else {
-      // NOTE: This branch is unreachable after Step 6 refactor.
-      // Runner now always creates a ToolRegistry internally.
-      // Kept as defensive code for interface compliance.
-      result = `Tool '${action.tool}' not executed: no tool registry provided`;
+    try {
+      result = await registry!.execute(action.tool, action.arguments);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      result = `Error: ${errorMessage}`;
     }
 
     execState.toolResult = result;
