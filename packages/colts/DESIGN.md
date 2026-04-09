@@ -807,20 +807,20 @@ runner.unregisterTool('calculator');
 ```
 
 **验收标准**:
-- [ ] 定义 ILLMProvider 接口，Runner 依赖接口不依赖具体 LLMClient 类
-- [ ] 定义 IToolRegistry 接口，Runner 依赖接口不依赖具体 ToolRegistry 类
-- [ ] 支持注入已有 llmClient 实例
-- [ ] 支持传 llm 快速初始化参数，内部自动创建 LLMClient
-- [ ] llmClient 和 llm 都传时抛 ConfigurationError
-- [ ] 支持注入已有 toolRegistry 实例
-- [ ] 支持传 tools 数组快速初始化
-- [ ] toolRegistry 和 tools 都传时合并（registry 为基础，tools 追加注册）
-- [ ] 可配置 maxSteps 作为 Runner 级别默认值
-- [ ] run()/runStream() 的 maxSteps 可覆盖 Runner 级别默认值
-- [ ] registerTool() / unregisterTool() 便捷方法可用
-- [ ] 所有执行方法返回 `{ state, ... }` 结构
-- [ ] 返回的 state 是新的不可变对象（Immer 创建）
-- [ ] 原 state 保持不变
+- [x] 定义 ILLMProvider 接口，Runner 依赖接口不依赖具体 LLMClient 类
+- [x] 定义 IToolRegistry 接口，Runner 依赖接口不依赖具体 ToolRegistry 类
+- [x] 支持注入已有 llmClient 实例
+- [x] 支持传 llm 快速初始化参数，内部自动创建 LLMClient
+- [x] llmClient 和 llm 都传时抛 ConfigurationError
+- [x] 支持注入已有 toolRegistry 实例
+- [x] 支持传 tools 数组快速初始化
+- [x] toolRegistry 和 tools 都传时合并（registry 为基础，tools 追加注册）
+- [x] 可配置 maxSteps 作为 Runner 级别默认值
+- [x] run()/runStream() 的 maxSteps 可覆盖 Runner 级别默认值
+- [x] registerTool() / unregisterTool() 便捷方法可用
+- [x] 所有执行方法返回 `{ state, ... }` 结构
+- [x] 返回的 state 是新的不可变对象（Immer 创建）
+- [x] 原 state 保持不变
 
 ---
 
