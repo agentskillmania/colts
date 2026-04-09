@@ -731,6 +731,9 @@ export class AgentRunner {
         result = `Error: ${errorMessage}`;
       }
     } else {
+      // NOTE: This branch is unreachable after Step 6 refactor.
+      // Runner now always creates a ToolRegistry internally.
+      // Kept as defensive code for interface compliance.
       result = `Tool '${action.tool}' not executed: no tool registry provided`;
     }
 
@@ -909,6 +912,9 @@ export class AgentRunner {
       }
 
       // Terminal: error (write error message to state)
+      // NOTE: Error handling in stepStream is difficult to test because
+      // errors in LLM calls are caught by advance() and converted to error phase.
+      // This branch handles edge cases where error phase is reached.
       if (done && phase.type === 'error') {
         const errorState = incrementStepCount(
           addAssistantMessage(currentState, phase.error.message, {

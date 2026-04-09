@@ -153,6 +153,38 @@ describe('Response Parser (Step 2)', () => {
       expect(result.isFinalAnswer).toBe(true);
     });
 
+    it('should handle both thinking and content empty', () => {
+      // Given: Response with empty thinking and empty content
+      const response: LLMResponse = {
+        content: '',
+        thinking: '',
+        tokens: { input: 5, output: 0 },
+        stopReason: 'stop',
+      };
+
+      // When: Parse response
+      const result = parseResponse(response);
+
+      // Then: Empty thought (fallback to empty string)
+      expect(result.thought).toBe('');
+      expect(result.isFinalAnswer).toBe(true);
+    });
+
+    it('should handle null content', () => {
+      // Given: Response with null content (edge case)
+      const response = {
+        content: null as unknown as string,
+        tokens: { input: 5, output: 0 },
+        stopReason: 'stop',
+      };
+
+      // When: Parse response
+      const result = parseResponse(response as LLMResponse);
+
+      // Then: Empty thought (null coalesced to empty string)
+      expect(result.thought).toBe('');
+    });
+
     it('should throw ParseError for invalid JSON arguments', () => {
       // Given: Response with invalid JSON arguments
       const response: LLMResponse = {
