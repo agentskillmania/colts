@@ -16,7 +16,8 @@
     "test:unit": "vitest run test/unit",
     "test:intg": "vitest run test/integration",
     "test:coverage": "vitest run test/unit --coverage",
-    "test:watch": "vitest watch test/unit"
+    "test:watch": "vitest watch test/unit",
+    "prepublishOnly": "pnpm test && pnpm build"
   },
   "keywords": [],
   "author": {
