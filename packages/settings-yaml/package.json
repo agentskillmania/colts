@@ -8,6 +8,9 @@
     "email": "yusangeng@outlook.com"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/agentskillmania/colts.git",
