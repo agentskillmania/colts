@@ -1174,6 +1174,138 @@ class AgentRunner {
 
 ---
 
+#### Step 16: 执行生命周期管理（AbortSignal）
+**目标**: 支持取消正在执行的 Agent，防止内存泄漏
+
+##### 背景
+
+当用户关闭对话、切换场景或主动取消时，执行链路上可能存在未完成的异步操作：
+- LLM 正在响应（可能数秒甚至数十秒）
+- LLM 正在流式输出 token
+- 工具正在执行（HTTP 请求、数据库查询、ask_human 等待人类输入）
+
+如果这些操作的 Promise 永远不 resolve/reject，整个执行链（state、execState、runner）都无法被 GC，造成内存泄漏。
+
+##### 需要取消的场景
+
+| 场景 | 取消时机 | 取消方式 |
+|---|---|---|
+| **LLM 阻塞调用** (`llmProvider.call`) | 等待 LLM 响应期间 | reject HTTP 请求 |
+| **LLM 流式接收** (`llmProvider.stream`) | 逐字输出 token 期间 | 关闭流，停止 yield |
+| **工具执行** (`registry.execute`) | 工具内部 IO（fetch、ask_human 等） | 工具自行处理 signal |
+| **run() 的 step 循环** | 步间 | 检查 signal，不再发起下一个 step |
+| **step() 的 advance 循环** | 步间 | 检查 signal，不再发起下一个 advance |
+
+##### 设计
+
+使用标准 JavaScript AbortController/AbortSignal 模式。signal 从调用方传入，贯穿整个执行链：
+
+```
+调用方 (AbortController)
+  │
+  ▼ signal
+run({ signal })
+  │ ├── 步间检查 signal（while 循环每次迭代前）
+  │
+  ▼ signal
+step({ signal })
+  │ ├── 步间检查 signal（while 循环每次迭代前）
+  │
+  ▼ signal
+advance({ signal })
+  │
+  ├── advanceToLLMResponse ──► llmProvider.call({ signal })
+  │
+  ├── streamCallingLLM ──► llmProvider.stream({ signal })
+  │                          ├── 每次 yield token 前检查 signal
+  │                          └── signal aborted → 停止读取流，停止 yield
+  │
+  └── advanceToToolResult ──► registry.execute(name, args, { signal })
+```
+
+##### 接口变更
+
+```typescript
+// 1. ILLMProvider 增加 signal
+interface ILLMProvider {
+  call(options: {
+    model: string;
+    messages: Message[];
+    tools?: Tool[];
+    priority?: number;
+    requestTimeout?: number;
+    signal?: AbortSignal;  // 新增
+  }): Promise<LLMResponse>;
+
+  stream(options: {
+    model: string;
+    messages: Message[];
+    tools?: Tool[];
+    priority?: number;
+    requestTimeout?: number;
+    signal?: AbortSignal;  // 新增
+  }): AsyncIterable<StreamEvent>;
+}
+
+// 2. IToolRegistry.execute 增加 signal
+interface IToolRegistry {
+  execute(name: string, args: unknown, options?: { signal?: AbortSignal }): Promise<unknown>;
+  // ... 其他方法不变
+}
+
+// 3. 执行方法增加 signal 参数
+// run() / runStream()
+async run(state, options?: { maxSteps?: number; signal?: AbortSignal }): Promise<...>;
+
+// step() / stepStream()
+async step(state, toolRegistry?, options?: { signal?: AbortSignal }): Promise<...>;
+
+// advance() / advanceStream()
+async advance(state, execState, toolRegistry?, options?: { signal?: AbortSignal }): Promise<...>;
+```
+
+**向后兼容**: 所有 signal 参数都是 optional，不传时行为与现有完全一致。
+
+##### 各层处理方式
+
+```typescript
+// 循环层（run / step）：步间检查
+while (totalSteps < maxSteps) {
+  signal?.throwIfAborted();  // 每次迭代前检查
+  const { result } = await this.step(currentState, registry, { signal });
+  // ...
+}
+
+// LLM 调用层：传递给 provider
+const response = await this.llmProvider.call({
+  model, messages, tools, signal,  // fetch 内部原生支持 AbortSignal
+});
+
+// LLM 流式层：迭代中检查
+for await (const event of this.llmProvider.stream({ ..., signal })) {
+  if (signal?.aborted) break;  // 停止读取
+  yield event;
+}
+
+// 工具执行层：传递给 registry
+result = await registry.execute(action.tool, action.arguments, { signal });
+
+// 工具内部（如 ask_human）：自行处理
+handler({ questions, context, signal });
+```
+
+##### 验收标准:
+- [ ] `run()` / `step()` / `advance()` 及流式版本支持 `signal` 参数
+- [ ] 循环层（run 的 step 循环、step 的 advance 循环）每次迭代前检查 signal
+- [ ] signal 传递到 `ILLMProvider.call()` 和 `ILLMProvider.stream()`
+- [ ] signal 传递到 `IToolRegistry.execute()`
+- [ ] 流式方法（`runStream` / `stepStream` / `advanceStream`）abort 后停止 yield 事件
+- [ ] abort 后正在执行的 Promise 正确 reject（AbortError），不泄漏
+- [ ] `ILLMProvider` 和 `IToolRegistry` 接口变更向后兼容（signal 为 optional）
+- [ ] 不传 signal 时行为与现有完全一致（零侵入）
+
+---
+
 ## 开发建议
 
 ### 起步策略
@@ -1190,8 +1322,8 @@ class AgentRunner {
 - 完成后开发者可以 Mock、暂停、压缩、回放
 - 提升开发体验和调试效率
 
-**Phase 4（Step 14-15）** = 生产稳定性
-- 完成后可以稳定运行多个 Agent，错误可恢复
+**Phase 4（Step 14-16）** = 生产稳定性
+- 完成后可以稳定运行多个 Agent，错误可恢复，支持取消
 
 ### 关键设计决策
 
@@ -1231,48 +1363,35 @@ await runner.step(state); // 重新执行第4步
 
 ### Q2: 工具调用前如何确认？
 
-**钩子仅观察，控制用 `advance` 或 `runInteractive`**：
+**使用 `advance()` 手动控制 或 注入拦截 Registry**：
 
 ```typescript
-// 钩子：仅观察，无法修改执行流程
-const runner = new AgentRunner({
-  hooks: {
-    onToolCall: (state, call) => {
-      console.log('准备调用:', call); // 只能观察记录
-    }
-  }
-});
-
-// 方式一：使用 advance() 手动控制
+// 方式一：使用 advance() 手动控制（精细调试场景）
 let state = initialState;
 while (true) {
-  const { state: newState, phase, done } = await runner.advance(state);
+  const { state: newState, phase, done } = await runner.advance(state, execState);
   state = newState;
-  
+
   if (phase.type === 'parsed' && phase.action) {
-    // 在此暂停，询问用户
     const confirmed = await confirmWithUser(phase.action);
-    if (!confirmed) {
-      // 修改 state 或中止
-      break;
-    }
+    if (!confirmed) break;
   }
-  
+
   if (done) break;
 }
 
-// 方式二：runInteractive（回调方式）
-await runner.runInteractive(initialState, {
-  onPause: (point) => {
-    if (point.type === 'before-tool') {
-      showConfirmUI(point.proposedAction, {
-        onConfirm: () => point.resume(),
-        onCancel: () => point.abort(),
-        onModify: (newArgs) => point.resume(newArgs)
-      });
+// 方式二：注入拦截 Registry（自动化场景）
+class ConfirmableRegistry implements IToolRegistry {
+  async execute(name: string, args: unknown) {
+    if (this.needsConfirm(name)) {
+      const decision = await this.confirmFn(name, args);
+      if (!decision.approved) throw new Error('User rejected');
     }
+    return this.inner.execute(name, args);
   }
-});
+}
+
+// 方式三：ask_human 工具（LLM 主动请求人类输入，见 Step 11）
 ```
 
 ### Q3: 内部思考 vs 对外展示？
