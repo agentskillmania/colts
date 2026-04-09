@@ -635,42 +635,189 @@ for await (const event of runner.runStream(initialState)) {
 
 ---
 
-#### Step 6: Runner 配置化
-**目标**: Runner 可配置，支持不同策略，所有方法返回不可变状态
+#### Step 6: Runner 配置化与依赖反转
+**目标**: Runner 可配置，依赖接口而非实现，所有方法返回不可变状态
+
+##### 依赖反转：定义接口
+
+Runner 不依赖具体的 LLMClient 或 ToolRegistry 类，而是依赖接口。
+接口定义在 colts 包内，数据类型通过 `import type` 从 llm-client 引入（纯编译时，无运行时依赖）。
 
 ```typescript
-import { z } from 'zod';
-import { Tool } from './types';
+import type { LLMResponse, StreamEvent, TokenStats } from '@agentskillmania/llm-client';
 
-interface RunnerConfig {
-  llm: LLMClient;
-  tools?: Tool<z.ZodTypeAny>[];  // Zod 定义的工具列表
-  maxSteps?: number;             // 默认 10
-  timeout?: number;              // 单步超时（毫秒）
-  systemPrompt?: string;         // 覆盖默认 ReAct 提示词
-  hooks?: RunnerHooks;           // 生命周期钩子（仅观察）
+// ========== Runner 依赖的接口 ==========
+
+/**
+ * LLM 提供者接口
+ *
+ * Runner 通过此接口与 LLM 交互，不依赖具体实现。
+ * 现有的 @agentskillmania/llm-client 的 LLMClient 满足此接口。
+ */
+interface ILLMProvider {
+  /** 阻塞式调用 */
+  call(options: {
+    model: string;
+    messages: Message[];
+    tools?: Tool[];
+    priority?: number;
+    requestTimeout?: number;
+  }): Promise<LLMResponse>;
+
+  /** 流式调用 */
+  stream(options: {
+    model: string;
+    messages: Message[];
+    tools?: Tool[];
+    priority?: number;
+    requestTimeout?: number;
+  }): AsyncIterable<StreamEvent>;
 }
 
+/**
+ * 工具注册表接口
+ *
+ * Runner 通过此接口执行工具和获取工具 Schema，不依赖具体实现。
+ * 现有的 ToolRegistry 类满足此接口。
+ */
+interface IToolRegistry {
+  /** 执行指定工具 */
+  execute(name: string, args: unknown): Promise<unknown>;
+  /** 获取所有工具的 JSON Schema（传给 LLM） */
+  toToolSchemas(): ToolSchema[];
+}
+```
+
+##### RunnerOptions：注入 + 便捷构造
+
+```typescript
+/**
+ * LLM 快速初始化配置
+ * 传此对象时，Runner 内部自动创建 LLMClient 实例
+ */
+interface LLMQuickInit {
+  /** API Key */
+  apiKey: string;
+  /** Provider 名称（默认 'openai'） */
+  provider?: string;
+  /** 自定义 Base URL（可选） */
+  baseUrl?: string;
+  /** 并发限制：同时发出的最大请求数（默认 5，应用到 provider/key/model 三级） */
+  maxConcurrency?: number;
+}
+
+/**
+ * 工具快速初始化配置
+ * 传此对象时，Runner 内部自动创建 ToolRegistry 并注册
+ */
+type ToolQuickInit = Tool<z.ZodTypeAny>[];
+
 class AgentRunner {
-  constructor(config: RunnerConfig);
-  
-  // 动态注册/注销工具（运行时扩展）
+  constructor(options: {
+    // --- LLM：注入或快速初始化（二选一，都传则报错） ---
+    llmClient?: ILLMProvider;       // 注入已有实例
+    llm?: LLMQuickInit;             // 快速初始化参数
+
+    // --- 工具：注入或快速初始化（都传则合并） ---
+    toolRegistry?: IToolRegistry;   // 注入已有实例
+    tools?: ToolQuickInit;          // 快速初始化参数
+
+    // --- Runner 配置 ---
+    model: string;                  // 模型标识（注入 llmClient 时仍需指定）
+    systemPrompt?: string;          // 系统提示词
+    requestTimeout?: number;        // 单步超时（毫秒）
+    maxSteps?: number;              // 默认最大步数（默认 10）
+    hooks?: RunnerHooks;            // 生命周期钩子（Step 7 实现）
+  });
+
+  // 工具便捷操作（代理到内部 ToolRegistry）
   registerTool<T extends z.ZodTypeAny>(tool: Tool<T>): void;
-  unregisterTool(name: string): void;
-  
+  unregisterTool(name: string): boolean;
+
   // 所有执行方法都返回 { state, ... }，state 为不可变新状态
   // - advance() / advanceStream()
   // - step() / stepStream()
   // - run() / runStream()
   // - chat() / chatStream()
-  // - runInteractive()
 }
 ```
 
+##### 初始化逻辑
+
+```
+构造时初始化规则：
+
+1. LLM 提供者（互斥，冲突则报错）：
+   - 传 llmClient → 直接使用
+   - 传 llm → 内部创建 LLMClient，流程如下：
+     ```
+     const c = llm.maxConcurrency ?? 5;
+     const client = new LLMClient({ baseUrl: llm.baseUrl });
+     client.registerProvider({ name: llm.provider ?? 'openai', maxConcurrency: c });
+     client.registerApiKey({
+       key: llm.apiKey,
+       provider: llm.provider ?? 'openai',
+       maxConcurrency: c,
+       models: [{ modelId: options.model, maxConcurrency: c }],
+     });
+     ```
+   - 都传 → 抛出 ConfigurationError
+   - 都不传 → 抛出 ConfigurationError
+
+2. 工具注册表（可合并）：
+   - 传 toolRegistry → 作为基础 registry
+   - 传 tools → 注册到 registry 中
+   - 两个都传 → 用传入的 toolRegistry，再把 tools 注册进去
+   - 都不传 → 内部创建空 ToolRegistry
+
+3. maxSteps 层级：
+   - RunnerOptions.maxSteps 为默认值（默认 10）
+   - run() / runStream() 的 options.maxSteps 可覆盖
+   - 优先级：run 参数 > RunnerOptions > 默认值 10
+```
+
+**使用示例**:
+
+```typescript
+// 方式 A：完全注入（适合生产、测试）
+const runner = new AgentRunner({
+  llmClient: existingClient,
+  toolRegistry: existingRegistry,
+  model: 'gpt-4',
+});
+
+// 方式 B：快速初始化（适合开发、原型）
+const runner = new AgentRunner({
+  llm: { apiKey: 'sk-...', provider: 'openai', baseUrl: 'https://...' },
+  tools: [calculatorTool, searchTool],
+  model: 'gpt-4',
+  maxSteps: 5,
+});
+
+// 方式 C：混合（LLM 注入 + 工具快速创建）
+const runner = new AgentRunner({
+  llmClient: existingClient,
+  tools: [calculatorTool],
+  model: 'gpt-4',
+});
+
+// 运行时动态添加工具
+runner.registerTool(weatherTool);
+runner.unregisterTool('calculator');
+```
+
 **验收标准**:
-- [ ] 可在构造时传入工具列表
-- [ ] 支持运行时动态注册/注销工具
-- [ ] 可配置 maxSteps、timeout、systemPrompt
+- [ ] 定义 ILLMProvider 接口，Runner 依赖接口不依赖具体 LLMClient 类
+- [ ] 定义 IToolRegistry 接口，Runner 依赖接口不依赖具体 ToolRegistry 类
+- [ ] 支持注入已有 llmClient 实例
+- [ ] 支持传 llm 快速初始化参数，内部自动创建 LLMClient
+- [ ] llmClient 和 llm 都传时抛 ConfigurationError
+- [ ] 支持注入已有 toolRegistry 实例
+- [ ] 支持传 tools 数组快速初始化
+- [ ] toolRegistry 和 tools 都传时合并（registry 为基础，tools 追加注册）
+- [ ] 可配置 maxSteps 作为 Runner 级别默认值
+- [ ] run()/runStream() 的 maxSteps 可覆盖 Runner 级别默认值
+- [ ] registerTool() / unregisterTool() 便捷方法可用
 - [ ] 所有执行方法返回 `{ state, ... }` 结构
 - [ ] 返回的 state 是新的不可变对象（Immer 创建）
 - [ ] 原 state 保持不变
