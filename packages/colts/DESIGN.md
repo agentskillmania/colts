@@ -1256,55 +1256,129 @@ const runner = new AgentRunner({
 
 ### Phase 4: 工程化（稳定性）
 
-#### Step 14: 并发隔离
-**目标**: 多个 AgentState 同时运行互不干扰
+#### Step 14: 并发隔离 ✅ 已完成（设计天然保证）
 
-```typescript
-// 验证 Runner 无状态，可并发使用
-const runner = new AgentRunner(config);
-const state1 = createAgentState({...});
-const state2 = createAgentState({...});
+**验证结果**: Runner 无状态 + AgentState 不可变的设计天然保证并发安全，无需额外代码。
 
-await Promise.all([
-  runner.run(state1),
-  runner.run(state2)
-]);
-```
+**测试覆盖**: `test/unit/concurrency.test.ts`（5 个测试）
 
 **验收标准**:
-- [ ] 两个 Agent 同时运行不冲突
-- [ ] 各自的 messages 独立
-- [ ] 各自的 stepCount 独立
-- [ ] 一个报错不影响另一个
+- [x] 两个 Agent 同时运行不冲突（Promise.all 并发 run，各自结果正确）
+- [x] 各自的 messages 独立（同一 Runner 跑两个有不同历史消息的 state，互不污染）
+- [x] 各自的 stepCount 独立（不同 maxSteps 并发执行，stepCount 各自符合预期）
+- [x] 一个报错不影响另一个（一个 Runner LLM 报错，另一个正常完成）
 
 ---
 
-#### Step 15: 错误隔离与恢复
-**目标**: 单步错误可捕获，Agent 不崩溃
+#### Step 15: 错误处理
+**目标**: 明确区分 LLM 错误和工具错误，上层能程序化识别错误
+
+##### 设计原则
+
+两种错误，两种处理策略：
+
+| 错误类型 | 处理策略 | 理由 |
+|---|---|---|
+| **LLM 错误** | 上报给调用方 | LLM 挂了，无法问它怎么办 |
+| **工具错误** | 传递给 LLM | LLM 可以看到错误，自己决定重试/换工具/放弃 |
+
+##### LLM 错误：不再伪装成成功
+
+当前问题：LLM 失败返回 `{ type: 'success', answer: 'LLM API error' }`，调用方无法区分正常回答和错误。
+
+**StepResult 新增 error 变体**：
 
 ```typescript
-type ErrorDecision = 'continue' | 'abort' | { retry: boolean };
+// 之前
+type StepResult =
+  | { type: 'continue'; toolResult: unknown }
+  | { type: 'done'; answer: string };
 
-interface ErrorHandler {
-  (error: Error, context: { 
-    state: AgentState; 
-    step: number;
-    operation: 'llm-call' | 'tool-execute' | 'parse';
-  }): ErrorDecision;
-}
+// 之后
+type StepResult =
+  | { type: 'continue'; toolResult: unknown }
+  | { type: 'done'; answer: string }
+  | { type: 'error'; error: Error };  // 新增：LLM 错误
+```
 
-class AgentRunner {
-  constructor(config: {
-    onError?: ErrorHandler;
-  });
+**RunResult 已有 error 变体，开始使用**：
+
+```typescript
+type RunResult =
+  | { type: 'success'; answer: string; totalSteps: number }
+  | { type: 'max_steps'; totalSteps: number }
+  | { type: 'error'; error: Error; totalSteps: number };  // 已定义，从未返回，现在启用
+```
+
+**错误流**：
+
+```
+LLM 调用失败
+  → advance() catch → error phase
+  → step() 返回 { type: 'error', error: Error }
+  → run() 返回 { type: 'error', error: Error, totalSteps }
+
+调用方判断：
+if (result.type === 'error') {
+  // 明确知道出错了，可以记录/上报/重试
+} else if (result.type === 'success') {
+  // 这是真正的成功
 }
 ```
 
-**验收标准**:
-- [ ] LLM 调用失败可捕获
-- [ ] 工具执行失败可捕获
-- [ ] 可配置重试或中止
-- [ ] 错误信息包含上下文（哪一步、什么操作）
+##### LLM 瞬态重试：Provider 层负责
+
+Runner 不内置重试逻辑。LLM 的瞬态错误（429 限流、网络超时）由使用者通过包装 ILLMProvider 实现：
+
+```typescript
+// 使用者用 p-retry 包装
+import pRetry from 'p-retry';
+
+const retryProvider: ILLMProvider = {
+  async call(options) {
+    return pRetry(() => realProvider.call(options), {
+      retries: 3,
+      minTimeout: 1000,
+    });
+  },
+  // stream 类似处理
+};
+
+const runner = new AgentRunner({
+  model: 'gpt-4',
+  llmClient: retryProvider,
+});
+```
+
+##### 工具错误：保持现有行为
+
+工具错误已经被正确处理——捕获异常后转为 `"Error: xxx"` 字符串作为 tool result，LLM 下一步能看到并自己决定怎么办。无需额外机制。
+
+```
+工具执行失败
+  → advanceToToolResult() catch → result = "Error: xxx"
+  → tool-result phase
+  → step() 返回 { type: 'continue', toolResult: 'Error: xxx' }
+  → run() 继续，LLM 下一步看到错误信息，自主决策
+```
+
+##### 错误流式事件
+
+补充 `error` 事件到 StreamEvent，让 UI 能实时获知错误：
+
+```typescript
+type StreamEvent =
+  | ... 现有事件
+  | { type: 'error'; error: Error; context: { toolName?: string; step: number } };
+```
+
+##### 验收标准:
+- [ ] LLM 错误时 `step()` 返回 `{ type: 'error', error: Error }`（而非伪装成 done）
+- [ ] LLM 错误时 `run()` 返回 `{ type: 'error', error: Error, totalSteps }`（而非伪装成 success）
+- [ ] 工具错误保持现有行为：错误信息作为 tool result 传递给 LLM
+- [ ] 新增 `error` 流式事件，UI 可实时获知错误
+- [ ] LLM 瞬态重试文档说明为 ILLMProvider 层职责（不内置到 Runner）
+- [ ] 现有工具错误测试不受影响
 
 ---
 
