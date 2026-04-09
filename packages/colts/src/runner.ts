@@ -841,7 +841,13 @@ export class AgentRunner {
     if (fromPhase.type === 'calling-llm') {
       yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 
-      yield* this.streamCallingLLM(state, execState, registry);
+      try {
+        yield* this.streamCallingLLM(state, execState, registry);
+      } catch (error) {
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        execState.phase = { type: 'error', error: errorObj };
+        return { state, phase: execState.phase, done: true };
+      }
 
       yield { type: 'phase-change', from: { type: 'streaming' }, to: execState.phase };
       return { state, phase: execState.phase, done: false };
@@ -903,18 +909,9 @@ export class AgentRunner {
         return { state: currentState, result: { type: 'done', answer: phase.answer } };
       }
 
-      // Terminal: error (write error message to state)
-      // NOTE: Error handling in stepStream is difficult to test because
-      // errors in LLM calls are caught by advance() and converted to error phase.
-      // This branch handles edge cases where error phase is reached.
+      // Terminal: error (LLM call failed, report to caller)
       if (done && phase.type === 'error') {
-        const errorState = incrementStepCount(
-          addAssistantMessage(currentState, phase.error.message, {
-            type: 'final',
-            visible: true,
-          })
-        );
-        return { state: errorState, result: { type: 'done', answer: phase.error.message } };
+        return { state: currentState, result: { type: 'error', error: phase.error } };
       }
 
       // Non-terminal stopping point: tool-result (state already updated by advance)
@@ -949,7 +946,14 @@ export class AgentRunner {
       if (fromPhase.type === 'calling-llm') {
         yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 
-        yield* this.streamCallingLLM(currentState, execState, registry);
+        try {
+          yield* this.streamCallingLLM(currentState, execState, registry);
+        } catch (error) {
+          const errorObj = error instanceof Error ? error : new Error(String(error));
+          execState.phase = { type: 'error', error: errorObj };
+          yield { type: 'error', error: errorObj, context: { step: 0 } };
+          return { state: currentState, result: { type: 'error', error: errorObj } };
+        }
 
         yield { type: 'phase-change', from: { type: 'streaming' }, to: execState.phase };
         continue;
@@ -995,13 +999,8 @@ export class AgentRunner {
       }
 
       if (done && phase.type === 'error') {
-        const errorState = incrementStepCount(
-          addAssistantMessage(currentState, phase.error.message, {
-            type: 'final',
-            visible: true,
-          })
-        );
-        return { state: errorState, result: { type: 'done', answer: phase.error.message } };
+        yield { type: 'error', error: phase.error, context: { step: 0 } };
+        return { state: currentState, result: { type: 'error', error: phase.error } };
       }
     }
 
@@ -1047,6 +1046,13 @@ export class AgentRunner {
         return {
           state: currentState,
           result: { type: 'success', answer: result.answer, totalSteps },
+        };
+      }
+
+      if (result.type === 'error') {
+        return {
+          state: currentState,
+          result: { type: 'error', error: result.error, totalSteps },
         };
       }
 
@@ -1115,6 +1121,16 @@ export class AgentRunner {
         const runResult: RunResult = {
           type: 'success',
           answer: stepResult.result.answer,
+          totalSteps,
+        };
+        yield { type: 'complete', result: runResult };
+        return { state: currentState, result: runResult };
+      }
+
+      if (stepResult.result.type === 'error') {
+        const runResult: RunResult = {
+          type: 'error',
+          error: stepResult.result.error,
           totalSteps,
         };
         yield { type: 'complete', result: runResult };

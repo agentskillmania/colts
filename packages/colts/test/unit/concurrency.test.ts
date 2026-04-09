@@ -108,14 +108,17 @@ describe('Step 14: 并发隔离', () => {
   });
 
   it('各自的 stepCount 独立', async () => {
-    const responses = Array(4).fill({
+    const toolCallResponse = {
       content: 'Calculating',
       toolCalls: [{ id: 'call-1', name: 'calc', arguments: { expression: '1+1' } }],
       tokens: mockTokens,
       stopReason: 'tool_calls',
-    }) as LLMResponse[];
+    };
 
-    const client = createMockLLMClient(responses);
+    // 每个 runner 用独立的 client，避免共享 callIndex 导致竞态
+    const client1 = createMockLLMClient(Array(4).fill(toolCallResponse) as LLMResponse[]);
+    const client2 = createMockLLMClient(Array(4).fill(toolCallResponse) as LLMResponse[]);
+
     const registry = new ToolRegistry();
     registry.register({
       name: 'calc',
@@ -125,9 +128,9 @@ describe('Step 14: 并发隔离', () => {
     });
 
     // Runner 1: maxSteps=2
-    const runner1 = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const runner1 = new AgentRunner({ model: 'gpt-4', llmClient: client1 });
     // Runner 2: maxSteps=3
-    const runner2 = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const runner2 = new AgentRunner({ model: 'gpt-4', llmClient: client2 });
 
     const state1 = createAgentState(defaultConfig);
     const state2 = createAgentState(defaultConfig);
@@ -165,10 +168,10 @@ describe('Step 14: 并发隔离', () => {
     // 并发运行，runner1 会失败
     const [result1, result2] = await Promise.all([runner1.run(state1), runner2.run(state2)]);
 
-    // runner1 错误被捕获，返回 error 信息
-    expect(result1.result.type).toBe('success');
-    if (result1.result.type === 'success') {
-      expect(result1.result.answer).toContain('API exploded');
+    // runner1 错误被捕获，返回 error 结果
+    expect(result1.result.type).toBe('error');
+    if (result1.result.type === 'error') {
+      expect(result1.result.error.message).toContain('API exploded');
     }
 
     // runner2 不受影响，正常完成

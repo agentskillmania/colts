@@ -40,7 +40,8 @@ export type Phase =
  */
 export type StepResult =
   | { type: 'continue'; toolResult: unknown }
-  | { type: 'done'; answer: string };
+  | { type: 'done'; answer: string }
+  | { type: 'error'; error: Error };
 
 /**
  * Events emitted during step/advance stream
@@ -49,7 +50,8 @@ export type StreamEvent =
   | { type: 'phase-change'; from: Phase; to: Phase }
   | { type: 'token'; token: string }
   | { type: 'tool:start'; action: Action }
-  | { type: 'tool:end'; result: unknown };
+  | { type: 'tool:end'; result: unknown }
+  | { type: 'error'; error: Error; context: { toolName?: string; step: number } };
 
 /**
  * Options for advance execution

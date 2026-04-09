@@ -207,6 +207,33 @@ describe('Step Control', () => {
       }
     });
 
+    it('should handle non-Error thrown value in advance', async () => {
+      // Force advance() to catch a non-Error value (covers else branch of instanceof check)
+      const client = createMockLLMClient([]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const execState = createExecutionState();
+
+      // Use a phase that triggers advanceToLLMResponse, but mock call to throw a string
+      const throwClient = {
+        call: vi.fn().mockRejectedValue('string error'),
+        stream: vi.fn(),
+      } as unknown as LLMClient;
+      const throwRunner = new AgentRunner({ model: 'gpt-4', llmClient: throwClient });
+
+      execState.phase = { type: 'calling-llm' };
+      const result = await throwRunner.advance(state, execState);
+
+      expect(result.phase.type).toBe('error');
+      if (result.phase.type === 'error') {
+        expect(result.phase.error.message).toBe('string error');
+      }
+    });
+
     it('should convert missing action error to error phase', async () => {
       // Given: An execState in executing-tool phase but without action
       const registry = new ToolRegistry();
@@ -589,16 +616,16 @@ describe('Step Control', () => {
       const state = createAgentState(defaultConfig);
       const { state: newState, result } = await runner.step(state);
 
-      expect(result.type).toBe('done');
-      if (result.type === 'done') {
-        expect(result.answer).toContain('LLM API error');
+      expect(result.type).toBe('error');
+      if (result.type === 'error') {
+        expect(result.error.message).toContain('LLM API error');
       }
 
       // Original state should be unchanged
       expect(state.context.stepCount).toBe(0);
-      // Error is recorded in messages, so step count increments
-      expect(newState.context.stepCount).toBe(1);
-      expect(newState.context.messages.length).toBe(1);
+      // Error does not write to state, step count stays 0
+      expect(newState.context.stepCount).toBe(0);
+      expect(newState.context.messages.length).toBe(0);
     });
 
     it('should use runner tool registry as default', async () => {
@@ -863,10 +890,12 @@ describe('Step Control', () => {
       }
     });
 
-    it('should handle error case', async () => {
+    it('should handle error case via stepStream', async () => {
       const client = {
         call: vi.fn().mockRejectedValue(new Error('LLM API error')),
-        stream: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          throw new Error('LLM API error');
+        }),
       } as unknown as LLMClient;
 
       const runner = new AgentRunner({
@@ -876,13 +905,24 @@ describe('Step Control', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // Use step() to trigger error handling
-      const { result } = await runner.step(state);
-
-      expect(result.type).toBe('done');
-      if (result.type === 'done') {
-        expect(result.answer).toContain('LLM API error');
+      // Use stepStream to verify error event and error result
+      const events: { type: string }[] = [];
+      let returnValue: { result: { type: string } } | undefined;
+      const iterator = runner.stepStream(state);
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          returnValue = value;
+          break;
+        }
+        events.push(value as { type: string });
       }
+
+      // Should emit error event
+      expect(events.some((e) => e.type === 'error')).toBe(true);
+
+      // Should return error result
+      expect(returnValue!.result.type).toBe('error');
     });
 
     it('should handle tool returning object result', async () => {
@@ -1279,7 +1319,7 @@ describe('Step Control', () => {
       }
     });
 
-    it('should handle LLM error and return success with error message', async () => {
+    it('should handle LLM error and return error result', async () => {
       const client = {
         call: vi.fn().mockRejectedValue(new Error('API error')),
         stream: vi.fn(),
@@ -1290,10 +1330,10 @@ describe('Step Control', () => {
 
       const { result } = await runner.run(state);
 
-      // step() 内部捕获错误，返回 done
-      expect(result.type).toBe('success');
-      if (result.type === 'success') {
-        expect(result.answer).toContain('API error');
+      // step() 内部捕获错误，返回 error
+      expect(result.type).toBe('error');
+      if (result.type === 'error') {
+        expect(result.error.message).toContain('API error');
         expect(result.totalSteps).toBe(1);
       }
     });
@@ -1611,6 +1651,37 @@ describe('Step Control', () => {
       expect(originalState.context.stepCount).toBe(originalStepCount);
       // 最终状态已更新
       expect(returnValue.state.context.stepCount).toBe(2);
+    });
+
+    it('should handle error via runStream', async () => {
+      const client = {
+        call: vi.fn().mockRejectedValue(new Error('LLM down')),
+        stream: vi.fn().mockImplementation(async function* () {
+          throw new Error('LLM down');
+        }),
+      } as unknown as LLMClient;
+
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      const events: { type: string }[] = [];
+      let returnValue: { result: { type: string } } | undefined;
+      const iterator = runner.runStream(state);
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          returnValue = value;
+          break;
+        }
+        events.push(value as { type: string });
+      }
+
+      // Should emit complete event with error result
+      expect(events.some((e) => e.type === 'complete')).toBe(true);
+      expect(returnValue!.result.type).toBe('error');
+      if (returnValue!.result.type === 'error') {
+        expect(returnValue!.result.error.message).toContain('LLM down');
+      }
     });
   });
 });

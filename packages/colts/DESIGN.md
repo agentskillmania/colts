@@ -1373,12 +1373,14 @@ type StreamEvent =
 ```
 
 ##### 验收标准:
-- [ ] LLM 错误时 `step()` 返回 `{ type: 'error', error: Error }`（而非伪装成 done）
-- [ ] LLM 错误时 `run()` 返回 `{ type: 'error', error: Error, totalSteps }`（而非伪装成 success）
-- [ ] 工具错误保持现有行为：错误信息作为 tool result 传递给 LLM
-- [ ] 新增 `error` 流式事件，UI 可实时获知错误
-- [ ] LLM 瞬态重试文档说明为 ILLMProvider 层职责（不内置到 Runner）
-- [ ] 现有工具错误测试不受影响
+- [x] LLM 错误时 `step()` 返回 `{ type: 'error', error: Error }`（而非伪装成 done）
+- [x] LLM 错误时 `run()` 返回 `{ type: 'error', error: Error, totalSteps }`（而非伪装成 success）
+- [x] 工具错误保持现有行为：错误信息作为 tool result 传递给 LLM
+- [x] 新增 `error` 流式事件，UI 可实时获知错误
+- [x] LLM 瞬态重试文档说明为 ILLMProvider 层职责（不内置到 Runner）
+- [x] 现有工具错误测试不受影响
+
+**状态**: ✅ 已完成 (151 个单元测试通过，分支覆盖率 90.73%)
 
 ---
 
