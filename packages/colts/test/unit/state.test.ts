@@ -248,6 +248,45 @@ describe('Step 0: AgentState', () => {
 
       expect(snapshot.state.config.name).toBe('test-agent');
     });
+
+    it('should allow restored state to continue state operations', () => {
+      // 验证：恢复的 Agent 能继续执行（验收标准第 4 条）
+      let state = createAgentState(baseConfig);
+      state = addUserMessage(state, 'Before snapshot');
+
+      // 创建快照
+      const snapshot = createSnapshot(state);
+
+      // 继续修改原状态
+      state = addUserMessage(state, 'After snapshot');
+      expect(state.context.messages).toHaveLength(2);
+
+      // 从快照恢复，应该只有 1 条消息
+      const restored = restoreSnapshot(snapshot);
+      expect(restored.context.messages).toHaveLength(1);
+      expect(restored.context.messages[0].content).toBe('Before snapshot');
+
+      // 恢复后的状态可以继续执行 state 操作
+      const continued = addUserMessage(restored, 'After restore');
+      expect(continued.context.messages).toHaveLength(2);
+      expect(continued.context.messages[1].content).toBe('After restore');
+      // 恢复的状态本身不变
+      expect(restored.context.messages).toHaveLength(1);
+    });
+
+    it('should allow deserialized state to continue state operations', () => {
+      let state = createAgentState(baseConfig);
+      state = addUserMessage(state, 'Before serialize');
+
+      // 序列化 → 反序列化
+      const json = serializeState(state);
+      const restored = deserializeState(json);
+
+      // 恢复后可继续操作
+      const continued = addUserMessage(restored, 'After deserialize');
+      expect(continued.context.messages).toHaveLength(2);
+      expect(continued.context.messages[1].content).toBe('After deserialize');
+    });
   });
 
   describe('Serialization (serialize/deserialize)', () => {
