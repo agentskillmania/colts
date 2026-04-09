@@ -826,34 +826,20 @@ runner.unregisterTool('calculator');
 
 ### Phase 2: 调试基础（可见性）
 
-#### Step 7: 生命周期钩子
-**目标**: 外部能观察到执行过程
+#### Step 7: 生命周期钩子（⏭️ 跳过 — 由流式事件体系替代）
 
-```typescript
-interface RunnerHooks {
-  // 注意：钩子接收的是当前 state（只读），修改不会生效
-  // 如果需要干预，使用 advance() 手动控制或返回特定值
-  beforeStep?: (state: AgentState, step: number) => void | Promise<void>;
-  afterStep?: (state: AgentState, result: StepResult) => void | Promise<void>;
-  onToolCall?: (state: AgentState, call: ToolCall) => void | Promise<void>;
-  onToolResult?: (state: AgentState, result: ToolResult) => void | Promise<void>;
-}
+**跳过原因**: Step 4-5 实现的流式事件体系（`runStream` / `stepStream` / `advanceStream`）已完整覆盖本 Step 的所有目标。每个钩子的功能都有对应的流式事件：
 
-class AgentRunner {
-  constructor(config: RunnerConfig & { hooks?: RunnerHooks });
-}
-```
+| 原设计钩子 | 对应的流式事件 |
+|---|---|
+| `beforeStep(state, step)` | `runStream` 的 `step:start` 事件 |
+| `afterStep(state, result)` | `runStream` 的 `step:end` 事件 |
+| `onToolCall(state, call)` | `stepStream` 的 `tool:start` 事件 |
+| `onToolResult(state, result)` | `stepStream` 的 `tool:end` 事件 |
 
-**重要说明**：
-- 钩子仅用于**观察**，不能修改 state
-- state 参数是**新的不可变状态**（每次调用都是最新）
-- 需要干预执行（如暂停、修改）请使用 `advance()` 手动控制
+此外流式事件还提供了 hooks 未覆盖的能力：`phase-change`（阶段变化观察）、`token`（逐字输出）、`complete`（运行完成）。
 
-**验收标准**:
-- [ ] beforeStep 在每次 LLM 调用前触发，传入当前 state
-- [ ] afterStep 在每次工具执行后触发，传入新的 state 和 result
-- [ ] 钩子可以异步（支持 await）
-- [ ] 钩子抛错可选是否中断执行
+**使用方式**: 需要观察执行过程时，使用 `*Stream` 方法并迭代事件即可，无需额外的 hooks 机制。
 
 ---
 
