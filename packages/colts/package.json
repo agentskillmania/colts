@@ -24,6 +24,11 @@
     "email": "yusangeng@outlook.com"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentskillmania/colts.git",
+    "directory": "packages/colts"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^2.0.0",

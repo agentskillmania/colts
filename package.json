@@ -8,6 +8,10 @@
     "email": "yusangeng@outlook.com"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentskillmania/colts.git"
+  },
   "type": "module",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
