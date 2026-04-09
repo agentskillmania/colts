@@ -382,14 +382,15 @@ describe('Step Control', () => {
         llmClient: client,
       });
 
-      // No tool registry provided
+      // No tool registry provided - Step 6: Runner internally creates empty registry
       const state = createAgentState(defaultConfig);
       const { result } = await runner.step(state);
 
       expect(result.type).toBe('continue');
       if (result.type === 'continue') {
-        expect(result.toolResult).toContain('not executed');
-        expect(result.toolResult).toContain('no tool registry');
+        // Empty registry returns "Tool not found" error
+        expect(result.toolResult).toContain('Error');
+        expect(result.toolResult).toContain('Tool not found');
       }
     });
 
@@ -771,7 +772,7 @@ describe('Step Control', () => {
         llmClient: client,
       });
 
-      // No registry provided
+      // No registry provided - Step 6: Runner internally creates empty registry
       const state = createAgentState(defaultConfig);
 
       const iterator = runner.stepStream(state);
@@ -786,8 +787,9 @@ describe('Step Control', () => {
 
       expect(result.result.type).toBe('continue');
       if (result.result.type === 'continue') {
-        expect(result.result.toolResult).toContain('not executed');
-        expect(result.result.toolResult).toContain('no tool registry');
+        // Empty registry returns "Tool not found" error
+        expect(result.result.toolResult).toContain('Error');
+        expect(result.result.toolResult).toContain('Tool not found');
       }
     });
   });

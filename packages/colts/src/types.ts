@@ -100,3 +100,85 @@ export interface Snapshot {
   /** Checksum */
   checksum: string;
 }
+
+// ========== Step 6: Runner Configuration Interfaces ==========
+
+import type { LLMResponse, StreamEvent } from '@agentskillmania/llm-client';
+import type { Message as LLMMessage, Tool } from '@mariozechner/pi-ai';
+import type { ToolSchema } from './tools/registry.js';
+
+/**
+ * LLM Provider Interface
+ *
+ * Runner interacts with LLM through this interface, not depending on concrete implementation.
+ * The LLMClient from @agentskillmania/llm-client satisfies this interface.
+ */
+export interface ILLMProvider {
+  /** Blocking call */
+  call(options: {
+    model: string;
+    messages: LLMMessage[];
+    tools?: Tool[];
+    priority?: number;
+    requestTimeout?: number;
+  }): Promise<LLMResponse>;
+
+  /** Streaming call */
+  stream(options: {
+    model: string;
+    messages: LLMMessage[];
+    tools?: Tool[];
+    priority?: number;
+    requestTimeout?: number;
+  }): AsyncIterable<StreamEvent>;
+}
+
+/**
+ * Tool Registry Interface
+ *
+ * Runner executes tools and gets tool schemas through this interface.
+ * The ToolRegistry class satisfies this interface.
+ */
+export interface IToolRegistry {
+  /** Execute specified tool */
+  execute(name: string, args: unknown): Promise<unknown>;
+  /** Get JSON schemas of all tools (for LLM) */
+  toToolSchemas(): ToolSchema[];
+}
+
+/**
+ * LLM Quick Initialization Configuration
+ * When passed, Runner internally creates LLMClient instance
+ */
+export interface LLMQuickInit {
+  /** API Key */
+  apiKey: string;
+  /** Provider name (default 'openai') */
+  provider?: string;
+  /** Custom Base URL (optional) */
+  baseUrl?: string;
+  /** Concurrency limit: max concurrent requests (default 5, applied to provider/key/model levels) */
+  maxConcurrency?: number;
+}
+
+/**
+ * Tool Quick Initialization Configuration
+ * When passed, Runner internally creates ToolRegistry and registers tools
+ */
+export type ToolQuickInit = Array<{
+  name: string;
+  description: string;
+  parameters: import('zod').ZodTypeAny;
+  execute: (args: unknown) => Promise<unknown>;
+}>;
+
+/**
+ * Configuration Error
+ * Thrown when runner configuration is invalid
+ */
+export class ConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigurationError';
+  }
+}

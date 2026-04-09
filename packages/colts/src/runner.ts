@@ -1,13 +1,16 @@
 /**
- * @fileoverview AgentRunner - Step 1 & 4: Basic LLM Chat and Step Control
+ * @fileoverview AgentRunner - Step 1, 4 & 6: Basic LLM Chat, Step Control and Configuration
  *
  * Stateless runner that executes AgentState with LLM integration.
  * Supports both blocking/streaming chat and fine-grained step control.
+ * Step 6: Configurable with dependency inversion and quick initialization.
  */
 
-import type { LLMClient, TokenStats } from '@agentskillmania/llm-client';
+import { LLMClient } from '@agentskillmania/llm-client';
+import type { TokenStats } from '@agentskillmania/llm-client';
 import type { Message, TextContent, Tool } from '@mariozechner/pi-ai';
-import type { AgentState } from './types.js';
+import type { AgentState, ILLMProvider, IToolRegistry, LLMQuickInit } from './types.js';
+import { ConfigurationError } from './types.js';
 import {
   addUserMessage,
   addAssistantMessage,
@@ -16,6 +19,7 @@ import {
 } from './state.js';
 import { parseResponse } from './parser.js';
 import { ToolRegistry } from './tools/registry.js';
+import type { Tool as ColtsTool } from './tools/registry.js';
 import type {
   StepResult,
   AdvanceResult,
@@ -28,13 +32,24 @@ import { createExecutionState, toolCallToAction, isTerminalPhase } from './execu
 
 /**
  * Configuration options for AgentRunner
+ *
+ * Step 6: Supports both injection and quick initialization patterns
  */
 export interface RunnerOptions {
   /** Model identifier to use for LLM calls */
   model: string;
 
-  /** LLM client instance */
-  llmClient: LLMClient;
+  // --- LLM: injection or quick initialization (mutually exclusive) ---
+  /** LLM provider instance (injection mode) */
+  llmClient?: ILLMProvider;
+  /** LLM quick initialization config (quick init mode) */
+  llm?: LLMQuickInit;
+
+  // --- Tools: injection or quick initialization (can be merged) ---
+  /** Tool registry instance (injection mode) */
+  toolRegistry?: IToolRegistry;
+  /** Tools array for quick initialization */
+  tools?: ColtsTool[];
 
   /** System prompt/instructions (optional) - merged with AgentConfig.instructions */
   systemPrompt?: string;
@@ -42,8 +57,8 @@ export interface RunnerOptions {
   /** Request timeout in milliseconds (optional) */
   requestTimeout?: number;
 
-  /** Tool registry for function calling (optional) */
-  toolRegistry?: ToolRegistry;
+  /** Default max steps for run() (default: 10) */
+  maxSteps?: number;
 }
 
 /**
@@ -133,7 +148,94 @@ export interface ChatStreamChunk {
  * ```
  */
 export class AgentRunner {
-  constructor(private options: RunnerOptions) {}
+  private llmProvider: ILLMProvider;
+  private toolRegistry: IToolRegistry;
+  private options: RunnerOptions;
+
+  constructor(options: RunnerOptions) {
+    // Validate LLM configuration (mutually exclusive)
+    if (options.llmClient && options.llm) {
+      throw new ConfigurationError(
+        'Cannot specify both llmClient and llm. Choose one: injection or quick initialization.'
+      );
+    }
+    if (!options.llmClient && !options.llm) {
+      throw new ConfigurationError('Must specify either llmClient or llm.');
+    }
+
+    // Initialize LLM provider
+    if (options.llmClient) {
+      this.llmProvider = options.llmClient;
+    } else if (options.llm) {
+      this.llmProvider = this.createLLMFromQuickInit(options.llm, options.model);
+    } else {
+      throw new ConfigurationError('No LLM provider configured.');
+    }
+
+    // Initialize tool registry (merge injection and quick init)
+    const registry = options.toolRegistry
+      ? (options.toolRegistry as ToolRegistry)
+      : new ToolRegistry();
+    if (options.tools && options.tools.length > 0) {
+      for (const tool of options.tools) {
+        registry.register(tool);
+      }
+    }
+    this.toolRegistry = registry;
+
+    // Store options with defaults
+    this.options = {
+      ...options,
+      maxSteps: options.maxSteps ?? 10,
+    };
+  }
+
+  /**
+   * Create LLMClient from quick initialization config
+   */
+  private createLLMFromQuickInit(llm: LLMQuickInit, model: string): LLMClient {
+    const concurrency = llm.maxConcurrency ?? 5;
+    const provider = llm.provider ?? 'openai';
+
+    const client = new LLMClient({ baseUrl: llm.baseUrl });
+    client.registerProvider({ name: provider, maxConcurrency: concurrency });
+    client.registerApiKey({
+      key: llm.apiKey,
+      provider,
+      maxConcurrency: concurrency,
+      models: [{ modelId: model, maxConcurrency: concurrency }],
+    });
+
+    return client;
+  }
+
+  /**
+   * Register a tool at runtime
+   */
+  registerTool(tool: ColtsTool): void {
+    (this.toolRegistry as ToolRegistry).register(tool);
+  }
+
+  /**
+   * Unregister a tool at runtime
+   */
+  unregisterTool(name: string): boolean {
+    return (this.toolRegistry as ToolRegistry).unregister(name);
+  }
+
+  /**
+   * Get the internal LLM provider (for advanced use)
+   */
+  getLLMProvider(): ILLMProvider {
+    return this.llmProvider;
+  }
+
+  /**
+   * Get the internal tool registry (for advanced use)
+   */
+  getToolRegistry(): IToolRegistry {
+    return this.toolRegistry;
+  }
 
   /**
    * Execute a single turn of conversation (blocking)
@@ -163,7 +265,7 @@ export class AgentRunner {
     const messages = this.buildMessages(newState);
 
     // 3. Call LLM
-    const response = await this.options.llmClient.call({
+    const response = await this.llmProvider.call({
       model: this.options.model,
       messages,
       priority: chatOptions?.priority ?? 0,
@@ -238,7 +340,7 @@ export class AgentRunner {
     let accumulatedContent = '';
 
     try {
-      for await (const event of this.options.llmClient.stream({
+      for await (const event of this.llmProvider.stream({
         model: this.options.model,
         messages,
         priority: chatOptions?.priority ?? 0,
@@ -413,7 +515,7 @@ export class AgentRunner {
    * @returns Tools in pi-ai format
    * @private
    */
-  private getToolsForLLM(registry?: ToolRegistry): Tool[] | undefined {
+  private getToolsForLLM(registry?: IToolRegistry): Tool[] | undefined {
     if (!registry) return undefined;
 
     const schemas = registry.toToolSchemas();
@@ -459,9 +561,9 @@ export class AgentRunner {
   async advance(
     state: AgentState,
     execState: ExecutionState,
-    toolRegistry?: ToolRegistry
+    toolRegistry?: IToolRegistry
   ): Promise<AdvanceResult> {
-    const registry = toolRegistry ?? this.options.toolRegistry;
+    const registry = toolRegistry ?? this.toolRegistry;
     const currentPhase = execState.phase;
 
     try {
@@ -527,11 +629,11 @@ export class AgentRunner {
   private async advanceToLLMResponse(
     state: AgentState,
     execState: ExecutionState,
-    registry?: ToolRegistry
+    registry?: IToolRegistry
   ): Promise<AdvanceResult> {
     const tools = this.getToolsForLLM(registry);
 
-    const response = await this.options.llmClient.call({
+    const response = await this.llmProvider.call({
       model: this.options.model,
       messages: execState.preparedMessages ?? this.buildMessages(state),
       tools,
@@ -613,7 +715,7 @@ export class AgentRunner {
   private async advanceToToolResult(
     state: AgentState,
     execState: ExecutionState,
-    registry?: ToolRegistry
+    registry?: IToolRegistry
   ): Promise<AdvanceResult> {
     const action = execState.action;
     if (!action) {
@@ -675,7 +777,7 @@ export class AgentRunner {
   private async *streamCallingLLM(
     state: AgentState,
     execState: ExecutionState,
-    registry?: ToolRegistry
+    registry?: IToolRegistry
   ): AsyncGenerator<StreamEvent> {
     const tools = this.getToolsForLLM(registry);
     let accumulatedContent = '';
@@ -684,7 +786,7 @@ export class AgentRunner {
       | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
       | undefined;
 
-    for await (const event of this.options.llmClient.stream({
+    for await (const event of this.llmProvider.stream({
       model: this.options.model,
       messages: execState.preparedMessages ?? this.buildMessages(state),
       tools,
@@ -735,9 +837,9 @@ export class AgentRunner {
   async *advanceStream(
     state: AgentState,
     execState: ExecutionState,
-    toolRegistry?: ToolRegistry
+    toolRegistry?: IToolRegistry
   ): AsyncGenerator<StreamEvent, AdvanceResult> {
-    const registry = toolRegistry ?? this.options.toolRegistry;
+    const registry = toolRegistry ?? this.toolRegistry;
     const fromPhase = execState.phase;
 
     // Handle streaming LLM response
@@ -786,9 +888,9 @@ export class AgentRunner {
    */
   async step(
     state: AgentState,
-    toolRegistry?: ToolRegistry
+    toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: StepResult }> {
-    const registry = toolRegistry ?? this.options.toolRegistry;
+    const registry = toolRegistry ?? this.toolRegistry;
     const execState = createExecutionState();
 
     // Loop advance() until a natural stopping point
@@ -836,9 +938,9 @@ export class AgentRunner {
    */
   async *stepStream(
     state: AgentState,
-    toolRegistry?: ToolRegistry
+    toolRegistry?: IToolRegistry
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
-    const registry = toolRegistry ?? this.options.toolRegistry;
+    const registry = toolRegistry ?? this.toolRegistry;
     const execState = createExecutionState();
 
     let currentState = state;
@@ -930,10 +1032,11 @@ export class AgentRunner {
   async run(
     state: AgentState,
     options?: { maxSteps?: number },
-    toolRegistry?: ToolRegistry
+    toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
-    const registry = toolRegistry ?? this.options.toolRegistry;
-    const maxSteps = options?.maxSteps ?? 10;
+    const registry = toolRegistry ?? this.toolRegistry;
+    // maxSteps hierarchy: run parameter > RunnerOptions > default 10
+    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
     let currentState = state;
     let totalSteps = 0;
 
@@ -980,10 +1083,11 @@ export class AgentRunner {
   async *runStream(
     state: AgentState,
     options?: { maxSteps?: number },
-    toolRegistry?: ToolRegistry
+    toolRegistry?: IToolRegistry
   ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
-    const registry = toolRegistry ?? this.options.toolRegistry;
-    const maxSteps = options?.maxSteps ?? 10;
+    const registry = toolRegistry ?? this.toolRegistry;
+    // maxSteps hierarchy: run parameter > RunnerOptions > default 10
+    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
     let currentState = state;
     let totalSteps = 0;
 

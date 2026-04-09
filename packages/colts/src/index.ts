@@ -18,7 +18,14 @@ export type {
   MessageType,
   ToolDefinition,
   Snapshot,
+  // Step 6: Configuration interfaces
+  ILLMProvider,
+  IToolRegistry,
+  LLMQuickInit,
+  ToolQuickInit,
 } from './types.js';
+
+export { ConfigurationError } from './types.js';
 
 // State operations
 export {
