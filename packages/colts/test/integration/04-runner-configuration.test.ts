@@ -135,9 +135,8 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
       });
 
       const registry = runner.getToolRegistry();
-      // Cast to ToolRegistry to access has() method (not in IToolRegistry interface)
-      expect((registry as ToolRegistry).has('greet')).toBe(true);
-      expect((registry as ToolRegistry).has('calculator')).toBe(false);
+      expect(registry.has('greet')).toBe(true);
+      expect(registry.has('calculator')).toBe(false);
     });
 
     itif(testConfig.enabled)(
@@ -182,8 +181,8 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
       });
 
       const registry = runner.getToolRegistry();
-      expect((registry as ToolRegistry).has('calculate')).toBe(true);
-      expect((registry as ToolRegistry).has('reverse')).toBe(true);
+      expect(registry.has('calculate')).toBe(true);
+      expect(registry.has('reverse')).toBe(true);
     });
 
     itif(testConfig.enabled)('should work when only tools are provided', async () => {
@@ -194,7 +193,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
       });
 
       const registry = runner.getToolRegistry();
-      expect((registry as ToolRegistry).has('calculate')).toBe(true);
+      expect(registry.has('calculate')).toBe(true);
     });
   });
 

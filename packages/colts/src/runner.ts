@@ -173,9 +173,7 @@ export class AgentRunner {
     }
 
     // Initialize tool registry (merge injection and quick init)
-    const registry = options.toolRegistry
-      ? (options.toolRegistry as ToolRegistry)
-      : new ToolRegistry();
+    const registry = options.toolRegistry ?? new ToolRegistry();
     if (options.tools && options.tools.length > 0) {
       for (const tool of options.tools) {
         registry.register(tool);
@@ -213,14 +211,14 @@ export class AgentRunner {
    * Register a tool at runtime
    */
   registerTool(tool: ColtsTool): void {
-    (this.toolRegistry as ToolRegistry).register(tool);
+    this.toolRegistry.register(tool);
   }
 
   /**
    * Unregister a tool at runtime
    */
   unregisterTool(name: string): boolean {
-    return (this.toolRegistry as ToolRegistry).unregister(name);
+    return this.toolRegistry.unregister(name);
   }
 
   /**

@@ -144,6 +144,19 @@ export interface IToolRegistry {
   execute(name: string, args: unknown): Promise<unknown>;
   /** Get JSON schemas of all tools (for LLM) */
   toToolSchemas(): ToolSchema[];
+  /** Register a new tool */
+  register<T extends import('zod').ZodTypeAny>(tool: {
+    name: string;
+    description: string;
+    parameters: T;
+    execute: (args: unknown) => Promise<unknown>;
+  }): void;
+  /** Unregister a tool by name */
+  unregister(name: string): boolean;
+  /** Check if tool exists */
+  has(name: string): boolean;
+  /** Get all registered tool names */
+  getToolNames(): string[];
 }
 
 /**
