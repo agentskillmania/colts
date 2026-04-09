@@ -843,138 +843,227 @@ runner.unregisterTool('calculator');
 
 ---
 
-#### Step 8: 状态快照（Snapshot）
-**目标**: 任意时刻能保存状态
+#### Step 8: 状态快照（Snapshot）✅ 已完成（Step 0 中实现）
 
-```typescript
-interface Snapshot {
-  version: string;      // 版本号，便于兼容性
-  timestamp: number;    // 创建时间
-  state: AgentState;    // 完整状态
-  checksum: string;     // 完整性校验
-}
+**实现位置**: `src/state.ts`，函数：`createSnapshot`、`restoreSnapshot`、`serializeState`、`deserializeState`
 
-function createSnapshot(state: AgentState): Snapshot;
-function restoreSnapshot(snapshot: Snapshot): AgentState;
-```
+**测试覆盖**: `test/unit/state.test.ts`（27 个测试）+ `test/integration/00-state-lifecycle.test.ts`
 
 **验收标准**:
-- [ ] 执行中任意时刻可创建快照
-- [ ] 快照可 JSON 序列化保存到文件
-- [ ] 从快照恢复后状态完全一致
-- [ ] 恢复的 Agent 能继续执行
+- [x] 执行中任意时刻可创建快照（`createSnapshot` 使用 `structuredClone` 深拷贝 + checksum）
+- [x] 快照可 JSON 序列化保存到文件（`serializeState` / `deserializeState`）
+- [x] 从快照恢复后状态完全一致（`restoreSnapshot` 验证 checksum 确保数据完整性）
+- [x] 恢复的 Agent 能继续执行（恢复的 AgentState 可直接传入 `addUserMessage` 等 state 操作继续使用）
 
 ---
 
-#### Step 9: 手动单步调试
-**目标**: 开发者能控制执行节奏
+#### Step 9: 手动单步调试 ✅ 已完成（Step 4 中实现）
 
-```typescript
-// 使用方式（外部控制循环，不可变数据）
-const runner = new AgentRunner(config);
-let state = createAgentState({...});
+**实现位置**: `src/runner.ts`，方法：`step()`、`advance()`、`stepStream()`、`advanceStream()`
 
-// step 返回新状态，需要显式接收
-const result1 = await runner.step(state);
-state = result1.state;     // 更新 state 引用
-inspect(state);            // 查看新状态
-
-const result2 = await runner.step(state);
-state = result2.state;     // 再次更新
-inspect(state);
-
-// 或者使用 advance 进行更细粒度控制
-const advanceResult = await runner.advance(state);
-state = advanceResult.state;  // 更新引用
-console.log(advanceResult.phase.type);  // 查看当前阶段
-```
-
-**关键要点**:
-- 每次调用都返回 `{ state, ... }`，必须显式更新 state 引用
-- 原 state 保持不变，可用于对比或回退
-- 可随时停止（不再继续调用）
+**测试覆盖**: `test/unit/execution.test.ts`（Invariants 测试组 + 各 describe 中的不可变性验证）
 
 **验收标准**:
-- [ ] 每次 step/advance 返回新的 state
-- [ ] 需要显式更新 state 引用才能继续
-- [ ] 可以查看和对比新旧状态
-- [ ] 可以随时停止执行
+- [x] 每次 step/advance 返回新的 state（`step()` 返回 `{ state, result }`，`advance()` 返回 `{ state, phase, done }`）
+- [x] 需要显式更新 state 引用才能继续（调用方必须 `state = result.state`，不更新则用过期数据）
+- [x] 可以查看和对比新旧状态（原 state 保持不变，测试验证 `originalState.context.stepCount` 不受影响）
+- [x] 可以随时停止执行（`advance()` 的 while 循环由调用方控制，`break` 即停）
 
 ---
 
 ### Phase 3: 调试增强（干预能力）
 
-#### Step 10: 工具 Mock 系统
-**目标**: 开发时工具可 Mock，不影响不可变数据设计
+#### Step 10: 工具 Mock 系统（⏭️ 跳过 — 由依赖注入替代）
+
+**跳过原因**: Step 6 的依赖反转（`IToolRegistry` 接口注入）已提供更灵活的 Mock 方案。Runner 通过 `IToolRegistry.execute()` 调用工具，用户只需注入一个包含 Mock 工具的 Registry 即可，无需 Runner 额外承担 Mock 职责。
 
 ```typescript
-interface ToolMock {
-  returnValue?: unknown;
-  delay?: number;         // 模拟延迟（ms）
-  error?: string;         // 模拟错误
-}
+// Mock 方式：注入包含 Mock 工具的 Registry
+const mockRegistry = new ToolRegistry();
+mockRegistry.register({
+  name: 'api',
+  description: 'mocked',
+  parameters: z.object({}),
+  execute: async () => 'mocked result',        // 返回预设值
+  // execute: async () => { await delay(100); throw new Error('mock error'); },  // 延迟/错误模拟
+});
 
-class AgentRunner {
-  // Mock 配置是 Runner 级别的，不修改 AgentState
-  enableMockMode(): void;
-  disableMockMode(): void;
-  mockTool(name: string, mock: ToolMock): void;
-  unmockTool(name: string): void;
-  
-  // 使用方式：创建带 Mock 的 Runner，执行返回正常状态结构
-  const runner = new AgentRunner({ llm, hooks });
-  runner.mockTool('api', { returnValue: 'mocked' });
-  
-  const { state: newState, result } = await runner.step(state);
-  // newState 中的 tool result 是 mocked 值，但 state 本身结构不变
-}
+const runner = new AgentRunner({
+  llmClient: client,
+  toolRegistry: mockRegistry,
+});
 ```
 
-**验收标准**:
-- [ ] Mock 模式下，指定工具返回预设值
-- [ ] 未 Mock 的工具正常执行
-- [ ] 可动态切换 Mock/真实模式
-- [ ] Mock 支持延迟模拟
-- [ ] Mock 不影响状态不可变性（只是改变了 tool 执行结果）
+**对比原设计**：
+- 原设计需要 Runner 新增 `mockTool()` / `enableMockMode()` 等方法和内部状态
+- 依赖注入方案零新代码，且粒度更细（完全自定义 execute 行为）
+- 如果后续需要便捷的 Mock 工具类，可作为独立的 `MockToolRegistry` 工具提供，无需修改 Runner
 
 ---
 
-#### Step 11: 人机协作暂停点
-**目标**: 能在关键节点暂停等用户输入
+#### Step 11: 内置 ask_human 工具（Human-in-the-Loop）
+**目标**: 提供标准化的 LLM-人类交互工具，让 LLM 能主动向人类提问
+
+##### 设计理念
+
+HITL 不是 Runner 的特殊机制，而是一个**普通工具**。LLM 需要人类输入时，调用 `ask_human` 工具，工具的 `execute()` 通过注入的 handler 与人类交互。这个机制天然兼容所有执行方法（advance / step / run 及其流式版本），因为它们最终都走 `registry.execute()`。
+
+##### 核心类型
 
 ```typescript
-interface PausePoint {
-  type: 'before-tool' | 'before-completion';
-  state: AgentState;     // 当前状态（不可变）
-  context: {
-    currentStep: number;
-    proposedAction?: ToolCall;
-    messages: Message[];
-  };
-  resume: (input?: string) => void;  // 继续执行
-  abort: () => void;                 // 中止执行
+/** 问题类型 */
+type QuestionType = 'text' | 'number' | 'single-select' | 'multi-select';
+
+/** 单个问题 */
+interface Question {
+  /** 问题标识，用于匹配回答 */
+  id: string;
+  /** 问题文本 */
+  question: string;
+  /** 问题类型 */
+  type: QuestionType;
+  /** 选项列表（single-select / multi-select 时必填） */
+  options?: string[];
 }
 
-class AgentRunner {
-  async runInteractive(state: AgentState, options: {
-    onPause: (point: PausePoint) => void;
-  }): Promise<{
-    state: AgentState;    // 最终状态
-    result: RunResult;
-  }>;
+/**
+ * 单个问题的回答
+ *
+ * 两种模式：
+ * - direct: 正面回答了问题
+ * - free-text: 用户没有正面回答，而是说了自己想说的
+ */
+type Answer =
+  | { type: 'direct'; value: string | number | string[] }
+  | { type: 'free-text'; value: string };
+
+/** 人类回复（question id → answer） */
+type HumanResponse = Record<string, Answer>;
+
+/** 外部注入的交互 handler（由使用者提供 UI 实现） */
+interface AskHumanHandler {
+  (params: {
+    questions: Question[];
+    context?: string;
+  }): Promise<HumanResponse>;
 }
 ```
 
-**重要说明**：
-- `point.state` 是当前状态的**快照**（不可变）
-- 用户选择 resume 或 abort 后，runInteractive 返回最终状态
-- 如果要修改参数后继续，使用 `resume(newArgs)`
+##### 工厂函数
 
-**验收标准**:
-- [ ] 工具调用前可暂停，传入当前 state
-- [ ] 用户可输入后继续，返回最终 state
-- [ ] 用户可中止执行，返回当前 state
-- [ ] 暂停时状态不丢失（state 始终不可变）
+```typescript
+/**
+ * 创建 ask_human 工具
+ *
+ * @param handler - 使用者提供的人类交互 handler
+ * @returns 可注册到 ToolRegistry 的工具
+ */
+function createAskHumanTool(handler: AskHumanHandler): Tool {
+  return {
+    name: 'ask_human',
+    description: 'Ask the human one or more questions when you need clarification or input',
+    parameters: z.object({
+      questions: z.array(z.object({
+        id: z.string().describe('Unique identifier for this question'),
+        question: z.string().describe('The question to ask'),
+        type: z.enum(['text', 'number', 'single-select', 'multi-select']),
+        options: z.array(z.string()).optional().describe('Options (required for select types)'),
+      })),
+      context: z.string().optional().describe('Why you are asking, helps the human understand'),
+    }),
+    execute: async ({ questions, context }) => {
+      return handler({ questions, context });
+    }),
+  };
+}
+```
+
+##### 使用示例
+
+```typescript
+// CLI 应用
+const askHuman = createAskHumanTool({
+  handler: async ({ questions, context }) => {
+    if (context) console.log(`[Context] ${context}`);
+    const answers: HumanResponse = {};
+    for (const q of questions) {
+      const input = readline.question(`${q.question} > `);
+      answers[q.id] = { type: 'direct', value: input };
+    }
+    return answers;
+  },
+});
+
+const runner = new AgentRunner({
+  model: 'gpt-4',
+  llm: { apiKey: 'sk-...' },
+  tools: [askHuman],
+});
+
+// LLM 自主决定何时调用 ask_human，无需调用方干预
+const { result } = await runner.run(state);
+```
+
+```typescript
+// Web 应用
+const askHuman = createAskHumanTool({
+  handler: async ({ questions, context }) => {
+    // 通过 WebSocket 推送问题到前端
+    // 返回的 Promise 在前端提交答案后 resolve
+    return websocket.sendAndWaitResponse({ questions, context });
+  },
+});
+```
+
+##### 回答语义示例
+
+```typescript
+// LLM 提问：
+{
+  questions: [
+    { id: 'address', question: '收货地址？', type: 'text' },
+    { id: 'size', question: '尺码？', type: 'single-select', options: ['S', 'M', 'L'] },
+  ]
+}
+
+// 正常回答：
+{
+  address: { type: 'direct', value: '北京市朝阳区xxx' },
+  size: { type: 'direct', value: 'M' },
+}
+
+// 用户在 address 问题上跑题了（per-question free-text）：
+{
+  address: { type: 'free-text', value: '我不想买了，帮我退货' },
+  size: { type: 'direct', value: 'M' },
+}
+```
+
+##### LLM System Prompt 建议
+
+使用 ask_human 工具时，建议在 AgentConfig.instructions 或 systemPrompt 中加入：
+
+```
+You have access to the ask_human tool. Use it when:
+- You need information only the human can provide
+- You are uncertain about the user's intent
+- A decision has significant consequences and needs confirmation
+Ask concise, specific questions. Prefer structured types (single-select, multi-select) over free-text when possible.
+```
+
+##### 实现位置
+
+- `src/tools/ask-human.ts` — 工厂函数和类型定义
+- `src/tools/index.ts` — 导出
+
+##### 验收标准:
+- [ ] `createAskHumanTool(handler)` 返回符合 Tool 接口的工具
+- [ ] 支持 text、number、single-select、multi-select 四种问题类型
+- [ ] 支持批量提问（一组问题一次调用）
+- [ ] 每个问题的回答支持 direct（正面回答）和 free-text（用户自由回复）两种模式
+- [ ] 通过 IToolRegistry 注册后，LLM 可自主决定何时调用
+- [ ] 兼容所有执行方法（advance / step / run 及流式版本）
+- [ ] 不修改 Runner 代码，纯工具层面实现
 
 ---
 
