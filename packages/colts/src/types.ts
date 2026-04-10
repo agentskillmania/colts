@@ -1,9 +1,7 @@
 /**
  * @fileoverview colts Core Type Definitions
  *
- * Step 0: AgentState Data Structure
- * - Pure data, serializable, immutable
- * - Use Immer for immutable updates
+ * Pure data types for AgentState, runner configuration, and compression.
  */
 
 /**
@@ -115,7 +113,7 @@ export interface Snapshot {
   checksum: string;
 }
 
-// ========== Step 6: Runner Configuration Interfaces ==========
+// ========== Runner Configuration Interfaces ==========
 
 import type { LLMResponse, StreamEvent } from '@agentskillmania/llm-client';
 import type { Message as LLMMessage, Tool } from '@mariozechner/pi-ai';
@@ -212,7 +210,7 @@ export class ConfigurationError extends Error {
   }
 }
 
-// ========== Step 12: Context Compression Interfaces ==========
+// ========== Context Compression Interfaces ==========
 
 /**
  * Result of a compression operation

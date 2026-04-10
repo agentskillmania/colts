@@ -1,11 +1,5 @@
 /**
  * @fileoverview colts - ReAct Agent Framework for Development and Debugging
- *
- * Step 0: AgentState Data Structure
- * Step 1: Basic LLM Chat
- * Step 2: Response Parser
- * Step 3: Tool Registry
- * Step 4: Step Control
  */
 
 // Types
@@ -18,12 +12,12 @@ export type {
   MessageType,
   ToolDefinition,
   Snapshot,
-  // Step 6: Configuration interfaces
+  // Configuration interfaces
   ILLMProvider,
   IToolRegistry,
   LLMQuickInit,
   ToolQuickInit,
-  // Step 12: Context Compression
+  // Context Compression
   CompressionMeta,
   CompressResult,
   IContextCompressor,
@@ -34,7 +28,7 @@ export type {
 
 export { ConfigurationError } from './types.js';
 
-// Context Compression (Step 12)
+// Context Compression
 export { DefaultContextCompressor } from './compressor.js';
 
 // State operations
@@ -52,7 +46,7 @@ export {
   deserializeState,
 } from './state.js';
 
-// Parser (Step 2)
+// Parser
 export {
   parseResponse,
   requiresToolExecution,
@@ -62,7 +56,7 @@ export {
   type ParseResult,
 } from './parser.js';
 
-// Tools (Step 3 + Step 11)
+// Tools
 export {
   ToolRegistry,
   ToolNotFoundError,
@@ -90,7 +84,7 @@ export {
   type ChatStreamChunk,
 } from './runner.js';
 
-// Execution Control (Step 4-5)
+// Execution Control
 export {
   createExecutionState,
   toolCallToAction,

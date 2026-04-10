@@ -1,5 +1,5 @@
 /**
- * @fileoverview Step 3: Tool Registry
+ * @fileoverview Tool Registry
  *
  * Manage tool registration, parameter validation with Zod,
  * and execution.

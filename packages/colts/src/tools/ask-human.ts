@@ -1,5 +1,5 @@
 /**
- * @fileoverview Step 11: Human-in-the-Loop Tool
+ * @fileoverview Human-in-the-Loop Tool
  *
  * Factory function to create an ask_human tool for LLM-human interaction.
  * The LLM can autonomously decide when to ask questions, and the handler

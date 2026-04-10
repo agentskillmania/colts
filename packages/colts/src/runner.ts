@@ -1,9 +1,8 @@
 /**
- * @fileoverview AgentRunner - Step 1, 4 & 6: Basic LLM Chat, Step Control and Configuration
+ * @fileoverview AgentRunner - Stateless executor for AgentState
  *
- * Stateless runner that executes AgentState with LLM integration.
  * Supports both blocking/streaming chat and fine-grained step control.
- * Step 6: Configurable with dependency inversion and quick initialization.
+ * Configurable with dependency inversion and quick initialization.
  */
 
 import { LLMClient } from '@agentskillmania/llm-client';
@@ -41,7 +40,7 @@ import { executeStep, executeRun, executeRunStream } from './runner-run.js';
 /**
  * Configuration options for AgentRunner
  *
- * Step 6: Supports both injection and quick initialization patterns
+ * Supports both injection and quick initialization patterns
  */
 export interface RunnerOptions {
   /** Model identifier to use for LLM calls */

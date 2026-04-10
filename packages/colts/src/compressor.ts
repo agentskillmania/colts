@@ -1,5 +1,5 @@
 /**
- * @fileoverview Step 12: Context Compression
+ * @fileoverview Context Compression
  *
  * Built-in compressor that prevents conversation history from growing unbounded.
  * Never modifies messages — only affects what buildMessages() sends to the LLM.

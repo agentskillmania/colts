@@ -1,8 +1,7 @@
 /**
  * @fileoverview AgentState creation and updates
  *
- * Step 0: AgentState data structure
- * - Use Immer for immutable updates
+ * Use Immer for immutable updates.
  * - All update operations return new state, original state remains unchanged
  */
 

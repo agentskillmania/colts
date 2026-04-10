@@ -1,5 +1,5 @@
 /**
- * @fileoverview Step 2: Response Parser
+ * @fileoverview Response Parser
  *
  * Parse LLM Function Calling response to extract Thought and Tool Calls.
  */

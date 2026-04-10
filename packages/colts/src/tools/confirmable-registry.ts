@@ -1,5 +1,5 @@
 /**
- * @fileoverview Step 11: Confirmable Tool Registry
+ * @fileoverview Confirmable Tool Registry
  *
  * A registry wrapper that requires human confirmation before executing
  * specified tools. Enables safe execution of dangerous operations

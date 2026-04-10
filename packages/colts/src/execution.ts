@@ -1,5 +1,5 @@
 /**
- * @fileoverview Step 4: Three-Level Execution Control
+ * @fileoverview Three-Level Execution Control
  *
  * Phase-based execution state machine for fine-grained control.
  */
