@@ -498,7 +498,7 @@ advanceStream(state, execState) 的处理逻辑：
 ```
 
 **关键规则**:
-- `streaming` 不是一个独立的 Phase。流式是 `calling-llm` 阶段内部的**读取方式**，不是状态机的节点
+- `streaming` 是一个仅在流式模式中出现的**内部观察 phase**，只出现在 `advanceStream()` / `stepStream()` 的 `phase-change` 事件中，不出现在 `advance()` 的返回值中。它标记"正在流式接收 LLM 响应"这个中间状态，让 UI 可以区分"正在等待 LLM"和"正在接收 token"
 - 流式变体在 `calling-llm` phase 用 `llmClient.stream()` 替代 `llmClient.call()`，其余 phase 全部复用 `advance()` 的逻辑
 - `advanceStream()` = `advance()` 的骨架 + 在 `calling-llm` 时 yield token 事件
 - **流式接收期间不更新 AgentState，流完成后一次性写入**（与"一次问话"的语义一致）
