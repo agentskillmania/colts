@@ -23,9 +23,19 @@ export type {
   IToolRegistry,
   LLMQuickInit,
   ToolQuickInit,
+  // Step 12: Context Compression
+  CompressionMeta,
+  CompressResult,
+  IContextCompressor,
+  CompressionStrategy,
+  CompressionThresholdType,
+  CompressionConfig,
 } from './types.js';
 
 export { ConfigurationError } from './types.js';
+
+// Context Compression (Step 12)
+export { DefaultContextCompressor } from './compressor.js';
 
 // State operations
 export {

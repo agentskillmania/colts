@@ -9,8 +9,17 @@
 import { LLMClient } from '@agentskillmania/llm-client';
 import type { TokenStats } from '@agentskillmania/llm-client';
 import type { Message, TextContent, Tool } from '@mariozechner/pi-ai';
-import type { AgentState, ILLMProvider, IToolRegistry, LLMQuickInit } from './types.js';
+import type {
+  AgentState,
+  ILLMProvider,
+  IToolRegistry,
+  IContextCompressor,
+  CompressionConfig,
+  LLMQuickInit,
+} from './types.js';
 import { ConfigurationError } from './types.js';
+import { produce } from 'immer';
+import { DefaultContextCompressor } from './compressor.js';
 import {
   addUserMessage,
   addAssistantMessage,
@@ -59,6 +68,9 @@ export interface RunnerOptions {
 
   /** Default max steps for run() (default: 10) */
   maxSteps?: number;
+
+  /** Context compressor: pass CompressionConfig for built-in, or IContextCompressor for custom */
+  compressor?: CompressionConfig | IContextCompressor;
 }
 
 /**
@@ -150,6 +162,7 @@ export interface ChatStreamChunk {
 export class AgentRunner {
   private llmProvider: ILLMProvider;
   private toolRegistry: IToolRegistry;
+  private compressor?: IContextCompressor;
   private options: RunnerOptions;
 
   constructor(options: RunnerOptions) {
@@ -186,6 +199,19 @@ export class AgentRunner {
       ...options,
       maxSteps: options.maxSteps ?? 10,
     };
+
+    // Initialize compressor
+    if (options.compressor) {
+      if (typeof options.compressor === 'object' && 'shouldCompress' in options.compressor) {
+        this.compressor = options.compressor as IContextCompressor;
+      } else {
+        this.compressor = new DefaultContextCompressor(
+          options.compressor as CompressionConfig,
+          this.llmProvider,
+          this.options.model
+        );
+      }
+    }
   }
 
   /**
@@ -453,8 +479,40 @@ export class AgentRunner {
       });
     }
 
-    // Add conversation history
-    for (const msg of state.context.messages) {
+    // Add conversation history (respecting compression boundary)
+    const compression = state.context.compression;
+    const startIdx = compression ? compression.anchor : 0;
+
+    // If compressed, inject summary as a system-like user message
+    if (compression && compression.summary) {
+      messages.push({
+        role: 'user',
+        content: `[Conversation History Summary]\n${compression.summary}`,
+        timestamp: now,
+      });
+      messages.push({
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Understood. I have the context from our previous conversation.' },
+        ],
+        api: 'openai-completions',
+        provider: 'openai',
+        model: this.options.model,
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: now,
+      });
+    }
+
+    for (let i = startIdx; i < state.context.messages.length; i++) {
+      const msg = state.context.messages[i];
       switch (msg.role) {
         case 'user':
           messages.push({
@@ -902,7 +960,7 @@ export class AgentRunner {
         phase,
         done,
       } = await this.advance(currentState, execState, registry);
-      currentState = newState;
+      currentState = await this.maybeCompress(newState);
 
       // Terminal: completed (direct answer, state already updated by advance)
       if (done && phase.type === 'completed') {
@@ -1117,6 +1175,22 @@ export class AgentRunner {
 
       yield { type: 'step:end', step: totalSteps - 1, result: stepResult.result };
 
+      // Auto-compress between steps (yield events so UI can observe)
+      if (this.compressor && this.compressor.shouldCompress(currentState)) {
+        yield { type: 'compressing' };
+        const compressedState = await this.maybeCompress(currentState);
+        if (compressedState.context.compression) {
+          const prevAnchor = stepResult.state.context.compression?.anchor ?? 0;
+          const newAnchor = compressedState.context.compression.anchor;
+          yield {
+            type: 'compressed',
+            summary: compressedState.context.compression.summary,
+            removedCount: newAnchor - prevAnchor,
+          };
+          currentState = compressedState;
+        }
+      }
+
       if (stepResult.result.type === 'done') {
         const runResult: RunResult = {
           type: 'success',
@@ -1142,5 +1216,41 @@ export class AgentRunner {
     const runResult: RunResult = { type: 'max_steps', totalSteps };
     yield { type: 'complete', result: runResult };
     return { state: currentState, result: runResult };
+  }
+
+  /**
+   * Manually trigger context compression
+   *
+   * @param state - Current agent state
+   * @returns New state with compression metadata (immutable)
+   * @throws Error if no compressor is configured
+   *
+   * @example
+   * ```typescript
+   * const compressedState = await runner.compress(state);
+   * // compressedState.context.compression is set
+   * // compressedState.context.messages is unchanged
+   * ```
+   */
+  async compress(state: AgentState): Promise<AgentState> {
+    if (!this.compressor) {
+      throw new Error('No compressor configured. Pass compressor in RunnerOptions.');
+    }
+    const result = await this.compressor.compress(state);
+    return produce(state, (draft) => {
+      draft.context.compression = { summary: result.summary, anchor: result.anchor };
+    });
+  }
+
+  /**
+   * Check if compression is needed and apply it
+   * @private
+   */
+  private async maybeCompress(state: AgentState): Promise<AgentState> {
+    if (!this.compressor || !this.compressor.shouldCompress(state)) return state;
+    const result = await this.compressor.compress(state);
+    return produce(state, (draft) => {
+      draft.context.compression = { summary: result.summary, anchor: result.anchor };
+    });
   }
 }

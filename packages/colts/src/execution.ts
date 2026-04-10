@@ -51,7 +51,9 @@ export type StreamEvent =
   | { type: 'token'; token: string }
   | { type: 'tool:start'; action: Action }
   | { type: 'tool:end'; result: unknown }
-  | { type: 'error'; error: Error; context: { toolName?: string; step: number } };
+  | { type: 'error'; error: Error; context: { toolName?: string; step: number } }
+  | { type: 'compressing' }
+  | { type: 'compressed'; summary: string; removedCount: number };
 
 /**
  * Options for advance execution
