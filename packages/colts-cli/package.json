@@ -1,0 +1,66 @@
+{
+  "name": "@agentskillmania/colts-cli",
+  "version": "0.1.0",
+  "description": "Terminal UI for the colts agent framework — interactive debugging and development environment.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "colts-cli": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:intg": "vitest run test/integration",
+    "test:coverage": "vitest run test/unit --coverage",
+    "test:watch": "vitest watch test/unit",
+    "prepublishOnly": "pnpm test:unit && pnpm build"
+  },
+  "keywords": [
+    "agent",
+    "cli",
+    "tui",
+    "terminal",
+    "debugging"
+  ],
+  "author": {
+    "name": "yusangeng",
+    "email": "yusangeng@outlook.com"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentskillmania/colts.git",
+    "directory": "packages/colts-cli"
+  },
+  "dependencies": {
+    "@agentskillmania/colts": "workspace:*",
+    "@agentskillmania/settings-yaml": "workspace:*",
+    "chalk": "^5.3.0",
+    "ink": "^5.1.0",
+    "ink-text-input": "^6.0.0",
+    "ink-spinner": "^5.0.0",
+    "react": "^18.3.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "ink-testing-library": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
