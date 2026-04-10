@@ -1057,13 +1057,15 @@ Ask concise, specific questions. Prefer structured types (single-select, multi-s
 - `src/tools/index.ts` — 导出
 
 ##### 验收标准:
-- [ ] `createAskHumanTool(handler)` 返回符合 Tool 接口的工具
-- [ ] 支持 text、number、single-select、multi-select 四种问题类型
-- [ ] 支持批量提问（一组问题一次调用）
-- [ ] 每个问题的回答支持 direct（正面回答）和 free-text（用户自由回复）两种模式
-- [ ] 通过 IToolRegistry 注册后，LLM 可自主决定何时调用
-- [ ] 兼容所有执行方法（advance / step / run 及流式版本）
-- [ ] 不修改 Runner 代码，纯工具层面实现
+- [x] `createAskHumanTool(handler)` 返回符合 Tool 接口的工具
+- [x] 支持 text、number、single-select、multi-select 四种问题类型
+- [x] 支持批量提问（一组问题一次调用）
+- [x] 每个问题的回答支持 direct（正面回答）和 free-text（用户自由回复）两种模式
+- [x] 通过 IToolRegistry 注册后，LLM 可自主决定何时调用
+- [x] 兼容所有执行方法（advance / step / run 及流式版本）
+- [x] 不修改 Runner 代码，纯工具层面实现
+
+**状态**: ✅ 已完成 (17 个单元测试，100% 覆盖率)
 
 ---
 

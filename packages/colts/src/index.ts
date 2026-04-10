@@ -52,14 +52,23 @@ export {
   type ParseResult,
 } from './parser.js';
 
-// Tools (Step 3)
+// Tools (Step 3 + Step 11)
 export {
   ToolRegistry,
   ToolNotFoundError,
   ToolParameterError,
   calculatorTool,
+  createAskHumanTool,
+  ConfirmableRegistry,
   type Tool,
   type ToolSchema,
+  type QuestionType,
+  type Question,
+  type Answer,
+  type HumanResponse,
+  type AskHumanHandler,
+  type ConfirmHandler,
+  type ConfirmableRegistryOptions,
 } from './tools/index.js';
 
 // Runner

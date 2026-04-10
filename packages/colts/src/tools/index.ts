@@ -13,3 +13,18 @@ export {
 } from './registry.js';
 
 export { calculatorTool } from './calculator.js';
+
+export {
+  createAskHumanTool,
+  type QuestionType,
+  type Question,
+  type Answer,
+  type HumanResponse,
+  type AskHumanHandler,
+} from './ask-human.js';
+
+export {
+  ConfirmableRegistry,
+  type ConfirmHandler,
+  type ConfirmableRegistryOptions,
+} from './confirmable-registry.js';
