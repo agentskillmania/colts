@@ -108,3 +108,5 @@ export { FilesystemSkillProvider, createLoadSkillTool } from './skills/index.js'
 
 // Subagent
 export type { SubAgentConfig, DelegateResult, SubAgentStreamEvent } from './subagent/index.js';
+export { createDelegateTool } from './subagent/index.js';
+export type { DelegateToolDeps } from './subagent/index.js';

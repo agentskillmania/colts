@@ -7,6 +7,8 @@ import type { LLMClient, LLMResponse, TokenStats } from '@agentskillmania/llm-cl
 import { AgentRunner } from '../../src/runner.js';
 import { createAgentState, addUserMessage, addAssistantMessage } from '../../src/state.js';
 import type { AgentConfig, IContextCompressor, CompressResult } from '../../src/types.js';
+import type { ISkillProvider, SkillManifest } from '../../src/skills/types.js';
+import { FilesystemSkillProvider } from '../../src/skills/filesystem-provider.js';
 
 describe('AgentRunner', () => {
   // Mock LLMClient
@@ -717,6 +719,192 @@ describe('AgentRunner', () => {
       // Should ignore unknown event and still complete
       expect(chunks.length).toBeGreaterThan(0);
       expect(chunks[chunks.length - 1].type).toBe('done');
+    });
+  });
+
+  // ============================================================
+  // Skill integration
+  // ============================================================
+  describe('skill integration', () => {
+    /** 创建 mock ISkillProvider */
+    const createMockSkillProvider = (skills: SkillManifest[]): ISkillProvider => {
+      const manifestMap = new Map(skills.map((s) => [s.name, s]));
+      return {
+        getManifest: vi.fn((name: string) => manifestMap.get(name)),
+        loadInstructions: vi.fn(async (name: string) => {
+          const m = manifestMap.get(name);
+          if (!m) throw new Error(`Skill not found: ${name}`);
+          return `Instructions for ${name}`;
+        }),
+        loadResource: vi.fn(async () => ''),
+        listSkills: vi.fn(() => Array.from(manifestMap.values())),
+        refresh: vi.fn(),
+      };
+    };
+
+    it('should accept skillProvider option', () => {
+      const client = createMockClient();
+      const skillProvider = createMockSkillProvider([
+        { name: 'code-review', description: 'Review code', source: '/skills/code-review' },
+      ]);
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        skillProvider,
+      });
+
+      expect(runner).toBeDefined();
+      // load_skill 工具应该被自动注册
+      const tools = runner.getToolRegistry().toToolSchemas();
+      const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
+      expect(loadSkillTool).toBeDefined();
+    });
+
+    it('should create FilesystemSkillProvider from skillDirectories', () => {
+      const client = createMockClient();
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        skillDirectories: ['/nonexistent/skills'],
+      });
+
+      expect(runner).toBeDefined();
+      // 即使目录不存在，load_skill 工具也应注册（provider 存在但没有 skills）
+      const tools = runner.getToolRegistry().toToolSchemas();
+      const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
+      expect(loadSkillTool).toBeDefined();
+    });
+
+    it('should prefer skillProvider over skillDirectories when both are provided', () => {
+      const client = createMockClient();
+      const injectedProvider = createMockSkillProvider([
+        { name: 'injected-skill', description: 'From injection', source: '/injected' },
+      ]);
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        skillProvider: injectedProvider,
+        skillDirectories: ['/nonexistent/skills'],
+      });
+
+      expect(runner).toBeDefined();
+      // 应使用注入的 provider，skillDirectories 被忽略
+      const tools = runner.getToolRegistry().toToolSchemas();
+      const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
+      expect(loadSkillTool).toBeDefined();
+    });
+
+    it('should auto-register load_skill tool when skillProvider exists', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Done',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      const skillProvider = createMockSkillProvider([
+        {
+          name: 'code-review',
+          description: 'Review code for security',
+          source: '/skills/code-review',
+        },
+      ]);
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        skillProvider,
+      });
+
+      // 验证 load_skill 工具在 registry 中
+      const tools = runner.getToolRegistry().toToolSchemas();
+      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
+
+      // 执行 load_skill 工具
+      const result = await runner.getToolRegistry().execute('load_skill', { name: 'code-review' });
+      expect(result).toBe('Instructions for code-review');
+    });
+
+    it('should include skill list in system prompt when skillProvider has skills', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Response',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      const skillProvider = createMockSkillProvider([
+        {
+          name: 'code-review',
+          description: 'Review code for security vulnerabilities',
+          source: '/skills/code-review',
+        },
+        { name: 'testing', description: 'Write comprehensive tests', source: '/skills/testing' },
+      ]);
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        skillProvider,
+      });
+
+      const state = createAgentState(defaultConfig);
+      await runner.chat(state, 'Hello');
+
+      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
+
+      // 系统提示应包含 skill 列表
+      expect(firstUserMsg?.content).toContain('Available skills:');
+      expect(firstUserMsg?.content).toContain(
+        'code-review: Review code for security vulnerabilities'
+      );
+      expect(firstUserMsg?.content).toContain('testing: Write comprehensive tests');
+      expect(firstUserMsg?.content).toContain(
+        'Use the load_skill tool to load detailed instructions'
+      );
+    });
+
+    it('should not include skill section when skillProvider has no skills', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Response',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      // 空 skill provider
+      const skillProvider = createMockSkillProvider([]);
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        skillProvider,
+      });
+
+      const state = createAgentState(defaultConfig);
+      await runner.chat(state, 'Hello');
+
+      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
+
+      // 没有 skills 时不应该包含 skill 相关内容
+      expect(firstUserMsg?.content).not.toContain('Available skills:');
+    });
+
+    it('should not register load_skill tool when no skillProvider is configured', () => {
+      const client = createMockClient();
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const tools = runner.getToolRegistry().toToolSchemas();
+      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(false);
     });
   });
 });

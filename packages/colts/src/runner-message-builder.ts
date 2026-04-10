@@ -7,6 +7,7 @@
 
 import type { Message as PiAIMessage, TextContent, Tool } from '@mariozechner/pi-ai';
 import type { AgentState, IToolRegistry } from './types.js';
+import type { ISkillProvider } from './skills/types.js';
 import type { ToolSchema } from './tools/registry.js';
 
 /**
@@ -17,6 +18,8 @@ export interface BuildMessagesOptions {
   systemPrompt?: string;
   /** Model identifier for assistant messages */
   model: string;
+  /** Skill 提供者，用于将 skill 列表注入系统提示 */
+  skillProvider?: ISkillProvider;
 }
 
 /**
@@ -37,6 +40,17 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
 
   if (state.config.instructions) {
     systemParts.push(state.config.instructions);
+  }
+
+  // 注入 skill 列表到系统提示
+  if (opts.skillProvider) {
+    const skills = opts.skillProvider.listSkills();
+    if (skills.length > 0) {
+      const skillLines = skills.map((s) => `- ${s.name}: ${s.description}`);
+      systemParts.push(
+        `Available skills:\n${skillLines.join('\n')}\nUse the load_skill tool to load detailed instructions when needed.`
+      );
+    }
   }
 
   // Add combined system prompt as first message if exists

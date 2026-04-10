@@ -36,6 +36,9 @@ import { executeAdvance } from './runner-advance.js';
 import type { RunnerContext } from './runner-advance.js';
 import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './runner-stream.js';
 import { executeStep, executeRun, executeRunStream } from './runner-run.js';
+import type { ISkillProvider } from './skills/types.js';
+import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
+import { createLoadSkillTool } from './skills/load-skill-tool.js';
 
 /**
  * Configuration options for AgentRunner
@@ -69,6 +72,12 @@ export interface RunnerOptions {
 
   /** Context compressor: pass CompressionConfig for built-in, or IContextCompressor for custom */
   compressor?: CompressionConfig | IContextCompressor;
+
+  // --- Skills: injection or quick initialization ---
+  /** Skill 提供者实例（注入模式） */
+  skillProvider?: ISkillProvider;
+  /** Skill 目录列表（快速初始化，内部创建 FilesystemSkillProvider） */
+  skillDirectories?: string[];
 }
 
 /**
@@ -161,6 +170,7 @@ export class AgentRunner {
   private llmProvider: ILLMProvider;
   private toolRegistry: IToolRegistry;
   private compressor?: IContextCompressor;
+  private skillProvider?: ISkillProvider;
   private options: RunnerOptions;
 
   constructor(options: RunnerOptions) {
@@ -209,6 +219,19 @@ export class AgentRunner {
           this.options.model
         );
       }
+    }
+
+    // Initialize skill provider (injection > quick init)
+    if (options.skillProvider) {
+      this.skillProvider = options.skillProvider;
+    } else if (options.skillDirectories && options.skillDirectories.length > 0) {
+      this.skillProvider = new FilesystemSkillProvider(options.skillDirectories);
+    }
+
+    // 自动注册 load_skill 工具
+    if (this.skillProvider) {
+      const loadSkillTool = createLoadSkillTool(this.skillProvider);
+      this.toolRegistry.register(loadSkillTool);
     }
   }
 
@@ -267,6 +290,7 @@ export class AgentRunner {
     return {
       llmProvider: this.llmProvider,
       toolRegistry: this.toolRegistry,
+      skillProvider: this.skillProvider,
       options: {
         model: this.options.model,
         systemPrompt: this.options.systemPrompt,
@@ -453,6 +477,7 @@ export class AgentRunner {
     return buildMessages(state, {
       systemPrompt: this.options.systemPrompt,
       model: this.options.model,
+      skillProvider: this.skillProvider,
     });
   }
 

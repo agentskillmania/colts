@@ -27,8 +27,8 @@ export interface DelegateResult {
   answer: string;
   /** 子 agent 执行的总步数 */
   totalSteps: number;
-  /** 子 agent 的最终状态 */
-  finalState: AgentState;
+  /** 子 agent 的最终状态（未知子 agent 时为 null） */
+  finalState: AgentState | null;
 }
 
 /**

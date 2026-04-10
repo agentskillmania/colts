@@ -6,6 +6,7 @@
  */
 
 import type { AgentState, ILLMProvider, IToolRegistry } from './types.js';
+import type { ISkillProvider } from './skills/types.js';
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.js';
 import { toolCallToAction } from './execution.js';
 import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
@@ -17,6 +18,7 @@ import { addAssistantMessage, addToolMessage, incrementStepCount } from './state
 export interface RunnerContext {
   llmProvider: ILLMProvider;
   toolRegistry: IToolRegistry;
+  skillProvider?: ISkillProvider;
   options: {
     model: string;
     systemPrompt?: string;
@@ -87,6 +89,7 @@ function advanceToPreparing(
   const messages = buildMessages(state, {
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,
+    skillProvider: ctx.skillProvider,
   });
   execState.preparedMessages = messages;
   const displayMessages: import('./types.js').Message[] = messages.map((m) => ({
@@ -116,7 +119,11 @@ async function advanceToLLMResponse(
     model: ctx.options.model,
     messages:
       execState.preparedMessages ??
-      buildMessages(state, { systemPrompt: ctx.options.systemPrompt, model: ctx.options.model }),
+      buildMessages(state, {
+        systemPrompt: ctx.options.systemPrompt,
+        model: ctx.options.model,
+        skillProvider: ctx.skillProvider,
+      }),
     tools,
     priority: 0,
     requestTimeout: ctx.options.requestTimeout,
@@ -223,5 +230,9 @@ export function buildMessagesFromCtx(
   ctx: RunnerContext,
   state: AgentState
 ): import('@mariozechner/pi-ai').Message[] {
-  return buildMessages(state, { systemPrompt: ctx.options.systemPrompt, model: ctx.options.model });
+  return buildMessages(state, {
+    systemPrompt: ctx.options.systemPrompt,
+    model: ctx.options.model,
+    skillProvider: ctx.skillProvider,
+  });
 }
