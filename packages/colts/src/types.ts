@@ -258,3 +258,7 @@ export interface CompressionConfig {
   /** Number of recent messages to keep (default: 10) */
   keepRecent?: number;
 }
+
+// ========== Skill Interfaces ==========
+
+export type { SkillManifest, ISkillProvider } from './skills/types.js';

@@ -24,6 +24,9 @@ export type {
   CompressionStrategy,
   CompressionThresholdType,
   CompressionConfig,
+  // Skill interfaces
+  SkillManifest,
+  ISkillProvider,
 } from './types.js';
 
 export { ConfigurationError } from './types.js';
@@ -99,3 +102,6 @@ export {
   type RunResult,
   type RunStreamEvent,
 } from './execution.js';
+
+// Skills
+export { FilesystemSkillProvider } from './skills/index.js';
