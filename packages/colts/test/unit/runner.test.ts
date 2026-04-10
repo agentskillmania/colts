@@ -688,4 +688,35 @@ describe('AgentRunner', () => {
       expect(runner).toBeDefined();
     });
   });
+
+  describe('chatStream edge cases', () => {
+    it('should handle chatStream default event type', async () => {
+      // Test the default case in chatStream's event handling
+      const client = {
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          // Yield an unknown event type to hit default case
+          yield { type: 'unknown_event', data: 'test' };
+          yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
+        }),
+      } as unknown as LLMClient;
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const chunks = [];
+
+      for await (const chunk of runner.chatStream(state, 'Hello')) {
+        chunks.push(chunk);
+        if (chunk.type === 'done') break;
+      }
+
+      // Should ignore unknown event and still complete
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks[chunks.length - 1].type).toBe('done');
+    });
+  });
 });
