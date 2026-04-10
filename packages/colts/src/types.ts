@@ -59,15 +59,29 @@ export interface AgentConfig {
 }
 
 /**
+ * Compression metadata stored in AgentContext
+ *
+ * Messages are never deleted. Compression only affects what buildMessages() sends to the LLM.
+ */
+export interface CompressionMeta {
+  /** Summary text for messages[0..anchor-1] */
+  summary: string;
+  /** Boundary index: messages before this are summarized, not sent to LLM */
+  anchor: number;
+}
+
+/**
  * Agent context
  */
 export interface AgentContext {
-  /** Conversation history */
+  /** Conversation history (never deleted, compression only affects LLM view) */
   messages: Message[];
   /** Current execution step count */
   stepCount: number;
   /** Previous tool execution result (if any) */
   lastToolResult?: unknown;
+  /** Compression metadata (present when context has been compressed) */
+  compression?: CompressionMeta;
 }
 
 /**
@@ -194,4 +208,53 @@ export class ConfigurationError extends Error {
     super(message);
     this.name = 'ConfigurationError';
   }
+}
+
+// ========== Step 12: Context Compression Interfaces ==========
+
+/**
+ * Result of a compression operation
+ */
+export interface CompressResult {
+  /** Summary text for the compressed messages */
+  summary: string;
+  /** Boundary index: messages[0..anchor-1] compressed, messages[anchor..] kept as-is */
+  anchor: number;
+}
+
+/**
+ * Context compressor interface (dependency inversion)
+ *
+ * Implementations check if compression is needed and produce compression metadata.
+ * Messages are never modified — only the LLM's view changes.
+ */
+export interface IContextCompressor {
+  /** Check if compression is needed for the given state */
+  shouldCompress(state: AgentState): boolean;
+  /** Execute compression, return metadata (does not modify messages) */
+  compress(state: AgentState): Promise<CompressResult>;
+}
+
+/**
+ * Compression strategy
+ */
+export type CompressionStrategy = 'truncate' | 'sliding-window' | 'summarize' | 'hybrid';
+
+/**
+ * Threshold type for compression trigger
+ */
+export type CompressionThresholdType = 'message-count' | 'estimated-tokens';
+
+/**
+ * Configuration for the built-in DefaultContextCompressor
+ */
+export interface CompressionConfig {
+  /** Compression threshold (default: 50) */
+  threshold?: number;
+  /** Threshold type (default: 'message-count') */
+  thresholdType?: CompressionThresholdType;
+  /** Compression strategy (default: 'sliding-window') */
+  strategy?: CompressionStrategy;
+  /** Number of recent messages to keep (default: 10) */
+  keepRecent?: number;
 }
