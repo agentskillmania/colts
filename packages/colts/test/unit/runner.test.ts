@@ -5,8 +5,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMClient, LLMResponse, TokenStats } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
-import type { AgentConfig } from '../../src/types.js';
+import { createAgentState, addUserMessage, addAssistantMessage } from '../../src/state.js';
+import type { AgentConfig, IContextCompressor, CompressResult } from '../../src/types.js';
 
 describe('AgentRunner', () => {
   // Mock LLMClient
@@ -514,6 +514,178 @@ describe('AgentRunner', () => {
         role: 'toolResult',
         toolCallId: 'calc-1',
       });
+    });
+  });
+
+  // ============================================================
+  // Compression integration in Runner
+  // ============================================================
+  describe('compression', () => {
+    it('should throw when calling compress() without compressor configured', async () => {
+      const client = createMockClient();
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      await expect(runner.compress(state)).rejects.toThrow('No compressor configured');
+    });
+
+    it('should compress state via compress() method', async () => {
+      const client = createMockClient();
+      const mockCompressor: IContextCompressor = {
+        shouldCompress: vi.fn().mockReturnValue(true),
+        compress: vi.fn().mockResolvedValue({
+          summary: 'Summary of conversation',
+          anchor: 5,
+        } satisfies CompressResult),
+      };
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        compressor: mockCompressor,
+      });
+
+      // 创建带有消息的 state
+      let state = createAgentState(defaultConfig);
+      for (let i = 0; i < 10; i++) {
+        state = addUserMessage(state, `Message ${i}`);
+      }
+
+      const compressed = await runner.compress(state);
+
+      expect(compressed.context.compression).toEqual({
+        summary: 'Summary of conversation',
+        anchor: 5,
+      });
+      // 原始 state 不变
+      expect(state.context.compression).toBeUndefined();
+    });
+
+    it('should auto-compress during step() when threshold exceeded', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Final answer',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      const mockCompressor: IContextCompressor = {
+        shouldCompress: vi.fn().mockReturnValue(true),
+        compress: vi.fn().mockResolvedValue({
+          summary: 'Compressed summary',
+          anchor: 2,
+        } satisfies CompressResult),
+      };
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        compressor: mockCompressor,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const { state: finalState } = await runner.step(state);
+
+      // step 完成后 shouldCompress 应被调用
+      expect(mockCompressor.shouldCompress).toHaveBeenCalled();
+      // 如果需要压缩，compress 也应被调用
+      if (mockCompressor.shouldCompress({ ...state, context: { ...state.context } })) {
+        expect(mockCompressor.compress).toHaveBeenCalled();
+      }
+    });
+
+    it('should not compress when shouldCompress returns false', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Final answer',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      const mockCompressor: IContextCompressor = {
+        shouldCompress: vi.fn().mockReturnValue(false),
+        compress: vi.fn(),
+      };
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        compressor: mockCompressor,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const { state: finalState } = await runner.step(state);
+
+      expect(mockCompressor.shouldCompress).toHaveBeenCalled();
+      expect(mockCompressor.compress).not.toHaveBeenCalled();
+      expect(finalState.context.compression).toBeUndefined();
+    });
+
+    it('should build messages with compression summary', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Response',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      // 创建带有 compression 元数据的 state
+      let state = createAgentState(defaultConfig);
+      state = addUserMessage(state, 'Old message 1');
+      state = addAssistantMessage(state, 'Old response 1', { type: 'final', visible: true });
+      state = addUserMessage(state, 'Old message 2');
+      state = addAssistantMessage(state, 'Old response 2', { type: 'final', visible: true });
+      state = addUserMessage(state, 'Recent message');
+      state = addAssistantMessage(state, 'Recent response', { type: 'final', visible: true });
+
+      // 设置 compression：anchor=4，意味着 messages[0..3] 被压缩
+      state = {
+        ...state,
+        context: {
+          ...state.context,
+          compression: {
+            summary: 'Previous conversation about topic X',
+            anchor: 4,
+          },
+        },
+      };
+
+      await runner.chat(state, 'Follow up');
+
+      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const allContent = JSON.stringify(callArg.messages);
+
+      // 应包含 summary
+      expect(allContent).toContain('Previous conversation about topic X');
+      // 应包含 anchor 之后的消息
+      expect(allContent).toContain('Recent message');
+      // 不应包含 anchor 之前的原始消息（它们被压缩了）
+      expect(allContent).not.toContain('Old message 1');
+    });
+
+    it('should accept CompressionConfig for built-in compressor', () => {
+      const client = createMockClient();
+
+      // 传入 CompressionConfig 而非 IContextCompressor
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        compressor: {
+          strategy: 'truncate',
+          threshold: 10,
+          keepRecent: 3,
+        },
+      });
+
+      expect(runner).toBeDefined();
     });
   });
 });
