@@ -8,7 +8,7 @@
 
 import { LLMClient } from '@agentskillmania/llm-client';
 import type { TokenStats } from '@agentskillmania/llm-client';
-import type { Message, TextContent, Tool } from '@mariozechner/pi-ai';
+import type { Message, Tool } from '@mariozechner/pi-ai';
 import type {
   AgentState,
   ILLMProvider,
@@ -18,15 +18,8 @@ import type {
   LLMQuickInit,
 } from './types.js';
 import { ConfigurationError } from './types.js';
-import { produce } from 'immer';
 import { DefaultContextCompressor } from './compressor.js';
-import {
-  addUserMessage,
-  addAssistantMessage,
-  addToolMessage,
-  incrementStepCount,
-} from './state.js';
-import { parseResponse } from './parser.js';
+import { addUserMessage, addAssistantMessage, incrementStepCount } from './state.js';
 import { ToolRegistry } from './tools/registry.js';
 import type { Tool as ColtsTool } from './tools/registry.js';
 import type {
@@ -37,8 +30,13 @@ import type {
   RunResult,
   RunStreamEvent,
 } from './execution.js';
-import { createExecutionState, toolCallToAction, isTerminalPhase } from './execution.js';
 import type { AdvanceOptions } from './execution.js';
+import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
+import { compressState, maybeCompress } from './runner-compression.js';
+import { executeAdvance } from './runner-advance.js';
+import type { RunnerContext } from './runner-advance.js';
+import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './runner-stream.js';
+import { executeStep, executeRun, executeRunStream } from './runner-run.js';
 
 /**
  * Configuration options for AgentRunner
@@ -263,6 +261,23 @@ export class AgentRunner {
   }
 
   /**
+   * Build RunnerContext for extracted functions
+   * @private
+   */
+  private get ctx(): RunnerContext {
+    return {
+      llmProvider: this.llmProvider,
+      toolRegistry: this.toolRegistry,
+      options: {
+        model: this.options.model,
+        systemPrompt: this.options.systemPrompt,
+        requestTimeout: this.options.requestTimeout,
+        maxSteps: this.options.maxSteps,
+      },
+    };
+  }
+
+  /**
    * Execute a single turn of conversation (blocking)
    *
    * @param state - Current agent state
@@ -436,151 +451,14 @@ export class AgentRunner {
    * @private
    */
   private buildMessages(state: AgentState): Message[] {
-    const messages: Message[] = [];
-    const now = Date.now();
-
-    // Combine system prompts into a single user message prefix
-    // pi-ai doesn't have a 'system' role, so we prepend to first user message
-    // or create a user message with instructions
-    const systemParts: string[] = [];
-
-    if (this.options.systemPrompt) {
-      systemParts.push(this.options.systemPrompt);
-    }
-
-    if (state.config.instructions) {
-      systemParts.push(state.config.instructions);
-    }
-
-    // Add combined system prompt as first message if exists
-    if (systemParts.length > 0) {
-      messages.push({
-        role: 'user',
-        content: `[System Instructions]\n${systemParts.join('\n\n')}`,
-        timestamp: now,
-      });
-
-      // Add a fake assistant acknowledgment to maintain conversation flow
-      messages.push({
-        role: 'assistant',
-        content: [{ type: 'text', text: 'Understood. I will follow these instructions.' }],
-        api: 'openai-completions',
-        provider: 'openai',
-        model: this.options.model,
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: 'stop',
-        timestamp: now,
-      });
-    }
-
-    // Add conversation history (respecting compression boundary)
-    const compression = state.context.compression;
-    const startIdx = compression ? compression.anchor : 0;
-
-    // If compressed, inject summary as a system-like user message
-    if (compression && compression.summary) {
-      messages.push({
-        role: 'user',
-        content: `[Conversation History Summary]\n${compression.summary}`,
-        timestamp: now,
-      });
-      messages.push({
-        role: 'assistant',
-        content: [
-          { type: 'text', text: 'Understood. I have the context from our previous conversation.' },
-        ],
-        api: 'openai-completions',
-        provider: 'openai',
-        model: this.options.model,
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: 'stop',
-        timestamp: now,
-      });
-    }
-
-    for (let i = startIdx; i < state.context.messages.length; i++) {
-      const msg = state.context.messages[i];
-      switch (msg.role) {
-        case 'user':
-          messages.push({
-            role: 'user',
-            content: msg.content,
-            timestamp: now,
-          });
-          break;
-
-        case 'assistant': {
-          // Only include visible messages in LLM context
-          if (msg.visible !== false) {
-            const content: TextContent[] = [{ type: 'text', text: msg.content }];
-            messages.push({
-              role: 'assistant',
-              content,
-              api: 'openai-completions',
-              provider: 'openai',
-              model: this.options.model,
-              usage: {
-                input: 0,
-                output: 0,
-                cacheRead: 0,
-                cacheWrite: 0,
-                totalTokens: 0,
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-              },
-              stopReason: 'stop',
-              timestamp: now,
-            });
-          }
-          break;
-        }
-
-        case 'tool':
-          // Tool results use 'toolResult' role in pi-ai
-          messages.push({
-            role: 'toolResult',
-            toolCallId: msg.toolCallId ?? 'unknown',
-            toolName: 'unknown',
-            content: [{ type: 'text', text: msg.content }],
-            isError: false,
-            timestamp: now,
-          });
-          break;
-      }
-    }
-
-    return messages;
+    return buildMessages(state, {
+      systemPrompt: this.options.systemPrompt,
+      model: this.options.model,
+    });
   }
 
-  /**
-   * Convert ToolRegistry schemas to pi-ai Tool format
-   *
-   * @param registry - Tool registry
-   * @returns Tools in pi-ai format
-   * @private
-   */
   private getToolsForLLM(registry?: IToolRegistry): Tool[] | undefined {
-    if (!registry) return undefined;
-
-    const schemas = registry.toToolSchemas();
-    return schemas.map((schema) => ({
-      name: schema.function.name,
-      description: schema.function.description,
-      parameters: schema.function.parameters as unknown as Tool['parameters'],
-    }));
+    return getToolsForLLM(registry);
   }
 
   /**
@@ -621,202 +499,7 @@ export class AgentRunner {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): Promise<AdvanceResult> {
-    const registry = toolRegistry ?? this.toolRegistry;
-    const currentPhase = execState.phase;
-
-    try {
-      switch (currentPhase.type) {
-        case 'idle':
-          return this.advanceToPreparing(state, execState);
-
-        case 'preparing':
-          return this.advanceToCallingLLM(state, execState);
-
-        case 'calling-llm':
-          return await this.advanceToLLMResponse(state, execState, registry, options?.signal);
-
-        case 'llm-response':
-          return this.advanceToParsing(state, execState);
-
-        case 'parsing':
-          return this.advanceToParsed(state, execState);
-
-        case 'parsed':
-          return this.advanceFromParsed(state, execState);
-
-        case 'executing-tool':
-          return await this.advanceToToolResult(state, execState, registry, options?.signal);
-
-        case 'tool-result':
-          return this.advanceToCompleted(state, execState);
-
-        case 'completed':
-        case 'error':
-          // Already terminal - return current state unchanged
-          return { state, phase: currentPhase, done: true };
-
-        default:
-          execState.phase = { type: 'error', error: new Error(`Unknown phase: ${currentPhase}`) };
-          return { state, phase: execState.phase, done: true };
-      }
-    } catch (error) {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      execState.phase = { type: 'error', error: errorObj };
-      return { state, phase: execState.phase, done: true };
-    }
-  }
-
-  private advanceToPreparing(state: AgentState, execState: ExecutionState): AdvanceResult {
-    const messages = this.buildMessages(state);
-    execState.preparedMessages = messages;
-    // Convert pi-ai Message format to colts internal format for phase display
-    const displayMessages: import('./types.js').Message[] = messages.map((m) => ({
-      role: m.role as import('./types.js').MessageRole,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-      timestamp: Date.now(),
-    }));
-    execState.phase = { type: 'preparing', messages: displayMessages };
-    return { state, phase: execState.phase, done: false };
-  }
-
-  private advanceToCallingLLM(state: AgentState, execState: ExecutionState): AdvanceResult {
-    execState.phase = { type: 'calling-llm' };
-    return { state, phase: execState.phase, done: false };
-  }
-
-  private async advanceToLLMResponse(
-    state: AgentState,
-    execState: ExecutionState,
-    registry?: IToolRegistry,
-    signal?: AbortSignal
-  ): Promise<AdvanceResult> {
-    const tools = this.getToolsForLLM(registry);
-
-    const response = await this.llmProvider.call({
-      model: this.options.model,
-      messages: execState.preparedMessages ?? this.buildMessages(state),
-      tools,
-      priority: 0,
-      requestTimeout: this.options.requestTimeout,
-      signal,
-    });
-
-    // Store LLM response in execution state
-    const responseText = response.content;
-    execState.llmResponse = responseText;
-
-    // Store all tool calls, not just the first
-    if (response.toolCalls && response.toolCalls.length > 0) {
-      // Store first action for execution (parallel execution can be added later)
-      const toolCall = response.toolCalls[0];
-      execState.action = toolCallToAction(toolCall);
-      // Store all actions for future use
-      execState.allActions = response.toolCalls.map(toolCallToAction);
-    }
-
-    execState.phase = { type: 'llm-response', response: responseText };
-    // Return new immutable state
-    return { state, phase: execState.phase, done: false };
-  }
-
-  private advanceToParsing(state: AgentState, execState: ExecutionState): AdvanceResult {
-    execState.phase = { type: 'parsing' };
-    // Return new immutable state
-    return { state, phase: execState.phase, done: false };
-  }
-
-  private advanceToParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
-    const parseResult = parseResponse({
-      content: execState.llmResponse ?? '',
-      thinking: undefined,
-      toolCalls: execState.action
-        ? [
-            {
-              id: execState.action.id,
-              name: execState.action.tool,
-              arguments: execState.action.arguments,
-            },
-          ]
-        : [],
-      tokens: { input: 0, output: 0 },
-      stopReason: 'stop',
-    });
-
-    execState.thought = parseResult.thought;
-
-    if (parseResult.toolCalls.length > 0 && execState.action) {
-      execState.phase = { type: 'parsed', thought: parseResult.thought, action: execState.action };
-    } else {
-      execState.phase = { type: 'parsed', thought: parseResult.thought };
-    }
-
-    // Parsing complete: thought is known, but path not yet decided
-    // (has action -> execute tool, no action -> complete directly)
-    // State is not written here; advanceFromParsed / advanceToCompleted handle it
-    return { state, phase: execState.phase, done: false };
-  }
-
-  private advanceFromParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
-    if (execState.action) {
-      // Has tool call: write thought message, then enter executing-tool
-      const thought = execState.thought ?? '';
-      const newState = addAssistantMessage(state, thought, {
-        type: 'thought',
-        visible: false,
-      });
-      execState.phase = { type: 'executing-tool', action: execState.action };
-      return { state: newState, phase: execState.phase, done: false };
-    } else {
-      // No tool call: complete directly, advanceToCompleted writes final message
-      return this.advanceToCompleted(state, execState);
-    }
-  }
-
-  private async advanceToToolResult(
-    state: AgentState,
-    execState: ExecutionState,
-    registry?: IToolRegistry,
-    signal?: AbortSignal
-  ): Promise<AdvanceResult> {
-    const action = execState.action;
-    if (!action) {
-      throw new Error('No action to execute');
-    }
-
-    // Execute tool - registry is always provided after Step 6 refactor
-    let result: unknown;
-    try {
-      result = await registry!.execute(action.tool, action.arguments, { signal });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      result = `Error: ${errorMessage}`;
-    }
-
-    execState.toolResult = result;
-    execState.phase = { type: 'tool-result', result };
-
-    // Write tool message + increment step count
-    const toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
-    const newState = incrementStepCount(addToolMessage(state, toolResultContent));
-
-    return { state: newState, phase: execState.phase, done: false };
-  }
-
-  private advanceToCompleted(state: AgentState, execState: ExecutionState): AdvanceResult {
-    const answer = execState.thought ?? '';
-    execState.phase = { type: 'completed', answer };
-
-    // Two paths to completed:
-    // 1. Direct answer (parsed -> completed): write final message + stepCount
-    // 2. After tool execution (tool-result -> completed): messages already written by advanceToToolResult
-    if (execState.toolResult === undefined) {
-      const newState = incrementStepCount(
-        addAssistantMessage(state, answer, { type: 'final', visible: true })
-      );
-      return { state: newState, phase: execState.phase, done: true };
-    }
-
-    return { state, phase: execState.phase, done: true };
+    return executeAdvance(this.ctx, state, execState, toolRegistry, options);
   }
 
   /**
@@ -838,54 +521,7 @@ export class AgentRunner {
     registry?: IToolRegistry,
     signal?: AbortSignal
   ): AsyncGenerator<StreamEvent> {
-    const tools = this.getToolsForLLM(registry);
-    let accumulatedContent = '';
-    let responseContent = '';
-    let responseToolCalls:
-      | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
-      | undefined;
-
-    for await (const event of this.llmProvider.stream({
-      model: this.options.model,
-      messages: execState.preparedMessages ?? this.buildMessages(state),
-      tools,
-      priority: 0,
-      requestTimeout: this.options.requestTimeout,
-      signal,
-    })) {
-      if (signal?.aborted) break;
-
-      if (event.type === 'text') {
-        accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
-        yield { type: 'token', token: event.delta ?? '' };
-      } else if (event.type === 'tool_call' && event.toolCall) {
-        responseToolCalls = responseToolCalls ?? [];
-        responseToolCalls.push({
-          id: event.toolCall.id,
-          name: event.toolCall.name,
-          arguments: event.toolCall.arguments,
-        });
-      } else if (event.type === 'done') {
-        responseContent = accumulatedContent;
-      }
-    }
-
-    // Store complete response
-    execState.llmResponse = responseContent;
-    if (responseToolCalls && responseToolCalls.length > 0) {
-      const toolCall = responseToolCalls[0];
-      execState.action = {
-        id: toolCall.id,
-        tool: toolCall.name,
-        arguments: toolCall.arguments,
-      };
-      execState.allActions = responseToolCalls.map((tc) => ({
-        id: tc.id,
-        tool: tc.name,
-        arguments: tc.arguments,
-      }));
-    }
-    execState.phase = { type: 'llm-response', response: responseContent };
+    yield* streamCallingLLM(this.ctx, state, execState, registry, signal);
   }
 
   /**
@@ -902,30 +538,7 @@ export class AgentRunner {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): AsyncGenerator<StreamEvent, AdvanceResult> {
-    const registry = toolRegistry ?? this.toolRegistry;
-    const fromPhase = execState.phase;
-
-    // Handle streaming LLM response
-    if (fromPhase.type === 'calling-llm') {
-      yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
-
-      try {
-        yield* this.streamCallingLLM(state, execState, registry, options?.signal);
-      } catch (error) {
-        const errorObj = error instanceof Error ? error : new Error(String(error));
-        execState.phase = { type: 'error', error: errorObj };
-        return { state, phase: execState.phase, done: true };
-      }
-
-      yield { type: 'phase-change', from: { type: 'streaming' }, to: execState.phase };
-      return { state, phase: execState.phase, done: false };
-    }
-
-    // For other phases, delegate to advance()
-    const result = await this.advance(state, execState, registry, options);
-    yield { type: 'phase-change', from: fromPhase, to: result.phase };
-
-    return result;
+    return yield* executeAdvanceStream(this.ctx, state, execState, toolRegistry, options);
   }
 
   /**
@@ -960,38 +573,7 @@ export class AgentRunner {
     toolRegistry?: IToolRegistry,
     options?: { signal?: AbortSignal }
   ): Promise<{ state: AgentState; result: StepResult }> {
-    const registry = toolRegistry ?? this.toolRegistry;
-    const execState = createExecutionState();
-
-    // Loop advance() until a natural stopping point
-    let currentState = state;
-    while (!isTerminalPhase(execState.phase)) {
-      options?.signal?.throwIfAborted();
-      const {
-        state: newState,
-        phase,
-        done,
-      } = await this.advance(currentState, execState, registry, options);
-      currentState = await this.maybeCompress(newState);
-
-      // Terminal: completed (direct answer, state already updated by advance)
-      if (done && phase.type === 'completed') {
-        return { state: currentState, result: { type: 'done', answer: phase.answer } };
-      }
-
-      // Terminal: error (LLM call failed, report to caller)
-      if (done && phase.type === 'error') {
-        return { state: currentState, result: { type: 'error', error: phase.error } };
-      }
-
-      // Non-terminal stopping point: tool-result (state already updated by advance)
-      if (phase.type === 'tool-result') {
-        return { state: currentState, result: { type: 'continue', toolResult: phase.result } };
-      }
-    }
-
-    // Fallback (should not reach here)
-    return { state: currentState, result: { type: 'done', answer: execState.thought ?? '' } };
+    return executeStep(this.ctx, this.compressor, state, toolRegistry, options);
   }
 
   /**
@@ -1006,78 +588,7 @@ export class AgentRunner {
     toolRegistry?: IToolRegistry,
     options?: { signal?: AbortSignal }
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
-    const registry = toolRegistry ?? this.toolRegistry;
-    const execState = createExecutionState();
-
-    let currentState = state;
-    while (!isTerminalPhase(execState.phase)) {
-      options?.signal?.throwIfAborted();
-      const fromPhase = execState.phase;
-
-      // Special: streaming LLM response (single streaming call, no double invocation)
-      if (fromPhase.type === 'calling-llm') {
-        yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
-
-        try {
-          yield* this.streamCallingLLM(currentState, execState, registry, options?.signal);
-        } catch (error) {
-          const errorObj = error instanceof Error ? error : new Error(String(error));
-          execState.phase = { type: 'error', error: errorObj };
-          yield { type: 'error', error: errorObj, context: { step: 0 } };
-          return { state: currentState, result: { type: 'error', error: errorObj } };
-        }
-
-        yield { type: 'phase-change', from: { type: 'streaming' }, to: execState.phase };
-        continue;
-      }
-
-      // All other phases: delegate to advance() (no duplicate logic)
-      const {
-        state: newState,
-        phase,
-        done,
-      } = await this.advance(currentState, execState, registry, options);
-      currentState = newState;
-
-      // Emit tool events based on phase transitions
-      if (phase.type === 'executing-tool') {
-        yield {
-          type: 'tool:start',
-          action: phase.action,
-        };
-      }
-
-      yield { type: 'phase-change', from: fromPhase, to: phase };
-
-      if (phase.type === 'tool-result') {
-        yield {
-          type: 'tool:end',
-          result: phase.result,
-        };
-        return {
-          state: currentState,
-          result: {
-            type: 'continue',
-            toolResult: phase.result,
-          },
-        };
-      }
-
-      if (done && phase.type === 'completed') {
-        return {
-          state: currentState,
-          result: { type: 'done', answer: phase.answer },
-        };
-      }
-
-      if (done && phase.type === 'error') {
-        yield { type: 'error', error: phase.error, context: { step: 0 } };
-        return { state: currentState, result: { type: 'error', error: phase.error } };
-      }
-    }
-
-    // Fallback
-    return { state: currentState, result: { type: 'done', answer: execState.thought ?? '' } };
+    return yield* executeStepStream(this.ctx, this.compressor, state, toolRegistry, options);
   }
 
   /**
@@ -1103,39 +614,7 @@ export class AgentRunner {
     options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
-    const registry = toolRegistry ?? this.toolRegistry;
-    // maxSteps hierarchy: run parameter > RunnerOptions > default 10
-    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
-    let currentState = state;
-    let totalSteps = 0;
-
-    while (totalSteps < maxSteps) {
-      options?.signal?.throwIfAborted();
-      const { state: newState, result } = await this.step(currentState, registry, options);
-      currentState = newState;
-      totalSteps++;
-
-      if (result.type === 'done') {
-        return {
-          state: currentState,
-          result: { type: 'success', answer: result.answer, totalSteps },
-        };
-      }
-
-      if (result.type === 'error') {
-        return {
-          state: currentState,
-          result: { type: 'error', error: result.error, totalSteps },
-        };
-      }
-
-      // result.type === 'continue' — loop again with updated state
-    }
-
-    return {
-      state: currentState,
-      result: { type: 'max_steps', totalSteps },
-    };
+    return executeRun(this.ctx, this.compressor, state, options, toolRegistry);
   }
 
   /**
@@ -1162,76 +641,7 @@ export class AgentRunner {
     options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
-    const registry = toolRegistry ?? this.toolRegistry;
-    // maxSteps hierarchy: run parameter > RunnerOptions > default 10
-    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
-    let currentState = state;
-    let totalSteps = 0;
-
-    while (totalSteps < maxSteps) {
-      options?.signal?.throwIfAborted();
-      yield { type: 'step:start', step: totalSteps, state: currentState };
-
-      // Use stepStream to get real-time tokens and phase events
-      const iterator = this.stepStream(currentState, registry, options);
-      let stepResult: { state: AgentState; result: StepResult };
-
-      while (true) {
-        const { done, value } = await iterator.next();
-        if (done) {
-          stepResult = value;
-          break;
-        }
-        // Forward all events from stepStream (token, phase-change, tool:start/end)
-        yield value as RunStreamEvent;
-      }
-
-      currentState = stepResult.state;
-      totalSteps++;
-
-      yield { type: 'step:end', step: totalSteps - 1, result: stepResult.result };
-
-      // Auto-compress between steps (yield events so UI can observe)
-      if (this.compressor && this.compressor.shouldCompress(currentState)) {
-        yield { type: 'compressing' };
-        const compressedState = await this.maybeCompress(currentState);
-        if (compressedState.context.compression) {
-          const prevAnchor = stepResult.state.context.compression?.anchor ?? 0;
-          const newAnchor = compressedState.context.compression.anchor;
-          yield {
-            type: 'compressed',
-            summary: compressedState.context.compression.summary,
-            removedCount: newAnchor - prevAnchor,
-          };
-          currentState = compressedState;
-        }
-      }
-
-      if (stepResult.result.type === 'done') {
-        const runResult: RunResult = {
-          type: 'success',
-          answer: stepResult.result.answer,
-          totalSteps,
-        };
-        yield { type: 'complete', result: runResult };
-        return { state: currentState, result: runResult };
-      }
-
-      if (stepResult.result.type === 'error') {
-        const runResult: RunResult = {
-          type: 'error',
-          error: stepResult.result.error,
-          totalSteps,
-        };
-        yield { type: 'complete', result: runResult };
-        return { state: currentState, result: runResult };
-      }
-    }
-
-    // maxSteps exhausted
-    const runResult: RunResult = { type: 'max_steps', totalSteps };
-    yield { type: 'complete', result: runResult };
-    return { state: currentState, result: runResult };
+    return yield* executeRunStream(this.ctx, this.compressor, state, options, toolRegistry);
   }
 
   /**
@@ -1252,10 +662,7 @@ export class AgentRunner {
     if (!this.compressor) {
       throw new Error('No compressor configured. Pass compressor in RunnerOptions.');
     }
-    const result = await this.compressor.compress(state);
-    return produce(state, (draft) => {
-      draft.context.compression = { summary: result.summary, anchor: result.anchor };
-    });
+    return compressState(this.compressor, state);
   }
 
   /**
@@ -1263,10 +670,6 @@ export class AgentRunner {
    * @private
    */
   private async maybeCompress(state: AgentState): Promise<AgentState> {
-    if (!this.compressor || !this.compressor.shouldCompress(state)) return state;
-    const result = await this.compressor.compress(state);
-    return produce(state, (draft) => {
-      draft.context.compression = { summary: result.summary, anchor: result.anchor };
-    });
+    return maybeCompress(this.compressor, state);
   }
 }
