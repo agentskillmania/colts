@@ -38,6 +38,7 @@ import type {
   RunStreamEvent,
 } from './execution.js';
 import { createExecutionState, toolCallToAction, isTerminalPhase } from './execution.js';
+import type { AdvanceOptions } from './execution.js';
 
 /**
  * Configuration options for AgentRunner
@@ -617,7 +618,8 @@ export class AgentRunner {
   async advance(
     state: AgentState,
     execState: ExecutionState,
-    toolRegistry?: IToolRegistry
+    toolRegistry?: IToolRegistry,
+    options?: AdvanceOptions
   ): Promise<AdvanceResult> {
     const registry = toolRegistry ?? this.toolRegistry;
     const currentPhase = execState.phase;
@@ -631,7 +633,7 @@ export class AgentRunner {
           return this.advanceToCallingLLM(state, execState);
 
         case 'calling-llm':
-          return await this.advanceToLLMResponse(state, execState, registry);
+          return await this.advanceToLLMResponse(state, execState, registry, options?.signal);
 
         case 'llm-response':
           return this.advanceToParsing(state, execState);
@@ -643,7 +645,7 @@ export class AgentRunner {
           return this.advanceFromParsed(state, execState);
 
         case 'executing-tool':
-          return await this.advanceToToolResult(state, execState, registry);
+          return await this.advanceToToolResult(state, execState, registry, options?.signal);
 
         case 'tool-result':
           return this.advanceToCompleted(state, execState);
@@ -685,7 +687,8 @@ export class AgentRunner {
   private async advanceToLLMResponse(
     state: AgentState,
     execState: ExecutionState,
-    registry?: IToolRegistry
+    registry?: IToolRegistry,
+    signal?: AbortSignal
   ): Promise<AdvanceResult> {
     const tools = this.getToolsForLLM(registry);
 
@@ -695,6 +698,7 @@ export class AgentRunner {
       tools,
       priority: 0,
       requestTimeout: this.options.requestTimeout,
+      signal,
     });
 
     // Store LLM response in execution state
@@ -771,7 +775,8 @@ export class AgentRunner {
   private async advanceToToolResult(
     state: AgentState,
     execState: ExecutionState,
-    registry?: IToolRegistry
+    registry?: IToolRegistry,
+    signal?: AbortSignal
   ): Promise<AdvanceResult> {
     const action = execState.action;
     if (!action) {
@@ -781,7 +786,7 @@ export class AgentRunner {
     // Execute tool - registry is always provided after Step 6 refactor
     let result: unknown;
     try {
-      result = await registry!.execute(action.tool, action.arguments);
+      result = await registry!.execute(action.tool, action.arguments, { signal });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       result = `Error: ${errorMessage}`;
@@ -830,7 +835,8 @@ export class AgentRunner {
   private async *streamCallingLLM(
     state: AgentState,
     execState: ExecutionState,
-    registry?: IToolRegistry
+    registry?: IToolRegistry,
+    signal?: AbortSignal
   ): AsyncGenerator<StreamEvent> {
     const tools = this.getToolsForLLM(registry);
     let accumulatedContent = '';
@@ -845,7 +851,10 @@ export class AgentRunner {
       tools,
       priority: 0,
       requestTimeout: this.options.requestTimeout,
+      signal,
     })) {
+      if (signal?.aborted) break;
+
       if (event.type === 'text') {
         accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
         yield { type: 'token', token: event.delta ?? '' };
@@ -890,7 +899,8 @@ export class AgentRunner {
   async *advanceStream(
     state: AgentState,
     execState: ExecutionState,
-    toolRegistry?: IToolRegistry
+    toolRegistry?: IToolRegistry,
+    options?: AdvanceOptions
   ): AsyncGenerator<StreamEvent, AdvanceResult> {
     const registry = toolRegistry ?? this.toolRegistry;
     const fromPhase = execState.phase;
@@ -900,7 +910,7 @@ export class AgentRunner {
       yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 
       try {
-        yield* this.streamCallingLLM(state, execState, registry);
+        yield* this.streamCallingLLM(state, execState, registry, options?.signal);
       } catch (error) {
         const errorObj = error instanceof Error ? error : new Error(String(error));
         execState.phase = { type: 'error', error: errorObj };
@@ -912,7 +922,7 @@ export class AgentRunner {
     }
 
     // For other phases, delegate to advance()
-    const result = await this.advance(state, execState, registry);
+    const result = await this.advance(state, execState, registry, options);
     yield { type: 'phase-change', from: fromPhase, to: result.phase };
 
     return result;
@@ -947,7 +957,8 @@ export class AgentRunner {
    */
   async step(
     state: AgentState,
-    toolRegistry?: IToolRegistry
+    toolRegistry?: IToolRegistry,
+    options?: { signal?: AbortSignal }
   ): Promise<{ state: AgentState; result: StepResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
     const execState = createExecutionState();
@@ -955,11 +966,12 @@ export class AgentRunner {
     // Loop advance() until a natural stopping point
     let currentState = state;
     while (!isTerminalPhase(execState.phase)) {
+      options?.signal?.throwIfAborted();
       const {
         state: newState,
         phase,
         done,
-      } = await this.advance(currentState, execState, registry);
+      } = await this.advance(currentState, execState, registry, options);
       currentState = await this.maybeCompress(newState);
 
       // Terminal: completed (direct answer, state already updated by advance)
@@ -991,13 +1003,15 @@ export class AgentRunner {
    */
   async *stepStream(
     state: AgentState,
-    toolRegistry?: IToolRegistry
+    toolRegistry?: IToolRegistry,
+    options?: { signal?: AbortSignal }
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
     const execState = createExecutionState();
 
     let currentState = state;
     while (!isTerminalPhase(execState.phase)) {
+      options?.signal?.throwIfAborted();
       const fromPhase = execState.phase;
 
       // Special: streaming LLM response (single streaming call, no double invocation)
@@ -1005,7 +1019,7 @@ export class AgentRunner {
         yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 
         try {
-          yield* this.streamCallingLLM(currentState, execState, registry);
+          yield* this.streamCallingLLM(currentState, execState, registry, options?.signal);
         } catch (error) {
           const errorObj = error instanceof Error ? error : new Error(String(error));
           execState.phase = { type: 'error', error: errorObj };
@@ -1022,7 +1036,7 @@ export class AgentRunner {
         state: newState,
         phase,
         done,
-      } = await this.advance(currentState, execState, registry);
+      } = await this.advance(currentState, execState, registry, options);
       currentState = newState;
 
       // Emit tool events based on phase transitions
@@ -1086,7 +1100,7 @@ export class AgentRunner {
    */
   async run(
     state: AgentState,
-    options?: { maxSteps?: number },
+    options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
@@ -1096,7 +1110,8 @@ export class AgentRunner {
     let totalSteps = 0;
 
     while (totalSteps < maxSteps) {
-      const { state: newState, result } = await this.step(currentState, registry);
+      options?.signal?.throwIfAborted();
+      const { state: newState, result } = await this.step(currentState, registry, options);
       currentState = newState;
       totalSteps++;
 
@@ -1144,7 +1159,7 @@ export class AgentRunner {
    */
   async *runStream(
     state: AgentState,
-    options?: { maxSteps?: number },
+    options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
@@ -1154,10 +1169,11 @@ export class AgentRunner {
     let totalSteps = 0;
 
     while (totalSteps < maxSteps) {
+      options?.signal?.throwIfAborted();
       yield { type: 'step:start', step: totalSteps, state: currentState };
 
       // Use stepStream to get real-time tokens and phase events
-      const iterator = this.stepStream(currentState, registry);
+      const iterator = this.stepStream(currentState, registry, options);
       let stepResult: { state: AgentState; result: StepResult };
 
       while (true) {

@@ -100,6 +100,7 @@ export {
   type StepResult,
   type StreamEvent,
   type AdvanceResult,
+  type AdvanceOptions,
   type ExecutionState,
   type RunResult,
   type RunStreamEvent,
