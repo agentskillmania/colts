@@ -544,15 +544,15 @@ for await (const event of runner.stepStream(state)) {
 ```
 
 ##### 验收标准
-- [ ] `advance()` 每次推进一个自然阶段，返回当前 phase
-- [ ] `advance()` 在产生实质变更的 phase（llm-response, tool-result, completed）用 Immer 返回新 AgentState
-- [ ] `advance()` 在过渡 phase 返回原 state（同一引用）
-- [ ] 可在任意 phase 暂停，此时 AgentState 反映到该 phase 为止的所有变更
-- [ ] `step()` 内部由多个 `advance()` 组成，state 在 advance 过程中已逐步更新
-- [ ] `stepStream()` 复用 `advance()` 核心逻辑，仅在 `calling-llm` 阶段注入流式读取
-- [ ] `stepStream()` 只调用一次 LLM（不重复调用）
-- [ ] `advanceStream()` 不引入 `streaming` 作为独立 phase
-- [ ] 所有方法返回的 AgentState 遵循不可变原则（新 state 由 Immer produce 创建）
+- [x] `advance()` 每次推进一个自然阶段，返回当前 phase
+- [x] `advance()` 在产生实质变更的 phase（llm-response, tool-result, completed）用 Immer 返回新 AgentState
+- [x] `advance()` 在过渡 phase 返回原 state（同一引用）
+- [x] 可在任意 phase 暂停，此时 AgentState 反映到该 phase 为止的所有变更
+- [x] `step()` 内部由多个 `advance()` 组成，state 在 advance 过程中已逐步更新
+- [x] `stepStream()` 复用 `advance()` 核心逻辑，仅在 `calling-llm` 阶段注入流式读取
+- [x] `stepStream()` 只调用一次 LLM（不重复调用）
+- [x] `advanceStream()` 不引入 `streaming` 作为独立 phase
+- [x] 所有方法返回的 AgentState 遵循不可变原则（新 state 由 Immer produce 创建）
 
 ---
 
@@ -1238,15 +1238,15 @@ const runner = new AgentRunner({
 ```
 
 ##### 验收标准:
-- [ ] `IContextCompressor` 接口定义，支持依赖倒置
-- [ ] 内置 `DefaultContextCompressor`，支持 truncate / sliding-window / summarize / hybrid 四种策略
-- [ ] `AgentContext.compression` 存储压缩元数据，`messages` 不被修改
-- [ ] `buildMessages()` 根据 compression 元数据构造 LLM 视图
-- [ ] 每个 advance() 后自动检查并执行压缩（step / run 内部）
-- [ ] `runner.compress(state)` 支持手动触发
-- [ ] 压缩产生 `compressing` / `compressed` 流式事件
-- [ ] `compressor` 参数支持传配置对象（用默认实现）或传实例（自定义）
-- [ ] 不传 compressor 时行为与现有完全一致
+- [x] `IContextCompressor` 接口定义，支持依赖倒置
+- [x] 内置 `DefaultContextCompressor`，支持 truncate / sliding-window / summarize / hybrid 四种策略
+- [x] `AgentContext.compression` 存储压缩元数据，`messages` 不被修改
+- [x] `buildMessages()` 根据 compression 元数据构造 LLM 视图
+- [x] 每个 advance() 后自动检查并执行压缩（step / run 内部）
+- [x] `runner.compress(state)` 支持手动触发
+- [x] 压缩产生 `compressing` / `compressed` 流式事件
+- [x] `compressor` 参数支持传配置对象（用默认实现）或传实例（自定义）
+- [x] 不传 compressor 时行为与现有完全一致
 
 ---
 
@@ -1507,14 +1507,14 @@ handler({ questions, context, signal });
 ```
 
 ##### 验收标准:
-- [ ] `run()` / `step()` / `advance()` 及流式版本支持 `signal` 参数
-- [ ] 循环层（run 的 step 循环、step 的 advance 循环）每次迭代前检查 signal
-- [ ] signal 传递到 `ILLMProvider.call()` 和 `ILLMProvider.stream()`
-- [ ] signal 传递到 `IToolRegistry.execute()`
-- [ ] 流式方法（`runStream` / `stepStream` / `advanceStream`）abort 后停止 yield 事件
-- [ ] abort 后正在执行的 Promise 正确 reject（AbortError），不泄漏
-- [ ] `ILLMProvider` 和 `IToolRegistry` 接口变更向后兼容（signal 为 optional）
-- [ ] 不传 signal 时行为与现有完全一致（零侵入）
+- [x] `run()` / `step()` / `advance()` 及流式版本支持 `signal` 参数
+- [x] 循环层（run 的 step 循环、step 的 advance 循环）每次迭代前检查 signal
+- [x] signal 传递到 `ILLMProvider.call()` 和 `ILLMProvider.stream()`
+- [x] signal 传递到 `IToolRegistry.execute()`
+- [x] 流式方法（`runStream` / `stepStream` / `advanceStream`）abort 后停止 yield 事件
+- [x] abort 后正在执行的 Promise 正确 reject（AbortError），不泄漏
+- [x] `ILLMProvider` 和 `IToolRegistry` 接口变更向后兼容（signal 为 optional）
+- [x] 不传 signal 时行为与现有完全一致（零侵入）
 
 ---
 
