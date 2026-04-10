@@ -61,14 +61,14 @@ export class ConfirmableRegistry implements IToolRegistry {
     this.options = options;
   }
 
-  async execute(name: string, args: unknown): Promise<unknown> {
+  async execute(name: string, args: unknown, options?: { signal?: AbortSignal }): Promise<unknown> {
     if (this.needsConfirm(name)) {
       const approved = await this.options.confirm(name, args as Record<string, unknown>);
       if (!approved) {
         throw new Error(`Tool execution rejected by human: ${name}`);
       }
     }
-    return this.inner.execute(name, args);
+    return this.inner.execute(name, args, options);
   }
 
   toToolSchemas(): ToolSchema[] {

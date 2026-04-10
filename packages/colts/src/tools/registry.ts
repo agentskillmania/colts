@@ -144,7 +144,11 @@ export class ToolRegistry {
    * @throws ToolNotFoundError if tool doesn't exist
    * @throws ToolParameterError if validation fails
    */
-  async execute(name: string, args: unknown): Promise<unknown> {
+  async execute(
+    name: string,
+    args: unknown,
+    _options?: { signal?: AbortSignal }
+  ): Promise<unknown> {
     const tool = this.get(name);
     if (!tool) {
       throw new ToolNotFoundError(name);

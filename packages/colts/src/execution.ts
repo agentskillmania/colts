@@ -61,6 +61,8 @@ export type StreamEvent =
 export interface AdvanceOptions {
   /** Priority for LLM call (default: 0) */
   priority?: number;
+  /** AbortSignal to cancel execution */
+  signal?: AbortSignal;
 }
 
 /**

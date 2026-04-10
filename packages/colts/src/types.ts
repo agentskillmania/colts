@@ -135,6 +135,7 @@ export interface ILLMProvider {
     tools?: Tool[];
     priority?: number;
     requestTimeout?: number;
+    signal?: AbortSignal;
   }): Promise<LLMResponse>;
 
   /** Streaming call */
@@ -144,6 +145,7 @@ export interface ILLMProvider {
     tools?: Tool[];
     priority?: number;
     requestTimeout?: number;
+    signal?: AbortSignal;
   }): AsyncIterable<StreamEvent>;
 }
 
@@ -155,7 +157,7 @@ export interface ILLMProvider {
  */
 export interface IToolRegistry {
   /** Execute specified tool */
-  execute(name: string, args: unknown): Promise<unknown>;
+  execute(name: string, args: unknown, options?: { signal?: AbortSignal }): Promise<unknown>;
   /** Get JSON schemas of all tools (for LLM) */
   toToolSchemas(): ToolSchema[];
   /** Register a new tool */
