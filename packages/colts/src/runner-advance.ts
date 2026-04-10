@@ -10,7 +10,6 @@ import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.
 import { toolCallToAction } from './execution.js';
 import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
 import { addAssistantMessage, addToolMessage, incrementStepCount } from './state.js';
-import { parseResponse } from './parser.js';
 
 /**
  * Runner context passed to extracted functions instead of `this`
@@ -143,28 +142,14 @@ function advanceToParsing(state: AgentState, execState: ExecutionState): Advance
 }
 
 function advanceToParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
-  const parseResult = parseResponse({
-    content: execState.llmResponse ?? '',
-    thinking: undefined,
-    toolCalls: execState.action
-      ? [
-          {
-            id: execState.action.id,
-            name: execState.action.tool,
-            arguments: execState.action.arguments,
-          },
-        ]
-      : [],
-    tokens: { input: 0, output: 0 },
-    stopReason: 'stop',
-  });
+  // action 已在 advanceToLLMResponse 中从原始响应提取，无需重新解析
+  const thought = execState.llmResponse ?? '';
+  execState.thought = thought;
 
-  execState.thought = parseResult.thought;
-
-  if (parseResult.toolCalls.length > 0 && execState.action) {
-    execState.phase = { type: 'parsed', thought: parseResult.thought, action: execState.action };
+  if (execState.action) {
+    execState.phase = { type: 'parsed', thought, action: execState.action };
   } else {
-    execState.phase = { type: 'parsed', thought: parseResult.thought };
+    execState.phase = { type: 'parsed', thought };
   }
 
   return { state, phase: execState.phase, done: false };
@@ -194,10 +179,13 @@ async function advanceToToolResult(
   if (!action) {
     throw new Error('No action to execute');
   }
+  if (!registry) {
+    throw new Error('Tool registry is required for tool execution');
+  }
 
   let result: unknown;
   try {
-    result = await registry!.execute(action.tool, action.arguments, { signal });
+    result = await registry.execute(action.tool, action.arguments, { signal });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     result = `Error: ${errorMessage}`;
@@ -223,6 +211,7 @@ function advanceToCompleted(state: AgentState, execState: ExecutionState): Advan
     return { state: newState, phase: execState.phase, done: true };
   }
 
+  // tool-result → completed: 消息已在前面写入（thought + tool message），不重复写
   return { state, phase: execState.phase, done: true };
 }
 

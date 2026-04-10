@@ -53,8 +53,8 @@ export async function executeStep(
     }
   }
 
-  // Fallback (should not reach here)
-  return { state: currentState, result: { type: 'done', answer: execState.thought ?? '' } };
+  // 不应到达此处：所有终止 phase 在循环体内已处理
+  throw new Error('Unexpected: executeStep loop exited without reaching terminal phase');
 }
 
 /**

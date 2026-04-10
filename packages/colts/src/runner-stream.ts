@@ -106,6 +106,7 @@ export async function* executeAdvanceStream(
     } catch (error) {
       const errorObj = error instanceof Error ? error : new Error(String(error));
       execState.phase = { type: 'error', error: errorObj };
+      yield { type: 'error', error: errorObj, context: { step: 0 } };
       return { state, phase: execState.phase, done: true };
     }
 
@@ -200,6 +201,6 @@ export async function* executeStepStream(
     }
   }
 
-  // Fallback
-  return { state: currentState, result: { type: 'done', answer: execState.thought ?? '' } };
+  // 不应到达此处：所有终止 phase 在循环体内已处理
+  throw new Error('Unexpected: stepStream loop exited without reaching terminal phase');
 }
