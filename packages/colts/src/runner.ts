@@ -247,6 +247,7 @@ export class AgentRunner {
       const delegateTool = createDelegateTool({
         subAgentConfigs: this.subAgentConfigs,
         llmProvider: this.llmProvider,
+        parentToolRegistry: this.toolRegistry,
       });
       this.toolRegistry.register(delegateTool);
     }

@@ -91,6 +91,10 @@ export class ConfirmableRegistry implements IToolRegistry {
     return this.inner.getToolNames();
   }
 
+  get(name: string): ReturnType<IToolRegistry['get']> {
+    return this.inner.get(name);
+  }
+
   private needsConfirm(name: string): boolean {
     return this.options.confirmTools.includes(name);
   }

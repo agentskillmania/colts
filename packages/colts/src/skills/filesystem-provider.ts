@@ -6,6 +6,7 @@
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import type { SkillManifest, ISkillProvider } from './types.js';
 
 /**
@@ -14,11 +15,23 @@ import type { SkillManifest, ISkillProvider } from './types.js';
 const SKILL_FILE = 'SKILL.md';
 
 /**
+ * Cache entry for file content
+ */
+interface CacheEntry {
+  /** Cached content */
+  content: string;
+  /** File modification time (ms) */
+  mtime: number;
+}
+
+/**
  * Parse YAML frontmatter from SKILL.md content
  *
- * Supported formats:
+ * Uses the 'yaml' library for robust parsing, supporting:
  * - Simple key-value pairs: `name: value`
  * - Multiline strings: `description: |` or `description: >`
+ * - Arrays: `tags: [a, b, c]`
+ * - Nested objects (values are converted to strings)
  *
  * @param content - Full SKILL.md file content
  * @returns Parsed result with frontmatter fields and body content
@@ -51,57 +64,28 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
   const bodyStart = afterFirstDelimiter.indexOf('\n', secondDelimiterIndex + 4);
   result.body = bodyStart === -1 ? '' : afterFirstDelimiter.substring(bodyStart + 1);
 
-  // Parse YAML key-value pairs
-  const lines = frontmatterText.split('\n');
-  let currentKey = '';
-  let currentValue = '';
-  let inMultiline = false;
-  // Note: multiline indicator (| or >) is not stored, currently processed uniformly as folded multiline
-
-  for (const line of lines) {
-    if (inMultiline) {
-      // Collect multiline value: ends when indentation decreases or empty line
-      if (line === '' || (!line.startsWith(' ') && !line.startsWith('\t'))) {
-        // End multiline value
-        result.frontmatter[currentKey] = currentValue.trim();
-        inMultiline = false;
-        // Continue processing current line (may be a new key-value pair)
-        const kvMatch = line.match(/^(\w[\w-]*)\s*:\s*(.*)/);
-        if (kvMatch) {
-          currentKey = kvMatch[1];
-          const value = kvMatch[2].trim();
-          if (value === '|' || value === '>') {
-            inMultiline = true;
-            // No need to distinguish | and >, process uniformly
-            currentValue = '';
-          } else {
-            result.frontmatter[currentKey] = value;
-          }
-        }
+  // Parse YAML using the yaml library
+  try {
+    const parsed = parseYaml(frontmatterText) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value === null || value === undefined) {
+        result.frontmatter[key] = '';
+      } else if (typeof value === 'string') {
+        result.frontmatter[key] = value;
+      } else if (Array.isArray(value)) {
+        // Convert arrays to comma-separated strings
+        result.frontmatter[key] = value.join(', ');
+      } else if (typeof value === 'object') {
+        // Convert objects to JSON strings
+        result.frontmatter[key] = JSON.stringify(value);
       } else {
-        // Collect multiline content (strip one level of indentation)
-        const trimmedLine = line.replace(/^ (\s?.*)/, '$1');
-        currentValue += (currentValue ? '\n' : '') + trimmedLine;
-      }
-    } else {
-      const kvMatch = line.match(/^(\w[\w-]*)\s*:\s*(.*)/);
-      if (kvMatch) {
-        currentKey = kvMatch[1];
-        const value = kvMatch[2].trim();
-        if (value === '|' || value === '>') {
-          inMultiline = true;
-          // No need to distinguish | and >, process uniformly
-          currentValue = '';
-        } else {
-          result.frontmatter[currentKey] = value;
-        }
+        // Convert other types to strings
+        result.frontmatter[key] = String(value);
       }
     }
-  }
-
-  // Handle the last multiline value
-  if (inMultiline && currentKey) {
-    result.frontmatter[currentKey] = currentValue.trim();
+  } catch {
+    // YAML parsing failed, fall back to empty frontmatter
+    // This maintains backward compatibility with malformed files
   }
 
   return result;
@@ -246,6 +230,12 @@ export class FilesystemSkillProvider implements ISkillProvider {
   /** Directory list to scan */
   private directories: string[];
 
+  /** Instructions cache: name -> cache entry */
+  private instructionCache = new Map<string, CacheEntry>();
+
+  /** Resource cache: "name:relativePath" -> cache entry */
+  private resourceCache = new Map<string, CacheEntry>();
+
   /**
    * Create a filesystem skill provider
    *
@@ -269,6 +259,9 @@ export class FilesystemSkillProvider implements ISkillProvider {
   /**
    * Load a skill's instruction content (SKILL.md body section, excluding frontmatter)
    *
+   * Uses cache to avoid repeated disk reads. Cache is invalidated when the file
+   * modification time changes.
+   *
    * @param name - Skill name
    * @returns SKILL.md body content
    * @throws Error when skill is not found
@@ -280,14 +273,40 @@ export class FilesystemSkillProvider implements ISkillProvider {
     }
 
     const skillFilePath = join(manifest.source, SKILL_FILE);
-    const content = readFileSync(skillFilePath, 'utf-8');
-    const { body } = parseFrontmatter(content);
 
-    return body;
+    // Check cache
+    const cached = this.instructionCache.get(name);
+    try {
+      const stats = statSync(skillFilePath);
+      if (cached && cached.mtime === stats.mtime.getTime()) {
+        return cached.content;
+      }
+
+      // Cache miss or stale, read file
+      const content = readFileSync(skillFilePath, 'utf-8');
+      const { body } = parseFrontmatter(content);
+
+      // Update cache
+      this.instructionCache.set(name, {
+        content: body,
+        mtime: stats.mtime.getTime(),
+      });
+
+      return body;
+    } catch {
+      // If stat fails but we have cached content, return it as fallback
+      if (cached) {
+        return cached.content;
+      }
+      throw new Error(`Failed to load instructions for skill: ${name}`);
+    }
   }
 
   /**
    * Load a skill's resource file content
+   *
+   * Uses cache to avoid repeated disk reads. Cache is invalidated when the file
+   * modification time changes.
    *
    * @param name - Skill name
    * @param relativePath - Resource file path relative to the skill directory
@@ -301,7 +320,33 @@ export class FilesystemSkillProvider implements ISkillProvider {
     }
 
     const resourcePath = join(manifest.source, relativePath);
-    return readFileSync(resourcePath, 'utf-8');
+    const cacheKey = `${name}:${relativePath}`;
+
+    // Check cache
+    const cached = this.resourceCache.get(cacheKey);
+    try {
+      const stats = statSync(resourcePath);
+      if (cached && cached.mtime === stats.mtime.getTime()) {
+        return cached.content;
+      }
+
+      // Cache miss or stale, read file
+      const content = readFileSync(resourcePath, 'utf-8');
+
+      // Update cache
+      this.resourceCache.set(cacheKey, {
+        content,
+        mtime: stats.mtime.getTime(),
+      });
+
+      return content;
+    } catch {
+      // If stat fails but we have cached content, return it as fallback
+      if (cached) {
+        return cached.content;
+      }
+      throw new Error(`Failed to load resource for skill: ${name}`);
+    }
   }
 
   /**
@@ -320,6 +365,8 @@ export class FilesystemSkillProvider implements ISkillProvider {
    */
   refresh(): void {
     this.manifests.clear();
+    this.instructionCache.clear();
+    this.resourceCache.clear();
     this.discover();
   }
 

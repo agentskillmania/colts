@@ -157,6 +157,60 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       expect(manifest!.description).toContain('This is a folded');
       expect(manifest!.description).toContain('description');
     });
+
+    it('应能解析包含特殊字符的描述', () => {
+      const frontmatter = [
+        'name: special-skill',
+        'description: "Skill with: colons, \\"quotes\\", and [brackets]"',
+      ].join('\n');
+
+      createSkillDir(tempDir, 'special', frontmatter, '# Body');
+
+      provider = new FilesystemSkillProvider([tempDir]);
+      const manifest = provider.getManifest('special-skill');
+
+      expect(manifest).toBeDefined();
+      expect(manifest!.description).toContain('colons');
+      expect(manifest!.description).toContain('quotes');
+      expect(manifest!.description).toContain('brackets');
+    });
+
+    it('应能处理 YAML 解析失败的情况', () => {
+      // 创建一个无效的 YAML frontmatter
+      const frontmatter = [
+        'name: invalid-yaml',
+        'description: Test',
+        'invalid: [unclosed bracket', // 未闭合的括号
+      ].join('\n');
+
+      createSkillDir(tempDir, 'invalid', frontmatter, '# Body');
+
+      // 不应该抛出错误，而是返回空 frontmatter
+      provider = new FilesystemSkillProvider([tempDir]);
+      const skills = provider.listSkills();
+
+      // 由于 YAML 解析失败，name 和 description 可能为空，导致验证失败
+      // 所以该 skill 可能不会被加载
+      expect(skills.length).toBe(0); // 因为 name 和 description 为空，被过滤掉了
+    });
+
+    it('应能解析包含数字和布尔值的 frontmatter', () => {
+      const frontmatter = [
+        'name: numeric-skill',
+        'description: Version 2.5 skill',
+        'version: 2.5',
+        'enabled: true',
+      ].join('\n');
+
+      createSkillDir(tempDir, 'numeric', frontmatter, '# Body');
+
+      provider = new FilesystemSkillProvider([tempDir]);
+      const manifest = provider.getManifest('numeric-skill');
+
+      expect(manifest).toBeDefined();
+      expect(manifest!.name).toBe('numeric-skill');
+      expect(manifest!.description).toBe('Version 2.5 skill');
+    });
   });
 
   describe('loadInstructions', () => {
@@ -486,6 +540,72 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe('real');
+    });
+  });
+
+  describe('缓存机制', () => {
+    it('应缓存指令内容避免重复读取磁盘', async () => {
+      createSkillDir(
+        tempDir,
+        'cached',
+        'name: cached-skill\ndescription: Cached',
+        '# Instructions'
+      );
+
+      provider = new FilesystemSkillProvider([tempDir]);
+
+      // 第一次加载（从磁盘读取）
+      const content1 = await provider.loadInstructions('cached-skill');
+      expect(content1).toBe('# Instructions');
+
+      // 第二次加载（应从缓存读取）
+      const content2 = await provider.loadInstructions('cached-skill');
+      expect(content2).toBe('# Instructions');
+
+      // 两次返回相同内容
+      expect(content1).toBe(content2);
+    });
+
+    it('应缓存资源文件内容', async () => {
+      createSkillDir(tempDir, 'res-cached', 'name: res-cached\ndescription: Cached', '# Body', {
+        'data.txt': 'resource data',
+      });
+
+      provider = new FilesystemSkillProvider([tempDir]);
+
+      // 第一次加载
+      const content1 = await provider.loadResource('res-cached', 'data.txt');
+      expect(content1).toBe('resource data');
+
+      // 第二次加载（应从缓存读取）
+      const content2 = await provider.loadResource('res-cached', 'data.txt');
+      expect(content2).toBe('resource data');
+
+      expect(content1).toBe(content2);
+    });
+
+    it('refresh() 应清除所有缓存', async () => {
+      createSkillDir(
+        tempDir,
+        'refresh-test',
+        'name: refresh-test\ndescription: Test',
+        '# Original'
+      );
+
+      provider = new FilesystemSkillProvider([tempDir]);
+
+      // 加载并缓存
+      const content1 = await provider.loadInstructions('refresh-test');
+      expect(content1).toBe('# Original');
+
+      // 修改文件（模拟外部更新）
+      const skillPath = join(tempDir, 'refresh-test', 'SKILL.md');
+      writeFileSync(skillPath, '---\nname: refresh-test\ndescription: Test\n---\n# Updated');
+
+      // refresh 后应返回新内容（refresh 会清除缓存和 manifest，重新扫描）
+      provider.refresh();
+      const content2 = await provider.loadInstructions('refresh-test');
+      expect(content2).toBe('# Updated');
     });
   });
 });

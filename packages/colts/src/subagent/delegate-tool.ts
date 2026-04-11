@@ -10,7 +10,7 @@ import type { Tool } from '../tools/registry.js';
 import type { SubAgentConfig, DelegateResult } from './types.js';
 import { createAgentState, addUserMessage } from '../state.js';
 import { AgentRunner } from '../runner.js';
-import type { ILLMProvider } from '../types.js';
+import type { ILLMProvider, IToolRegistry } from '../types.js';
 
 /**
  * Dependency injection interface for the delegate tool
@@ -22,6 +22,8 @@ export interface DelegateToolDeps {
   llmProvider: ILLMProvider;
   /** Default max steps for sub-agents (default: 10) */
   defaultMaxSteps?: number;
+  /** Parent agent's tool registry for inheriting tool implementations */
+  parentToolRegistry: IToolRegistry;
 }
 
 /**
@@ -46,13 +48,14 @@ export interface DelegateToolDeps {
  * const delegateTool = createDelegateTool({
  *   subAgentConfigs: subAgents,
  *   llmProvider: myLLMClient,
+ *   parentToolRegistry: parentRegistry,
  * });
  *
  * registry.register(delegateTool);
  * ```
  */
 export function createDelegateTool(deps: DelegateToolDeps): Tool {
-  const { subAgentConfigs, llmProvider, defaultMaxSteps = 10 } = deps;
+  const { subAgentConfigs, llmProvider, defaultMaxSteps = 10, parentToolRegistry } = deps;
 
   return {
     name: 'delegate',
@@ -88,17 +91,36 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
       const subState = createAgentState(subConfig);
       const stateWithTask = addUserMessage(subState, task);
 
-      // Create a runner for the sub-agent
+      // Build sub-agent tools from parent registry
+      const subAgentTools: Tool[] = [];
+      const canDelegate = config.allowDelegation ?? false;
+
+      for (const toolDef of config.config.tools) {
+        // Skip delegate tool if sub-agent is not allowed to delegate
+        if (toolDef.name === 'delegate' && !canDelegate) {
+          continue;
+        }
+
+        // Look up tool implementation from parent registry
+        const parentTool = parentToolRegistry.get(toolDef.name);
+        if (parentTool) {
+          // Use the parent's tool implementation (including execute function)
+          subAgentTools.push({
+            name: parentTool.name,
+            description: parentTool.description,
+            parameters: parentTool.parameters,
+            execute: parentTool.execute,
+          });
+        }
+        // If tool not found in parent, it's not added (sub-agent won't have access)
+      }
+
+      // Create a runner for the sub-agent with real tool implementations
       const subRunner = new AgentRunner({
         model: 'sub-agent',
         llmClient: llmProvider,
         maxSteps: config.maxSteps ?? defaultMaxSteps,
-        tools: config.config.tools.map((toolDef) => ({
-          name: toolDef.name,
-          description: toolDef.description,
-          parameters: z.object({}).passthrough(),
-          execute: async () => 'Tool not implemented',
-        })),
+        tools: subAgentTools,
       });
 
       // Run until completion
