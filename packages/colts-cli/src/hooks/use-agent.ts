@@ -1,57 +1,57 @@
 /**
- * @fileoverview Agent 交互 Hook — 管理 Agent 对话、执行模式和消息流
+ * @fileoverview Agent interaction hook — manages agent conversation, execution modes, and message flow
  *
- * 提供与 AgentRunner 交互的核心逻辑，包括：
- * - 消息发送和接收（支持流式传输）
- * - 执行模式切换（run / step / advance）
- * - 命令解析（/run, /step, /advance, /clear, /help, /skill <name>）
+ * Provides core logic for interacting with AgentRunner, including:
+ * - Message sending and receiving (with streaming support)
+ * - Execution mode switching (run / step / advance)
+ * - Command parsing (/run, /step, /advance, /clear, /help, /skill <name>)
  */
 
 import { useState, useCallback } from 'react';
 import type { AgentRunner, AgentState, ISkillProvider } from '@agentskillmania/colts';
 
 /**
- * 执行模式
+ * Execution mode
  *
- * - run: 完整运行（runStream），自动循环直到完成
- * - step: 单步执行（stepStream），一次 ReAct 周期
- * - advance: 微步执行（advanceStream），一次相位推进
+ * - run: Full run (runStream), auto-loops until completion
+ * - step: Single step (stepStream), one ReAct cycle
+ * - advance: Micro-step (advanceStream), one phase advancement
  */
 export type ExecutionMode = 'run' | 'step' | 'advance';
 
 /**
- * 聊天消息
+ * Chat message
  */
 export interface ChatMessage {
-  /** 消息唯一标识 */
+  /** Unique message identifier */
   id: string;
-  /** 角色 */
+  /** Role */
   role: 'user' | 'assistant' | 'system';
-  /** 消息内容 */
+  /** Message content */
   content: string;
-  /** 时间戳（毫秒） */
+  /** Timestamp in milliseconds */
   timestamp: number;
-  /** 是否正在流式输出 */
+  /** Whether currently streaming output */
   isStreaming?: boolean;
 }
 
 /**
- * 命令解析结果
+ * Command parse result
  */
 export interface ParsedCommand {
-  /** 命令类型 */
+  /** Command type */
   type: 'mode-run' | 'mode-step' | 'mode-advance' | 'clear' | 'help' | 'skill' | 'message';
-  /** 原始输入 */
+  /** Raw input */
   raw: string;
-  /** Skill 名称（仅当 type 为 'skill' 时有值） */
+  /** Skill name (only set when type is 'skill') */
   skillName?: string;
 }
 
 /**
- * 解析用户输入命令
+ * Parse user input as a command
  *
- * @param input - 用户输入的原始文本
- * @returns 解析后的命令对象
+ * @param input - Raw user input text
+ * @returns Parsed command object
  */
 export function parseCommand(input: string): ParsedCommand {
   const trimmed = input.trim();
@@ -68,46 +68,46 @@ export function parseCommand(input: string): ParsedCommand {
 }
 
 /**
- * useAgent Hook 的返回值
+ * Return value of useAgent hook
  */
 export interface UseAgentReturn {
-  /** 当前消息列表 */
+  /** Current message list */
   messages: ChatMessage[];
-  /** 当前执行模式 */
+  /** Current execution mode */
   mode: ExecutionMode;
-  /** 是否正在运行 */
+  /** Whether currently running */
   isRunning: boolean;
-  /** 当前 Agent 状态 */
+  /** Current agent state */
   state: AgentState | null;
-  /** 发送消息或命令 */
+  /** Send a message or command */
   sendMessage: (input: string) => Promise<void>;
-  /** 设置执行模式 */
+  /** Set execution mode */
   setMode: (mode: ExecutionMode) => void;
-  /** 清空消息 */
+  /** Clear messages */
   clearMessages: () => void;
 }
 
 /**
- * Agent 交互 Hook
+ * Agent interaction hook
  *
- * 管理与 AgentRunner 的对话交互。支持三种执行模式：
- * - run: 完整运行，自动循环直到完成
- * - step: 单步执行，一次 ReAct 周期
- * - advance: 微步执行，一次相位推进
+ * Manages conversation with AgentRunner. Supports three execution modes:
+ * - run: Full run, auto-loops until completion
+ * - step: Single step, one ReAct cycle
+ * - advance: Micro-step, one phase advancement
  *
- * @param runner - AgentRunner 实例（可为 null）
- * @param initialState - 初始 AgentState（可为 null）
- * @param skillProvider - Skill 提供者（可选，用于 /skill 命令）
- * @returns Agent 交互状态和操作方法
+ * @param runner - AgentRunner instance (can be null)
+ * @param initialState - Initial AgentState (can be null)
+ * @param skillProvider - Skill provider (optional, for /skill command)
+ * @returns Agent interaction state and action methods
  *
  * @example
  * ```tsx
  * const { messages, mode, isRunning, sendMessage } = useAgent(runner, state);
  *
- * // 发送消息
+ * // Send a message
  * await sendMessage('Hello!');
  *
- * // 切换模式
+ * // Switch mode
  * await sendMessage('/step');
  * ```
  */
@@ -121,28 +121,28 @@ export function useAgent(
   const [isRunning, setIsRunning] = useState(false);
   const [state, setState] = useState<AgentState | null>(initialState);
 
-  /** 清空消息 */
+  /** Clear messages */
   const clearMessages = useCallback(() => {
     setMessages([]);
   }, []);
 
   /**
-   * 发送消息或执行命令
+   * Send a message or execute a command
    *
-   * 支持以下命令：
-   * - /run - 切换到完整运行模式
-   * - /step - 切换到单步模式
-   * - /advance - 切换到微步模式
-   * - /clear - 清空消息
-   * - /help - 显示帮助信息
+   * Supported commands:
+   * - /run - Switch to full run mode
+   * - /step - Switch to step mode
+   * - /advance - Switch to advance mode
+   * - /clear - Clear messages
+   * - /help - Show help
    *
-   * @param input - 用户输入
+   * @param input - User input
    */
   const sendMessage = useCallback(
     async (input: string) => {
       const command = parseCommand(input);
 
-      // 处理命令
+      // Handle command
       switch (command.type) {
         case 'mode-run':
           setMode('run');
@@ -151,7 +151,7 @@ export function useAgent(
             {
               id: Date.now().toString(),
               role: 'system',
-              content: '切换到 RUN 模式',
+              content: 'Switched to RUN mode',
               timestamp: Date.now(),
             },
           ]);
@@ -164,7 +164,7 @@ export function useAgent(
             {
               id: Date.now().toString(),
               role: 'system',
-              content: '切换到 STEP 模式',
+              content: 'Switched to STEP mode',
               timestamp: Date.now(),
             },
           ]);
@@ -177,7 +177,7 @@ export function useAgent(
             {
               id: Date.now().toString(),
               role: 'system',
-              content: '切换到 ADVANCE 模式',
+              content: 'Switched to ADVANCE mode',
               timestamp: Date.now(),
             },
           ]);
@@ -194,14 +194,14 @@ export function useAgent(
               id: Date.now().toString(),
               role: 'system',
               content:
-                '可用命令：/run（完整运行） /step（单步） /advance（微步） /skill <name>（加载技能） /clear（清空） /help（帮助）',
+                'Commands: /run (full run) /step (single step) /advance (micro-step) /skill <name> (load skill) /clear (clear) /help (help)',
               timestamp: Date.now(),
             },
           ]);
           return;
 
         case 'skill': {
-          // 加载 Skill 指令并作为系统消息注入
+          // Load skill instructions and inject as system message
           const skillName = command.skillName;
           if (!skillName) {
             setMessages((prev) => [
@@ -209,7 +209,7 @@ export function useAgent(
               {
                 id: Date.now().toString(),
                 role: 'system',
-                content: '用法：/skill <name>',
+                content: 'Usage: /skill <name>',
                 timestamp: Date.now(),
               },
             ]);
@@ -222,7 +222,7 @@ export function useAgent(
               {
                 id: Date.now().toString(),
                 role: 'system',
-                content: 'Skill 提供者未配置',
+                content: 'Skill provider not configured',
                 timestamp: Date.now(),
               },
             ]);
@@ -241,7 +241,7 @@ export function useAgent(
                 {
                   id: Date.now().toString(),
                   role: 'system',
-                  content: `Skill '${skillName}' 未找到。可用 Skill：${available || '无'}`,
+                  content: `Skill '${skillName}' not found. Available: ${available || 'none'}`,
                   timestamp: Date.now(),
                 },
               ]);
@@ -254,7 +254,7 @@ export function useAgent(
               {
                 id: Date.now().toString(),
                 role: 'system',
-                content: `Skill '${skillName}' 已加载（${instructions.length} 字符）`,
+                content: `Skill '${skillName}' loaded (${instructions.length} chars)`,
                 timestamp: Date.now(),
               },
               {
@@ -271,7 +271,7 @@ export function useAgent(
               {
                 id: Date.now().toString(),
                 role: 'system',
-                content: `加载 Skill 失败：${errorMsg}`,
+                content: `Failed to load skill: ${errorMsg}`,
                 timestamp: Date.now(),
               },
             ]);
@@ -289,14 +289,14 @@ export function useAgent(
           {
             id: Date.now().toString(),
             role: 'system',
-            content: 'Agent 未就绪，请检查配置',
+            content: 'Agent not ready, check configuration',
             timestamp: Date.now(),
           },
         ]);
         return;
       }
 
-      // 添加用户消息
+      // Add user message
       const userMsg: ChatMessage = {
         id: Date.now().toString(),
         role: 'user',
@@ -321,7 +321,7 @@ export function useAgent(
           {
             id: (Date.now() + 2).toString(),
             role: 'system',
-            content: `错误: ${errorMsg}`,
+            content: `Error: ${errorMsg}`,
             timestamp: Date.now(),
           },
         ]);
@@ -336,14 +336,14 @@ export function useAgent(
 }
 
 /**
- * 以 run 模式执行 Agent（流式）
+ * Execute agent in run mode (streaming)
  *
- * 使用 chatStream 进行流式对话，实时更新助手消息。
+ * Uses chatStream for streaming conversation, updating assistant messages in real time.
  *
- * @param runner - AgentRunner 实例
- * @param currentState - 当前 Agent 状态
- * @param setMessages - 消息状态更新函数
- * @param setState - Agent 状态更新函数
+ * @param runner - AgentRunner instance
+ * @param currentState - Current agent state
+ * @param setMessages - Message state setter
+ * @param setState - Agent state setter
  */
 async function executeRunWithStreaming(
   runner: AgentRunner,
@@ -384,7 +384,7 @@ async function executeRunWithStreaming(
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsg.id
-              ? { ...m, content: `错误: ${chunk.error}`, isStreaming: false }
+              ? { ...m, content: `Error: ${chunk.error}`, isStreaming: false }
               : m
           )
         );
@@ -394,21 +394,21 @@ async function executeRunWithStreaming(
     const errorMsg = error instanceof Error ? error.message : String(error);
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === assistantMsg.id ? { ...m, content: `错误: ${errorMsg}`, isStreaming: false } : m
+        m.id === assistantMsg.id ? { ...m, content: `Error: ${errorMsg}`, isStreaming: false } : m
       )
     );
   }
 }
 
 /**
- * 以 step 模式执行 Agent（流式）
+ * Execute agent in step mode (streaming)
  *
- * 使用 stepStream 进行单步执行。
+ * Uses stepStream for single-step execution.
  *
- * @param runner - AgentRunner 实例
- * @param currentState - 当前 Agent 状态
- * @param setMessages - 消息状态更新函数
- * @param setState - Agent 状态更新函数
+ * @param runner - AgentRunner instance
+ * @param currentState - Current agent state
+ * @param setMessages - Message state setter
+ * @param setState - Agent state setter
  */
 async function executeStepWithStreaming(
   runner: AgentRunner,
@@ -446,7 +446,7 @@ async function executeStepWithStreaming(
           {
             id: (Date.now() + Math.random()).toString(),
             role: 'system',
-            content: `调用工具: ${event.action.tool}`,
+            content: `Tool call: ${event.action.tool}`,
             timestamp: Date.now(),
           },
         ]);
@@ -455,7 +455,7 @@ async function executeStepWithStreaming(
       result = await gen.next();
     }
 
-    // 最终结果
+    // Final result
     if (result.done && result.value) {
       const { state: newState } = result.value;
       setState(newState);
@@ -473,21 +473,21 @@ async function executeStepWithStreaming(
     const errorMsg = error instanceof Error ? error.message : String(error);
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === assistantMsg.id ? { ...m, content: `错误: ${errorMsg}`, isStreaming: false } : m
+        m.id === assistantMsg.id ? { ...m, content: `Error: ${errorMsg}`, isStreaming: false } : m
       )
     );
   }
 }
 
 /**
- * 以 advance 模式执行 Agent（流式）
+ * Execute agent in advance mode (streaming)
  *
- * 使用 advanceStream 进行微步执行。
+ * Uses advanceStream for micro-step execution.
  *
- * @param runner - AgentRunner 实例
- * @param currentState - 当前 Agent 状态
- * @param setMessages - 消息状态更新函数
- * @param setState - Agent 状态更新函数
+ * @param runner - AgentRunner instance
+ * @param currentState - Current agent state
+ * @param setMessages - Message state setter
+ * @param setState - Agent state setter
  */
 async function executeAdvanceWithStreaming(
   runner: AgentRunner,
@@ -495,7 +495,7 @@ async function executeAdvanceWithStreaming(
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   setState: React.Dispatch<React.SetStateAction<AgentState | null>>
 ): Promise<void> {
-  // advance 需要外部管理 ExecutionState，此处创建临时状态
+  // advance requires external ExecutionState management, create a temporary one here
   const { createExecutionState } = await import('@agentskillmania/colts');
   const execState = createExecutionState();
 
@@ -529,7 +529,7 @@ async function executeAdvanceWithStreaming(
           {
             id: (Date.now() + Math.random()).toString(),
             role: 'system',
-            content: `相位: ${event.from.type} -> ${event.to.type}`,
+            content: `Phase: ${event.from.type} -> ${event.to.type}`,
             timestamp: Date.now(),
           },
         ]);
@@ -538,7 +538,7 @@ async function executeAdvanceWithStreaming(
       result = await gen.next();
     }
 
-    // 最终结果
+    // Final result
     if (result.done && result.value) {
       const { state: newState } = result.value;
       setState(newState);
@@ -551,7 +551,7 @@ async function executeAdvanceWithStreaming(
     const errorMsg = error instanceof Error ? error.message : String(error);
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === assistantMsg.id ? { ...m, content: `错误: ${errorMsg}`, isStreaming: false } : m
+        m.id === assistantMsg.id ? { ...m, content: `Error: ${errorMsg}`, isStreaming: false } : m
       )
     );
   }

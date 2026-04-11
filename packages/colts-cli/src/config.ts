@@ -1,19 +1,19 @@
 /**
- * @fileoverview 配置管理 — 使用 settings-yaml 读取配置
+ * @fileoverview Configuration management — uses settings-yaml Settings class for config read/write
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { Settings, mkdirp } from '@agentskillmania/settings-yaml';
+import { Settings } from '@agentskillmania/settings-yaml';
 import type { AppConfig } from './app.js';
 
-/** 配置文件默认路径 */
+/** Default path for global configuration directory */
 const CONFIG_DIR = path.join(os.homedir(), '.agentskillmania', 'colts');
 const CONFIG_FILE = 'config.yaml';
 
 /**
- * colts-cli 配置结构
+ * colts-cli configuration structure
  */
 export interface ColtsConfig extends Record<string, unknown> {
   llm?: {
@@ -40,7 +40,7 @@ export interface ColtsConfig extends Record<string, unknown> {
 }
 
 /**
- * 默认配置 YAML
+ * Default configuration YAML
  */
 const DEFAULT_CONFIG_YAML = `llm:
   provider: openai
@@ -55,61 +55,61 @@ persistence:
 `;
 
 /**
- * 加载配置的选项
+ * Options for loading configuration
  */
 export interface LoadConfigOptions {
-  /** 覆盖全局配置目录（测试用） */
+  /** Override global config directory (for testing) */
   globalDir?: string;
 }
 
 /**
- * 查找配置文件路径
+ * Find configuration file path
  *
- * 查找顺序：./colts.yaml > {globalDir}/config.yaml
+ * Search order: ./colts.yaml > {globalDir}/config.yaml
  */
 async function findConfigPath(globalDir?: string): Promise<string | null> {
-  // 1. 本地项目配置
+  // 1. Local project config
   const localPath = path.resolve('colts.yaml');
   try {
     await fs.access(localPath);
     return localPath;
   } catch {
-    // 本地配置不存在，继续查找
+    // Local config not found, continue searching
   }
 
-  // 2. 全局配置
+  // 2. Global config
   const dir = globalDir ?? CONFIG_DIR;
   const globalPath = path.join(dir, CONFIG_FILE);
   try {
     await fs.access(globalPath);
     return globalPath;
   } catch {
-    // 全局配置也不存在
+    // Global config not found either
   }
 
   return null;
 }
 
 /**
- * 获取全局配置文件路径
+ * Get global config file path
  */
 function getGlobalConfigPath(globalDir?: string): string {
   return path.join(globalDir ?? CONFIG_DIR, CONFIG_FILE);
 }
 
 /**
- * 检查配置是否有效（包含必要的 LLM 配置）
+ * Check if config has required LLM settings
  */
 function isValidConfig(config: ColtsConfig): boolean {
   return !!(config.llm?.apiKey && config.llm?.provider);
 }
 
 /**
- * 加载配置
+ * Load configuration
  *
- * 优先从配置文件读取，没有配置文件时返回未配置状态。
+ * Reads from config file if found, returns unconfigured state otherwise.
  *
- * @param options - 加载选项（测试时可注入 globalDir）
+ * @param options - Load options (inject globalDir for testing)
  */
 export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig> {
   const configPath = await findConfigPath(options?.globalDir);
@@ -142,11 +142,14 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
 }
 
 /**
- * 保存配置
+ * Save a configuration value
  *
- * @param keyPath - 要更新的配置项路径（支持嵌套路径，如 "llm.provider"）
- * @param value - 配置值
- * @param options - 保存选项（测试时可注入 globalDir）
+ * Uses the Settings class to read, update, and persist config.
+ * Creates the config file with defaults if it doesn't exist yet.
+ *
+ * @param keyPath - Dot-separated config key path (e.g. "llm.provider")
+ * @param value - Config value to set
+ * @param options - Save options (inject globalDir for testing)
  */
 export async function saveConfig(
   keyPath: string,
@@ -154,31 +157,22 @@ export async function saveConfig(
   options?: { globalDir?: string }
 ): Promise<void> {
   const configPath = getGlobalConfigPath(options?.globalDir);
+  const settings = new Settings<ColtsConfig>(configPath);
 
-  // 确保目录存在
-  await mkdirp(path.dirname(configPath));
+  // Initialize with defaults, creating the file if it doesn't exist
+  await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
 
-  // 读取现有配置或使用空对象
-  let existing: Record<string, unknown> = {};
-  try {
-    const content = await fs.readFile(configPath, 'utf-8');
-    const yaml = await import('js-yaml');
-    existing = yaml.load(content) as Record<string, unknown>;
-  } catch {
-    // 文件不存在，使用空对象
-  }
-
-  // 按点号路径设置值
-  setNestedValue(existing, keyPath, value);
-
-  // 写入文件
-  const yaml = await import('js-yaml');
-  const content = yaml.dump(existing);
-  await fs.writeFile(configPath, content, 'utf-8');
+  // Update the value and persist
+  settings.set(keyPath, value);
+  await settings.save();
 }
 
 /**
- * 按点号分隔路径设置嵌套对象的值
+ * Set a nested value in an object by dot-separated path
+ *
+ * @param obj - Target object to mutate
+ * @param keyPath - Dot-separated key path (e.g. "llm.provider")
+ * @param value - Value to set
  */
 export function setNestedValue(obj: Record<string, unknown>, keyPath: string, value: string): void {
   const keys = keyPath.split('.');

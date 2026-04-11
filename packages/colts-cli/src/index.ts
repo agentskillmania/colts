@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @fileoverview colts-cli 入口 — 启动 ink 终端应用
+ * @fileoverview colts-cli entry point — starts the ink terminal application
  */
 
 import React from 'react';

@@ -1,5 +1,5 @@
 /**
- * @fileoverview ink 根组件 — TUI 主入口
+ * @fileoverview Root ink component — TUI main entry point
  */
 
 import React from 'react';
@@ -7,9 +7,9 @@ import { Box, Text, useApp, useInput } from 'ink';
 import { theme } from './utils/theme.js';
 
 export interface AppConfig {
-  /** 是否已有有效配置（LLM provider + apiKey） */
+  /** Whether a valid config exists (LLM provider + apiKey) */
   hasValidConfig: boolean;
-  /** LLM 配置 */
+  /** LLM configuration */
   llm?: {
     provider: string;
     apiKey: string;
@@ -23,9 +23,9 @@ interface AppProps {
 }
 
 /**
- * colts-cli 根组件
+ * colts-cli root component
  *
- * @param props - 应用配置
+ * @param props - Application configuration
  */
 export function App({ config }: AppProps) {
   const { exit } = useApp();

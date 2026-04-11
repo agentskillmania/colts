@@ -1,8 +1,8 @@
 /**
- * @fileoverview Events — 事件面板组件
+ * @fileoverview Events — Event panel component
  *
- * 显示 Agent 执行过程中的事件流，包括相位变化、工具调用、
- * Token 输出、压缩等事件。
+ * Displays the event stream during agent execution, including phase changes,
+ * tool calls, token output, compression, and other events.
  */
 
 import React from 'react';
@@ -11,16 +11,16 @@ import { theme } from '../utils/theme.js';
 import type { DisplayEvent } from '../hooks/use-events.js';
 
 /**
- * Events 属性
+ * Events props
  */
 interface EventsProps {
-  /** 事件列表 */
+  /** Event list */
   events: DisplayEvent[];
-  /** 面板高度（可选） */
+  /** Panel height (optional) */
   height?: number;
 }
 
-/** 事件类型到颜色的映射 */
+/** Event type to color mapping */
 const EVENT_COLORS: Record<string, string> = {
   'phase-change': theme.info,
   token: theme.dim,
@@ -29,10 +29,10 @@ const EVENT_COLORS: Record<string, string> = {
   error: theme.error,
   compressing: theme.warning,
   compressed: theme.warning,
-  // Skill 事件
+  // Skill events
   'skill:loading': theme.warning,
   'skill:loaded': theme.success,
-  // Subagent 事件
+  // Sub-agent events
   'subagent:start': theme.info,
   'subagent:token': theme.dim,
   'subagent:step:end': theme.dim,
@@ -40,22 +40,22 @@ const EVENT_COLORS: Record<string, string> = {
 };
 
 /**
- * 获取事件类型的显示颜色
+ * Get display color for an event type
  *
- * @param type - 事件类型
- * @returns 颜色名称
+ * @param type - Event type
+ * @returns Color name
  */
 function getEventColor(type: string): string {
   return EVENT_COLORS[type] ?? theme.dim;
 }
 
 /**
- * 事件面板组件
+ * Event panel component
  *
- * 以列表形式显示执行事件，每个事件带有类型对应的颜色标识。
+ * Displays execution events as a list, each with a color indicator based on event type.
  *
- * @param props - 组件属性
- * @returns 渲染的事件面板
+ * @param props - Component props
+ * @returns Rendered event panel
  *
  * @example
  * ```tsx

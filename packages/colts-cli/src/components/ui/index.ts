@@ -1,5 +1,5 @@
 /**
- * @fileoverview UI 组件索引 — 可复用基础组件的统一导出
+ * @fileoverview UI component index — unified export for reusable base components
  */
 
 export { StatusIndicator } from './status-indicator.js';

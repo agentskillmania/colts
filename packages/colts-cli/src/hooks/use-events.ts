@@ -1,39 +1,39 @@
 /**
- * @fileoverview Events Hook — 事件流的缓冲管理和格式化
+ * @fileoverview Events Hook — Event stream buffering and formatting
  *
- * 管理来自 Agent 执行的事件流，支持 100ms 批量渲染以避免终端闪烁。
- * 将 StreamEvent 转换为可显示的 DisplayEvent 格式。
+ * Manages event streams from agent execution with 100ms batch rendering to prevent terminal flickering.
+ * Converts StreamEvent to displayable DisplayEvent format.
  */
 
 import { useState, useCallback, useRef } from 'react';
 import type { StreamEvent } from '@agentskillmania/colts';
 
 /**
- * 可显示的事件
+ * Displayable event
  */
 export interface DisplayEvent {
-  /** 事件唯一标识 */
+  /** Unique event identifier */
   id: string;
-  /** 事件类型 */
+  /** Event type */
   type: string;
-  /** 格式化后的显示文本 */
+  /** Formatted display text */
   text: string;
-  /** 时间戳（毫秒） */
+  /** Timestamp in milliseconds */
   timestamp: number;
-  /** 缩进层级（用于层级展示） */
+  /** Indentation level (for hierarchical display) */
   indent?: number;
 }
 
-/** 事件批量渲染的延迟时间（毫秒） */
+/** Batch rendering delay in milliseconds */
 const BATCH_DELAY_MS = 100;
 
 /**
- * 格式化 StreamEvent 为可显示文本
+ * Format a StreamEvent as displayable text
  *
- * 根据事件类型生成人类可读的描述。
+ * Generates human-readable descriptions based on event type.
  *
- * @param event - 原始 StreamEvent
- * @returns 格式化后的文本
+ * @param event - Raw StreamEvent
+ * @returns Formatted text
  */
 export function formatEvent(event: StreamEvent): string {
   switch (event.type) {
@@ -56,12 +56,12 @@ export function formatEvent(event: StreamEvent): string {
       return 'Compressing context...';
     case 'compressed':
       return `Compressed: ${event.removedCount} messages`;
-    // Skill 事件
+    // Skill events
     case 'skill:loading':
       return `Skill loading: ${event.name}...`;
     case 'skill:loaded':
       return `Skill loaded: ${event.name} (${event.tokenCount} chars)`;
-    // Subagent 事件
+    // Sub-agent events
     case 'subagent:start':
       return `[${event.name}] Starting: ${event.task}`;
     case 'subagent:token':
@@ -76,30 +76,30 @@ export function formatEvent(event: StreamEvent): string {
 }
 
 /**
- * useEvents Hook 的返回值
+ * Return value of useEvents hook
  */
 export interface UseEventsReturn {
-  /** 当前事件列表 */
+  /** Current event list */
   events: DisplayEvent[];
-  /** 添加事件（自动批量渲染） */
+  /** Add event (auto batch rendering) */
   addEvent: (event: StreamEvent) => void;
-  /** 清空事件 */
+  /** Clear events */
   clearEvents: () => void;
 }
 
 /**
- * 事件流管理 Hook
+ * Event stream management hook
  *
- * 将 StreamEvent 转为 DisplayEvent，并使用 100ms 定时器批量渲染，
- * 避免高频事件导致终端闪烁。
+ * Converts StreamEvents to DisplayEvents and uses a 100ms timer for batch rendering
+ * to prevent terminal flickering from high-frequency events.
  *
- * @returns 事件管理接口
+ * @returns Event management interface
  *
  * @example
  * ```tsx
  * const { events, addEvent, clearEvents } = useEvents();
  *
- * // 在 Agent 流式执行中添加事件
+ * // Add events during agent streaming execution
  * for await (const event of runner.runStream(state)) {
  *   addEvent(event);
  * }
@@ -110,7 +110,7 @@ export function useEvents(): UseEventsReturn {
   const bufferRef = useRef<DisplayEvent[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** 将缓冲区的事件批量刷新到状态中 */
+  /** Flush buffered events to state in batch */
   const flushEvents = useCallback(() => {
     if (bufferRef.current.length > 0) {
       setEvents((prev) => [...prev, ...bufferRef.current]);
@@ -120,12 +120,12 @@ export function useEvents(): UseEventsReturn {
   }, []);
 
   /**
-   * 添加事件到缓冲区
+   * Add event to buffer
    *
-   * 事件先存入缓冲区，100ms 后批量刷新到状态中。
-   * 如果已有定时器在运行，新事件会在下次刷新时一并处理。
+   * Events are first stored in a buffer and flushed to state after 100ms.
+   * If a timer is already running, new events will be processed in the next flush.
    *
-   * @param event - StreamEvent 事件
+   * @param event - StreamEvent to add
    */
   const addEvent = useCallback(
     (event: StreamEvent) => {
@@ -138,7 +138,7 @@ export function useEvents(): UseEventsReturn {
 
       bufferRef.current.push(displayEvent);
 
-      // 启动批量渲染定时器
+      // Start batch rendering timer
       if (!timerRef.current) {
         timerRef.current = setTimeout(flushEvents, BATCH_DELAY_MS);
       }
@@ -146,7 +146,7 @@ export function useEvents(): UseEventsReturn {
     [flushEvents]
   );
 
-  /** 清空所有事件并取消定时器 */
+  /** Clear all events and cancel timer */
   const clearEvents = useCallback(() => {
     setEvents([]);
     bufferRef.current = [];

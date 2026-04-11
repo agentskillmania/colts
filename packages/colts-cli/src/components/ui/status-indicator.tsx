@@ -1,8 +1,8 @@
 /**
- * @fileoverview StatusIndicator — 可复用的状态指示器组件
+ * @fileoverview StatusIndicator — Reusable status indicator component
  *
- * 根据 type 属性显示不同状态图标和颜色。
- * 支持 loading / success / error / idle 四种状态。
+ * Displays different status icons and colors based on the type prop.
+ * Supports loading / success / error / idle states.
  */
 
 import React from 'react';
@@ -10,16 +10,16 @@ import { Text } from 'ink';
 import { theme } from '../../utils/theme.js';
 
 /**
- * StatusIndicator 属性
+ * StatusIndicator props
  */
 interface StatusIndicatorProps {
-  /** 状态类型 */
+  /** Status type */
   type: 'loading' | 'success' | 'error' | 'idle';
-  /** 显示文字（默认使用 type 值） */
+  /** Display text (defaults to type value) */
   text?: string;
 }
 
-/** 状态图标映射 */
+/** Status icon mapping */
 const STATUS_SYMBOLS: Record<StatusIndicatorProps['type'], string> = {
   loading: '◐',
   success: '✔',
@@ -27,7 +27,7 @@ const STATUS_SYMBOLS: Record<StatusIndicatorProps['type'], string> = {
   idle: '○',
 };
 
-/** 状态颜色映射 */
+/** Status color mapping */
 const STATUS_COLORS: Record<StatusIndicatorProps['type'], string> = {
   loading: theme.warning,
   success: theme.success,
@@ -36,18 +36,18 @@ const STATUS_COLORS: Record<StatusIndicatorProps['type'], string> = {
 };
 
 /**
- * 状态指示器组件
+ * Status indicator component
  *
- * 显示状态图标和文字，常用于表示加载、成功、错误、空闲等状态。
+ * Displays a status icon and text, commonly used for loading, success, error, and idle states.
  *
- * @param props - 组件属性
- * @returns 渲染的状态指示器
+ * @param props - Component props
+ * @returns Rendered status indicator
  *
  * @example
  * ```tsx
- * <StatusIndicator type="loading" text="正在加载..." />
- * <StatusIndicator type="success" text="完成" />
- * <StatusIndicator type="error" text="出错了" />
+ * <StatusIndicator type="loading" text="Loading..." />
+ * <StatusIndicator type="success" text="Done" />
+ * <StatusIndicator type="error" text="Error" />
  * ```
  */
 export function StatusIndicator({ type, text }: StatusIndicatorProps) {

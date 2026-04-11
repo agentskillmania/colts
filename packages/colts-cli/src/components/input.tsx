@@ -1,8 +1,8 @@
 /**
- * @fileoverview Input — 输入框组件
+ * @fileoverview Input — Input box component
  *
- * 底部输入框，显示当前执行模式标签和输入光标。
- * 运行时显示动态指示器。
+ * Bottom input box displaying the current execution mode label and input cursor.
+ * Shows a dynamic indicator when running.
  */
 
 import React, { useState } from 'react';
@@ -12,35 +12,35 @@ import { theme } from '../utils/theme.js';
 import type { ExecutionMode } from '../hooks/use-agent.js';
 
 /**
- * Input 属性
+ * Input props
  */
 interface InputProps {
-  /** 提交回调 */
+  /** Submit callback */
   onSubmit: (value: string) => void;
-  /** 当前执行模式 */
+  /** Current execution mode */
   mode: ExecutionMode;
-  /** 是否正在运行 */
+  /** Whether currently running */
   isRunning: boolean;
 }
 
-/** 模式标签映射 */
+/** Mode label mapping */
 const MODE_LABELS: Record<ExecutionMode, string> = {
   run: 'RUN',
   step: 'STEP',
   advance: 'ADV',
 };
 
-/** 运行指示器 */
+/** Running indicator */
 const RUNNING_INDICATOR = ' ●';
 
 /**
- * 输入框组件
+ * Input box component
  *
- * 显示当前执行模式标签，接收用户输入。
- * 按 Enter 提交输入，运行中显示动态指示器。
+ * Displays the current execution mode label and accepts user input.
+ * Press Enter to submit, shows a dynamic indicator when running.
  *
- * @param props - 组件属性
- * @returns 渲染的输入框
+ * @param props - Component props
+ * @returns Rendered input box
  *
  * @example
  * ```tsx

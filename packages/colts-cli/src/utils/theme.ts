@@ -1,37 +1,37 @@
 /**
- * @fileoverview 语义颜色定义 — 使用 ANSI 前景色，跟随终端主题
+ * @fileoverview Semantic color definitions — uses ANSI foreground colors, follows terminal theme
  *
- * 不使用硬编码背景色，所有颜色为语义化命名。
+ * No hardcoded background colors. All colors use semantic naming.
  */
 
 /**
- * 语义颜色映射
+ * Semantic color map
  *
- * 在终端中自动适配暗色/亮色主题。
- * 使用 chalk 的颜色名称，确保 ANSI 兼容。
+ * Automatically adapts to dark/light terminal themes.
+ * Uses chalk color names for ANSI compatibility.
  */
 export const theme = {
-  /** 成功 — 绿色 */
+  /** Success — green */
   success: 'green',
-  /** 错误 — 红色 */
+  /** Error — red */
   error: 'red',
-  /** 信息 — 青色 */
+  /** Info — cyan */
   info: 'cyan',
-  /** 警告 — 黄色 */
+  /** Warning — yellow */
   warning: 'yellow',
-  /** 工具调用 — 灰色 */
+  /** Tool call — gray */
   tool: 'gray',
-  /** 次要/弱化文字 — 灰色 */
+  /** Secondary/dimmed text — gray */
   dim: 'gray',
-  /** 用户消息 — 蓝色 */
+  /** User message — blue */
   user: 'blue',
-  /** 助手消息 — 白色（默认色） */
+  /** Assistant message — white (default) */
   assistant: 'white',
-  /** 强调 — 品红色 */
+  /** Accent — magenta */
   accent: 'magenta',
 } as const;
 
 /**
- * 颜色类型
+ * Theme color type
  */
 export type ThemeColor = (typeof theme)[keyof typeof theme];

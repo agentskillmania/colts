@@ -1,8 +1,8 @@
 /**
- * @fileoverview SplitPane — 分割面板组件
+ * @fileoverview SplitPane — Split pane component
  *
- * 将终端区域分为上下两个面板，支持自定义比例和标题。
- * 用于同时展示聊天面板和事件面板。
+ * Splits the terminal area into top and bottom panels with customizable ratio and titles.
+ * Used to display the chat panel and event panel simultaneously.
  */
 
 import React from 'react';
@@ -10,29 +10,29 @@ import { Box, Text } from 'ink';
 import { theme } from '../utils/theme.js';
 
 /**
- * SplitPane 属性
+ * SplitPane props
  */
 interface SplitPaneProps {
-  /** 上方面板内容 */
+  /** Top panel content */
   top: React.ReactNode;
-  /** 下方面板内容 */
+  /** Bottom panel content */
   bottom: React.ReactNode;
-  /** 上方面板标题 */
+  /** Top panel title */
   topTitle?: string;
-  /** 下方面板标题 */
+  /** Bottom panel title */
   bottomTitle?: string;
-  /** 上方面板占比（0-1，默认 0.6） */
+  /** Top panel ratio (0-1, default 0.6) */
   topRatio?: number;
 }
 
 /**
- * 分割面板组件
+ * Split pane component
  *
- * 将显示区域分为上下两部分，各自带有标题栏和边框。
- * 常用于同时展示聊天区域和事件日志区域。
+ * Splits the display area into top and bottom sections, each with a title bar and border.
+ * Commonly used to show the chat area and event log area simultaneously.
  *
- * @param props - 组件属性
- * @returns 渲染的分割面板
+ * @param props - Component props
+ * @returns Rendered split pane
  *
  * @example
  * ```tsx
@@ -52,7 +52,7 @@ export function SplitPane({
 }: SplitPaneProps) {
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* 上方面板 */}
+      {/* Top panel */}
       <Box flexDirection="column" flexGrow={1}>
         {topTitle && (
           <Box>
@@ -66,12 +66,12 @@ export function SplitPane({
         </Box>
       </Box>
 
-      {/* 分割线 */}
+      {/* Divider line */}
       <Box>
         <Text color={theme.dim}>{'─'.repeat(40)}</Text>
       </Box>
 
-      {/* 下方面板 */}
+      {/* Bottom panel */}
       <Box flexDirection="column" flexGrow={1}>
         {bottomTitle && (
           <Box>

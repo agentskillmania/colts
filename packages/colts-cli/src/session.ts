@@ -1,55 +1,54 @@
 /**
- * @fileoverview 对话历史管理 — 会话的持久化存储与加载
+ * @fileoverview Conversation history management — session persistence and loading
  *
- * 提供会话的保存、加载、列举和删除功能。
- * 会话以 JSON 文件形式存储在文件系统中，每个会话对应一个文件。
+ * Provides save, load, list, and delete operations for sessions.
+ * Sessions are stored as JSON files on the filesystem, one file per session.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { mkdirp } from '@agentskillmania/settings-yaml';
 import type { AgentState } from '@agentskillmania/colts';
 import { serializeState, deserializeState } from '@agentskillmania/colts';
 
 /**
- * 会话元数据
+ * Session metadata
  */
 export interface SessionMeta {
-  /** 会话唯一标识 */
+  /** Unique session identifier */
   id: string;
-  /** 创建时间戳（毫秒） */
+  /** Creation timestamp in milliseconds */
   createdAt: number;
-  /** 消息数量 */
+  /** Message count */
   messageCount: number;
-  /** 最后一条消息预览（截断至 50 字符） */
+  /** Last message preview (truncated to 50 characters) */
   lastMessage: string;
 }
 
-/** 会话文件默认存储根目录 */
+/** Default session storage root directory */
 const DEFAULT_BASE_DIR = path.join(os.homedir(), '.agentskillmania', 'colts', 'sessions');
 
-/** lastMessage 预览的最大长度 */
+/** Maximum length for lastMessage preview */
 const PREVIEW_MAX_LENGTH = 50;
 
 /**
- * 获取会话存储目录路径
+ * Get session storage directory path
  *
- * @param baseDir - 可选的自定义根目录（测试隔离用）
- * @returns 会话文件存储目录的绝对路径
+ * @param baseDir - Optional custom root directory (for test isolation)
+ * @returns Absolute path to session file storage directory
  */
 export function getSessionDir(baseDir?: string): string {
   return baseDir ?? DEFAULT_BASE_DIR;
 }
 
 /**
- * 列出所有会话及其元数据
+ * List all sessions with metadata
  *
- * 扫描会话目录下的所有 `.json` 文件，提取元数据信息。
- * 如果目录不存在则返回空数组。
+ * Scans all `.json` files in the session directory and extracts metadata.
+ * Returns an empty array if the directory does not exist.
  *
- * @param baseDir - 可选的自定义根目录
- * @returns 按创建时间降序排列的会话元数据列表
+ * @param baseDir - Optional custom root directory
+ * @returns Session metadata list sorted by creation time (newest first)
  */
 export async function listSessions(baseDir?: string): Promise<SessionMeta[]> {
   const sessionDir = getSessionDir(baseDir);
@@ -58,7 +57,7 @@ export async function listSessions(baseDir?: string): Promise<SessionMeta[]> {
   try {
     files = await fs.readdir(sessionDir);
   } catch {
-    // 目录不存在，返回空列表
+    // Directory does not exist, return empty list
     return [];
   }
 
@@ -87,28 +86,28 @@ export async function listSessions(baseDir?: string): Promise<SessionMeta[]> {
         lastMessage: preview,
       });
     } catch {
-      // 文件损坏或格式不正确，跳过该文件
+      // File is corrupted or malformed, skip it
     }
   }
 
-  // 按创建时间降序排列（最新的在前）
+  // Sort by creation time descending (newest first)
   metas.sort((a, b) => b.createdAt - a.createdAt);
 
   return metas;
 }
 
 /**
- * 保存会话到文件
+ * Save a session to file
  *
- * 将 AgentState 序列化为 JSON 并写入文件。
- * 如果会话目录不存在会自动创建。
+ * Serializes an AgentState to JSON and writes it to a file.
+ * Creates the session directory if it doesn't exist.
  *
- * @param state - 要保存的 AgentState
- * @param baseDir - 可选的自定义根目录
+ * @param state - AgentState to save
+ * @param baseDir - Optional custom root directory
  */
 export async function saveSession(state: AgentState, baseDir?: string): Promise<void> {
   const sessionDir = getSessionDir(baseDir);
-  await mkdirp(sessionDir);
+  await fs.mkdir(sessionDir, { recursive: true });
 
   const filePath = path.join(sessionDir, `${state.id}.json`);
   const json = serializeState(state);
@@ -116,14 +115,14 @@ export async function saveSession(state: AgentState, baseDir?: string): Promise<
 }
 
 /**
- * 加载会话
+ * Load a session
  *
- * 从文件中读取并反序列化 AgentState。
+ * Reads and deserializes an AgentState from a file.
  *
- * @param sessionId - 要加载的会话 ID
- * @param baseDir - 可选的自定义根目录
- * @returns 反序列化后的 AgentState
- * @throws 如果会话文件不存在
+ * @param sessionId - Session ID to load
+ * @param baseDir - Optional custom root directory
+ * @returns Deserialized AgentState
+ * @throws If session file does not exist
  */
 export async function loadSession(sessionId: string, baseDir?: string): Promise<AgentState> {
   const sessionDir = getSessionDir(baseDir);
@@ -134,12 +133,12 @@ export async function loadSession(sessionId: string, baseDir?: string): Promise<
 }
 
 /**
- * 删除会话
+ * Delete a session
  *
- * 删除指定会话的持久化文件。如果文件不存在则静默忽略。
+ * Deletes the persisted file for a session. Silently ignores if the file doesn't exist.
  *
- * @param sessionId - 要删除的会话 ID
- * @param baseDir - 可选的自定义根目录
+ * @param sessionId - Session ID to delete
+ * @param baseDir - Optional custom root directory
  */
 export async function deleteSession(sessionId: string, baseDir?: string): Promise<void> {
   const sessionDir = getSessionDir(baseDir);
@@ -148,6 +147,6 @@ export async function deleteSession(sessionId: string, baseDir?: string): Promis
   try {
     await fs.unlink(filePath);
   } catch {
-    // 文件不存在时静默忽略
+    // File doesn't exist, silently ignore
   }
 }
