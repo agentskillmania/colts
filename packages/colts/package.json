@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/yaml": "^1.9.7",
     "@vitest/coverage-v8": "^2.0.0",
     "immer": "^11.1.4",
     "typescript": "^5.0.0",
@@ -43,6 +44,7 @@
   "dependencies": {
     "@agentskillmania/llm-client": "workspace:*",
     "dotenv": "^16.4.0",
+    "yaml": "^2.8.3",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.25.2"
   }

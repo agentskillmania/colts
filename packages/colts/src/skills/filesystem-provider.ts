@@ -6,6 +6,7 @@
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import type { SkillManifest, ISkillProvider } from './types.js';
 
 /**
@@ -16,9 +17,11 @@ const SKILL_FILE = 'SKILL.md';
 /**
  * Parse YAML frontmatter from SKILL.md content
  *
- * Supported formats:
+ * Uses the 'yaml' library for robust parsing, supporting:
  * - Simple key-value pairs: `name: value`
  * - Multiline strings: `description: |` or `description: >`
+ * - Arrays: `tags: [a, b, c]`
+ * - Nested objects (values are converted to strings)
  *
  * @param content - Full SKILL.md file content
  * @returns Parsed result with frontmatter fields and body content
@@ -51,57 +54,28 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
   const bodyStart = afterFirstDelimiter.indexOf('\n', secondDelimiterIndex + 4);
   result.body = bodyStart === -1 ? '' : afterFirstDelimiter.substring(bodyStart + 1);
 
-  // Parse YAML key-value pairs
-  const lines = frontmatterText.split('\n');
-  let currentKey = '';
-  let currentValue = '';
-  let inMultiline = false;
-  // Note: multiline indicator (| or >) is not stored, currently processed uniformly as folded multiline
-
-  for (const line of lines) {
-    if (inMultiline) {
-      // Collect multiline value: ends when indentation decreases or empty line
-      if (line === '' || (!line.startsWith(' ') && !line.startsWith('\t'))) {
-        // End multiline value
-        result.frontmatter[currentKey] = currentValue.trim();
-        inMultiline = false;
-        // Continue processing current line (may be a new key-value pair)
-        const kvMatch = line.match(/^(\w[\w-]*)\s*:\s*(.*)/);
-        if (kvMatch) {
-          currentKey = kvMatch[1];
-          const value = kvMatch[2].trim();
-          if (value === '|' || value === '>') {
-            inMultiline = true;
-            // No need to distinguish | and >, process uniformly
-            currentValue = '';
-          } else {
-            result.frontmatter[currentKey] = value;
-          }
-        }
+  // Parse YAML using the yaml library
+  try {
+    const parsed = parseYaml(frontmatterText) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value === null || value === undefined) {
+        result.frontmatter[key] = '';
+      } else if (typeof value === 'string') {
+        result.frontmatter[key] = value;
+      } else if (Array.isArray(value)) {
+        // Convert arrays to comma-separated strings
+        result.frontmatter[key] = value.join(', ');
+      } else if (typeof value === 'object') {
+        // Convert objects to JSON strings
+        result.frontmatter[key] = JSON.stringify(value);
       } else {
-        // Collect multiline content (strip one level of indentation)
-        const trimmedLine = line.replace(/^ (\s?.*)/, '$1');
-        currentValue += (currentValue ? '\n' : '') + trimmedLine;
-      }
-    } else {
-      const kvMatch = line.match(/^(\w[\w-]*)\s*:\s*(.*)/);
-      if (kvMatch) {
-        currentKey = kvMatch[1];
-        const value = kvMatch[2].trim();
-        if (value === '|' || value === '>') {
-          inMultiline = true;
-          // No need to distinguish | and >, process uniformly
-          currentValue = '';
-        } else {
-          result.frontmatter[currentKey] = value;
-        }
+        // Convert other types to strings
+        result.frontmatter[key] = String(value);
       }
     }
-  }
-
-  // Handle the last multiline value
-  if (inMultiline && currentKey) {
-    result.frontmatter[currentKey] = currentValue.trim();
+  } catch {
+    // YAML parsing failed, fall back to empty frontmatter
+    // This maintains backward compatibility with malformed files
   }
 
   return result;

@@ -157,6 +157,60 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       expect(manifest!.description).toContain('This is a folded');
       expect(manifest!.description).toContain('description');
     });
+
+    it('应能解析包含特殊字符的描述', () => {
+      const frontmatter = [
+        'name: special-skill',
+        'description: "Skill with: colons, \\"quotes\\", and [brackets]"',
+      ].join('\n');
+
+      createSkillDir(tempDir, 'special', frontmatter, '# Body');
+
+      provider = new FilesystemSkillProvider([tempDir]);
+      const manifest = provider.getManifest('special-skill');
+
+      expect(manifest).toBeDefined();
+      expect(manifest!.description).toContain('colons');
+      expect(manifest!.description).toContain('quotes');
+      expect(manifest!.description).toContain('brackets');
+    });
+
+    it('应能处理 YAML 解析失败的情况', () => {
+      // 创建一个无效的 YAML frontmatter
+      const frontmatter = [
+        'name: invalid-yaml',
+        'description: Test',
+        'invalid: [unclosed bracket', // 未闭合的括号
+      ].join('\n');
+
+      createSkillDir(tempDir, 'invalid', frontmatter, '# Body');
+
+      // 不应该抛出错误，而是返回空 frontmatter
+      provider = new FilesystemSkillProvider([tempDir]);
+      const skills = provider.listSkills();
+
+      // 由于 YAML 解析失败，name 和 description 可能为空，导致验证失败
+      // 所以该 skill 可能不会被加载
+      expect(skills.length).toBe(0); // 因为 name 和 description 为空，被过滤掉了
+    });
+
+    it('应能解析包含数字和布尔值的 frontmatter', () => {
+      const frontmatter = [
+        'name: numeric-skill',
+        'description: Version 2.5 skill',
+        'version: 2.5',
+        'enabled: true',
+      ].join('\n');
+
+      createSkillDir(tempDir, 'numeric', frontmatter, '# Body');
+
+      provider = new FilesystemSkillProvider([tempDir]);
+      const manifest = provider.getManifest('numeric-skill');
+
+      expect(manifest).toBeDefined();
+      expect(manifest!.name).toBe('numeric-skill');
+      expect(manifest!.description).toBe('Version 2.5 skill');
+    });
   });
 
   describe('loadInstructions', () => {
