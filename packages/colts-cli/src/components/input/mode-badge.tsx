@@ -1,12 +1,12 @@
 /**
- * @fileoverview 模式标签组件 — 显示当前执行模式
+ * @fileoverview Mode badge component — displays the current execution mode
  */
 
 import React from 'react';
 import { Badge } from '@inkjs/ui';
 
 /**
- * 执行模式
+ * Execution mode type
  */
 export type ExecutionMode = 'run' | 'step' | 'advance';
 
@@ -14,11 +14,11 @@ export type ExecutionMode = 'run' | 'step' | 'advance';
  * ModeBadge props
  */
 interface ModeBadgeProps {
-  /** 当前执行模式 */
+  /** Current execution mode */
   mode: ExecutionMode;
 }
 
-/** 模式与颜色/标签映射 */
+/** Mode to color/label mapping */
 const MODE_CONFIG: Record<ExecutionMode, { color: 'green' | 'yellow' | 'blue'; label: string }> = {
   run: { color: 'green', label: 'RUN' },
   step: { color: 'yellow', label: 'STEP' },
@@ -26,11 +26,11 @@ const MODE_CONFIG: Record<ExecutionMode, { color: 'green' | 'yellow' | 'blue'; l
 };
 
 /**
- * 模式标签组件
+ * Mode badge component
  *
- * 用 @inkjs/ui Badge 渲染当前执行模式标签。
+ * Renders the current execution mode label using @inkjs/ui Badge.
  *
- * @param props - 组件属性
+ * @param props - Component props
  */
 export function ModeBadge({ mode }: ModeBadgeProps) {
   const config = MODE_CONFIG[mode];

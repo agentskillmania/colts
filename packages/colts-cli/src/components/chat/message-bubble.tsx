@@ -1,5 +1,5 @@
 /**
- * @fileoverview 单条消息渲染组件 — 角色标签 + 内容 + 流式游标
+ * @fileoverview Single message rendering component — role label + content + streaming cursor
  */
 
 import React from 'react';
@@ -11,12 +11,12 @@ import type { ChatMessage } from '../../hooks/use-agent.js';
  * MessageBubble props
  */
 interface MessageBubbleProps {
-  /** 消息内容 */
+  /** Message content */
   message: ChatMessage;
 }
 
 /**
- * 角色标签颜色
+ * Role label colors
  */
 const ROLE_COLORS: Record<string, string> = {
   user: theme.user,
@@ -25,7 +25,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 /**
- * 角色显示名称
+ * Role display names
  */
 const ROLE_LABELS: Record<string, string> = {
   user: 'You',
@@ -34,9 +34,9 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 /**
- * 单条消息气泡组件
+ * Single message bubble component
  *
- * 根据角色显示不同颜色标签，内容区域支持流式游标。
+ * Displays different colored labels based on role, with streaming cursor support in the content area.
  */
 export function MessageBubble({ message }: MessageBubbleProps) {
   const color = ROLE_COLORS[message.role] ?? theme.dim;

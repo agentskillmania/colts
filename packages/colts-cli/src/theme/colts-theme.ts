@@ -1,14 +1,14 @@
 /**
- * @fileoverview colts CLI 主题配置 — 基于 @inkjs/ui 的主题扩展
+ * @fileoverview colts CLI theme configuration — theme extension based on @inkjs/ui
  */
 
 import { extendTheme, defaultTheme } from '@inkjs/ui';
 
 /**
- * colts 自定义主题
+ * colts custom theme
  *
- * 在 @inkjs/ui 默认主题基础上，统一组件风格。
- * 所有颜色使用 ANSI 前景色，跟随终端主题。
+ * Extends the @inkjs/ui default theme for consistent component styling.
+ * All colors use ANSI foreground colors, following the terminal theme.
  */
 export const coltsTheme = extendTheme(defaultTheme, {
   components: {

@@ -1,5 +1,5 @@
 /**
- * @fileoverview 工具调用展示卡片 — 工具名 + 参数 + 结果
+ * @fileoverview Tool call display card — tool name + arguments + result
  */
 
 import React from 'react';
@@ -7,16 +7,16 @@ import { Box, Text } from 'ink';
 import { theme } from '../../utils/theme.js';
 
 /**
- * 工具调用数据
+ * Tool call data
  */
 export interface ToolCallData {
-  /** 工具名 */
+  /** Tool name */
   tool: string;
-  /** 调用参数（JSON 字符串或对象） */
+  /** Call arguments (JSON string or object) */
   args?: unknown;
-  /** 工具执行结果 */
+  /** Tool execution result */
   result?: unknown;
-  /** 是否正在执行 */
+  /** Whether the tool is currently running */
   isRunning?: boolean;
 }
 
@@ -24,12 +24,12 @@ export interface ToolCallData {
  * ToolCallCard props
  */
 interface ToolCallCardProps {
-  /** 工具调用数据 */
+  /** Tool call data */
   data: ToolCallData;
 }
 
 /**
- * 截断文本到指定长度
+ * Truncate text to a specified length
  */
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -37,7 +37,7 @@ function truncate(text: string, maxLen: number): string {
 }
 
 /**
- * 格式化参数/结果为可读字符串
+ * Format arguments/results into a readable string
  */
 function formatValue(value: unknown, maxLen = 80): string {
   if (value === undefined || value === null) return '';
@@ -46,10 +46,10 @@ function formatValue(value: unknown, maxLen = 80): string {
 }
 
 /**
- * 工具调用卡片组件
+ * Tool call card component
  *
- * 显示工具名、参数摘要和执行结果。
- * isRunning 时显示 Spinner 文字。
+ * Displays tool name, argument summary, and execution result.
+ * Shows spinner text when isRunning is true.
  */
 export function ToolCallCard({ data }: ToolCallCardProps) {
   return (

@@ -1,5 +1,5 @@
 /**
- * @fileoverview 顶部状态栏 — 版本、模型、运行状态、快捷键提示
+ * @fileoverview Header status bar — version, model, run status, keyboard shortcuts
  */
 
 import React from 'react';
@@ -8,7 +8,7 @@ import { Badge, Spinner } from '@inkjs/ui';
 import { theme } from '../../utils/theme.js';
 
 /**
- * 运行状态
+ * Run status type
  */
 export type RunStatus = 'idle' | 'running' | 'error';
 
@@ -16,15 +16,15 @@ export type RunStatus = 'idle' | 'running' | 'error';
  * HeaderBar props
  */
 interface HeaderBarProps {
-  /** 模型名称 */
+  /** Model name */
   model: string;
-  /** 运行状态 */
+  /** Run status */
   status: RunStatus;
-  /** 右侧面板是否可见 */
+  /** Whether the right panel is visible */
   eventsVisible: boolean;
 }
 
-/** 状态图标映射 */
+/** Status icon mapping */
 const STATUS_CONFIG: Record<RunStatus, { color: 'gray' | 'yellow' | 'red'; label: string }> = {
   idle: { color: 'gray', label: 'Ready' },
   running: { color: 'yellow', label: 'Running' },
@@ -32,12 +32,12 @@ const STATUS_CONFIG: Record<RunStatus, { color: 'gray' | 'yellow' | 'red'; label
 };
 
 /**
- * 顶部状态栏组件
+ * Header status bar component
  *
- * 左侧显示版本号、模型名、运行状态。
- * 右侧显示快捷键提示。
+ * Left side displays version number, model name, and run status.
+ * Right side displays keyboard shortcut hints.
  *
- * @param props - 组件属性
+ * @param props - Component props
  */
 export function HeaderBar({ model, status, eventsVisible }: HeaderBarProps) {
   const statusConfig = STATUS_CONFIG[status];

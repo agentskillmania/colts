@@ -1,5 +1,5 @@
 /**
- * @fileoverview 消息列表容器 — 渲染 ChatMessage[] 列表，包含消息气泡和工具调用卡片
+ * @fileoverview Message list container — renders ChatMessage[] list with message bubbles and tool call cards
  */
 
 import React from 'react';
@@ -12,15 +12,15 @@ import { theme } from '../../utils/theme.js';
  * ChatPanel props
  */
 interface ChatPanelProps {
-  /** 消息列表 */
+  /** Message list */
   messages: ChatMessage[];
 }
 
 /**
- * 聊天面板组件
+ * Chat panel component
  *
- * 渲染所有消息气泡。消息之间有分隔线。
- * 空消息时显示欢迎提示。
+ * Renders all message bubbles with separators between messages.
+ * Shows a welcome prompt when there are no messages.
  */
 export function ChatPanel({ messages }: ChatPanelProps) {
   if (messages.length === 0) {

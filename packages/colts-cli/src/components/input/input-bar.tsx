@@ -1,8 +1,8 @@
 /**
- * @fileoverview 输入栏组件 — 底部命令输入区域
+ * @fileoverview Input bar component — bottom command input area
  *
- * 显示当前模式标签、文本输入框、运行指示器。
- * 运行时禁用输入，显示 Spinner。
+ * Displays the current mode badge, text input, and running indicator.
+ * Disables input while running and shows a Spinner.
  */
 
 import React, { useState } from 'react';
@@ -16,21 +16,21 @@ import { theme } from '../../utils/theme.js';
  * InputBar props
  */
 interface InputBarProps {
-  /** 提交回调 */
+  /** Submit callback */
   onSubmit: (value: string) => void;
-  /** 当前执行模式 */
+  /** Current execution mode */
   mode: ExecutionMode;
-  /** 是否正在运行 */
+  /** Whether the agent is currently running */
   isRunning: boolean;
 }
 
 /**
- * 输入栏组件
+ * Input bar component
  *
- * 底部固定区域。运行中显示 Spinner 并禁用输入，
- * 空闲时接受用户输入。使用 @inkjs/ui 的 TextInput（非受控）。
+ * Fixed bottom area. Shows a Spinner and disables input while running,
+ * accepts user input when idle. Uses @inkjs/ui TextInput (uncontrolled).
  *
- * @param props - 组件属性
+ * @param props - Component props
  */
 export function InputBar({ onSubmit, mode, isRunning }: InputBarProps) {
   const [inputKey, setInputKey] = useState(0);
@@ -38,7 +38,7 @@ export function InputBar({ onSubmit, mode, isRunning }: InputBarProps) {
   const handleSubmit = (value: string) => {
     if (value.trim() && !isRunning) {
       onSubmit(value.trim());
-      // 重新挂载 TextInput 清空内容
+      // Remount TextInput to clear content
       setInputKey((k) => k + 1);
     }
   };

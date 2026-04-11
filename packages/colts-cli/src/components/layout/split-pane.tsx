@@ -1,7 +1,7 @@
 /**
- * @fileoverview 左右分屏容器 — Chat 和 Events 面板的容器
+ * @fileoverview Left-right split pane container — holds Chat and Events panels
  *
- * 左右分屏布局，右侧面板可折叠。折叠后左侧占满宽度。
+ * Horizontal split layout with a collapsible right panel. When collapsed, the left panel takes full width.
  */
 
 import React from 'react';
@@ -12,27 +12,27 @@ import { theme } from '../../utils/theme.js';
  * SplitPane props
  */
 interface SplitPaneProps {
-  /** 左侧内容（Chat 面板） */
+  /** Left content (Chat panel) */
   left: React.ReactNode;
-  /** 右侧内容（Events 面板） */
+  /** Right content (Events panel) */
   right: React.ReactNode;
-  /** 左侧标题 */
+  /** Left panel title */
   leftTitle?: string;
-  /** 右侧标题 */
+  /** Right panel title */
   rightTitle?: string;
-  /** 右侧面板是否可见 */
+  /** Whether the right panel is visible */
   rightVisible?: boolean;
-  /** 左侧占比（0-1，默认 0.6） */
+  /** Left panel width ratio (0-1, default 0.6) */
   leftRatio?: number;
 }
 
 /**
- * 左右分屏容器组件
+ * Left-right split pane container component
  *
- * 使用 `flexDirection="row"` 实现水平分割。
- * 通过 `rightVisible` 控制右侧面板折叠。
+ * Uses `flexDirection="row"` for horizontal splitting.
+ * Controls right panel visibility via `rightVisible`.
  *
- * @param props - 组件属性
+ * @param props - Component props
  */
 export function SplitPane({
   left,
@@ -47,7 +47,7 @@ export function SplitPane({
 
   return (
     <Box flexDirection="row" flexGrow={1}>
-      {/* 左侧面板 */}
+      {/* Left panel */}
       <Box flexDirection="column" width={rightVisible ? leftPct : '100%'}>
         {leftTitle && (
           <Box>
@@ -63,7 +63,7 @@ export function SplitPane({
         </Box>
       </Box>
 
-      {/* 右侧面板（可折叠） */}
+      {/* Right panel (collapsible) */}
       {rightVisible && (
         <>
           <Box flexDirection="column" width={1}>

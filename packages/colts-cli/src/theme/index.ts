@@ -1,5 +1,5 @@
 /**
- * @fileoverview 主题导出
+ * @fileoverview Theme exports
  */
 
 export { coltsTheme } from './colts-theme.js';

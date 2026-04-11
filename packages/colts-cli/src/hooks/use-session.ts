@@ -1,8 +1,8 @@
 /**
- * @fileoverview Session 持久化 hook — 自动保存、恢复 AgentState
+ * @fileoverview Session persistence hook — auto-save and restore AgentState
  *
- * 封装 saveSession/loadSession，提供 React 状态管理。
- * 支持自动保存（state 变化时）和恢复最近 session。
+ * Wraps saveSession/loadSession with React state management.
+ * Supports auto-save (on state change) and restoring the most recent session.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -10,42 +10,42 @@ import type { AgentState } from '@agentskillmania/colts';
 import { saveSession, loadSession, listSessions } from '../session.js';
 
 /**
- * 自动保存延迟（毫秒）
+ * Auto-save delay in milliseconds
  *
- * state 变化后等待 500ms 再保存，避免高频保存。
+ * Waits 500ms after state changes before saving to avoid high-frequency writes.
  */
 const AUTOSAVE_DELAY_MS = 500;
 
 /**
- * useSession hook 返回值
+ * useSession hook return value
  */
 export interface UseSessionReturn {
-  /** 当前 session ID */
+  /** Current session ID */
   sessionId: string | null;
-  /** 是否正在保存 */
+  /** Whether a save is in progress */
   isSaving: boolean;
-  /** 保存当前 state */
+  /** Save current state */
   save: (state: AgentState) => Promise<void>;
-  /** 恢复最近 session */
+  /** Restore the most recent session */
   restoreLatest: () => Promise<AgentState | null>;
-  /** 设置 session ID（state 恢复后调用） */
+  /** Set session ID (called after state restoration) */
   setSessionId: (id: string | null) => void;
 }
 
 /**
- * Session 持久化 hook
+ * Session persistence hook
  *
- * @param baseDir - 可选的自定义存储目录（测试用）
- * @returns Session 管理接口
+ * @param baseDir - Optional custom storage directory (for testing)
+ * @returns Session management interface
  *
  * @example
  * ```tsx
  * const { save, restoreLatest, sessionId } = useSession();
  *
- * // 恢复最近 session
+ * // Restore the most recent session
  * const state = await restoreLatest();
  *
- * // 保存当前 state
+ * // Save current state
  * await save(agentState);
  * ```
  */
@@ -54,7 +54,7 @@ export function useSession(baseDir?: string): UseSessionReturn {
   const [isSaving, setIsSaving] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 清理定时器
+  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
@@ -64,9 +64,9 @@ export function useSession(baseDir?: string): UseSessionReturn {
   }, []);
 
   /**
-   * 保存 AgentState 到文件
+   * Save AgentState to file
    *
-   * @param state - 当前 AgentState
+   * @param state - Current AgentState
    */
   const save = useCallback(
     async (state: AgentState) => {
@@ -75,7 +75,7 @@ export function useSession(baseDir?: string): UseSessionReturn {
         await saveSession(state, baseDir);
         setSessionId(state.id);
       } catch {
-        // 保存失败静默处理，不影响交互
+        // Silently ignore save failures to avoid disrupting interaction
       } finally {
         setIsSaving(false);
       }
@@ -84,18 +84,18 @@ export function useSession(baseDir?: string): UseSessionReturn {
   );
 
   /**
-   * 恢复最近的 session
+   * Restore the most recent session
    *
-   * 从 session 列表中选择最新的一个并加载。
+   * Selects the latest session from the session list and loads it.
    *
-   * @returns AgentState 或 null（无 session 时）
+   * @returns AgentState or null (when no sessions exist)
    */
   const restoreLatest = useCallback(async (): Promise<AgentState | null> => {
     try {
       const sessions = await listSessions(baseDir);
       if (sessions.length === 0) return null;
 
-      const latest = sessions[0]; // 已按时间降序排列
+      const latest = sessions[0]; // Already sorted by time descending
       const state = await loadSession(latest.id, baseDir);
       setSessionId(state.id);
       return state;
@@ -108,14 +108,14 @@ export function useSession(baseDir?: string): UseSessionReturn {
 }
 
 /**
- * 延迟自动保存
+ * Delayed auto-save
  *
- * state 变化后延迟保存，避免高频写入。
+ * Saves state after a delay to avoid high-frequency writes.
  *
- * @param state - 当前 AgentState
- * @param sessionId - 当前 session ID
- * @param saveFn - 保存函数
- * @param timerRef - 定时器 ref
+ * @param state - Current AgentState
+ * @param sessionId - Current session ID
+ * @param saveFn - Save function
+ * @param timerRef - Timer ref
  */
 export function scheduleAutoSave(
   state: AgentState | null,
@@ -124,7 +124,7 @@ export function scheduleAutoSave(
   timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
 ): void {
   if (!state) return;
-  // session ID 不匹配说明是新 state 或未保存过
+  // Mismatched session ID indicates a new state or unsaved state
   if (state.id === sessionId) return;
 
   if (timerRef.current) {

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * @fileoverview colts CLI 入口
+ * @fileoverview colts CLI entry point
  *
- * 加载配置，创建 AgentRunner 和初始 AgentState，渲染 TUI。
+ * Loads configuration, creates AgentRunner and initial AgentState, renders TUI.
  */
 
 import React from 'react';
@@ -30,7 +30,7 @@ async function main() {
     };
     runner = new AgentRunner(runnerOptions);
 
-    // 创建初始 AgentState
+    // Create initial AgentState
     initialState = createAgentState({
       name: config.agent?.name ?? 'colts-agent',
       instructions: config.agent?.instructions ?? 'You are a helpful assistant.',

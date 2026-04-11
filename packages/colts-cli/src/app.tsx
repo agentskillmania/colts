@@ -1,5 +1,5 @@
 /**
- * @fileoverview 根组件 — 路由到主界面或配置引导
+ * @fileoverview Root component — routes to main UI or configuration setup
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -23,19 +23,19 @@ import { theme } from './utils/theme.js';
  * App props
  */
 interface AppProps {
-  /** 应用配置 */
+  /** Application configuration */
   config: AppConfig;
-  /** Agent Runner 实例（可能为 null，如果配置无效） */
+  /** AgentRunner instance (may be null if configuration is invalid) */
   runner: AgentRunner | null;
-  /** 初始 AgentState（可能为 null） */
+  /** Initial AgentState (may be null) */
   initialState?: AgentState | null;
 }
 
 /**
- * 根组件
+ * Root component
  *
- * 根据配置有效性路由到 MainTUI 或配置引导提示。
- * 使用 ThemeProvider 包裹整个应用，统一 @inkjs/ui 组件风格。
+ * Routes to MainTUI or configuration setup prompt based on config validity.
+ * Wraps the entire app with ThemeProvider for consistent @inkjs/ui component styling.
  */
 export function App({ config, runner, initialState }: AppProps) {
   return (
@@ -50,33 +50,33 @@ export function App({ config, runner, initialState }: AppProps) {
 }
 
 /**
- * 主界面
+ * Main UI
  *
- * 包含 HeaderBar + SplitPane（Chat + Events）+ InputBar。
- * 通过 useAgent 管理对话流，useEvents 管理事件面板。
+ * Contains HeaderBar + SplitPane (Chat + Events) + InputBar.
+ * Uses useAgent for conversation flow and useEvents for the events panel.
  */
 function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: AgentRunner; initialState: AgentState | null }) {
   const [eventsVisible, setEventsVisible] = useState(true);
   const { exit } = useApp();
 
-  // 事件面板
+  // Events panel
   const { events, addEvent, clearEvents } = useEvents();
 
-  // Session 持久化
+  // Session persistence
   const { sessionId, save, restoreLatest, setSessionId } = useSession();
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Agent 交互
+  // Agent interaction
   const { messages, mode, isRunning, state, sendMessage, setMode, clearMessages } = useAgent(
     runner,
     initialState,
     undefined,
-    addEvent // 事件转发
+    addEvent // Event forwarding
   );
 
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'error'>('idle');
 
-  // 启动时恢复最近 session
+  // Restore most recent session on startup
   useEffect(() => {
     if (initialState) {
       setSessionId(initialState.id);
@@ -89,10 +89,10 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
     });
   }, []);
 
-  // state 变化自动保存
+  // Auto-save on state changes
   useEffect(() => {
     if (!state || !isRunning) {
-      // 只在非运行时保存（运行中 state 频繁变化）
+      // Only save when not running (state changes frequently during execution)
       if (state && state.id !== sessionId) {
         save(state);
       }
@@ -117,7 +117,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
     async (value: string) => {
       if (!value.trim()) return;
 
-      // 解析模式切换命令
+      // Parse mode switch commands
       const { parseCommand } = await import('./hooks/use-agent.js');
       const cmd = parseCommand(value);
 
@@ -139,7 +139,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
       } catch {
         setRunStatus('error');
       } finally {
-        // 检查是否有错误消息（最后一条是 error system 消息）
+        // Check for error messages (last message is an error system message)
         setRunStatus((prev) => {
           if (prev === 'error') return 'error';
           return 'idle';
@@ -184,10 +184,10 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
 }
 
 /**
- * 配置引导提示
+ * Configuration setup prompt
  *
- * 配置无效时显示，提示用户编辑配置文件或使用向导。
- * Step 10 会实现完整的 SetupWizard 替换此组件。
+ * Displayed when configuration is invalid, prompting the user to edit the config file or use the wizard.
+ * Step 10 will implement a full SetupWizard to replace this component.
  */
 function ConfigPrompt({ configPath }: { configPath?: string }) {
   const { exit } = useApp();

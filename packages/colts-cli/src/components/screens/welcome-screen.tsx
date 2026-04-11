@@ -1,5 +1,5 @@
 /**
- * @fileoverview 欢迎屏幕 — 无 session 时的欢迎界面
+ * @fileoverview Welcome screen — displayed when no session is active
  */
 
 import React from 'react';
@@ -10,16 +10,16 @@ import { theme } from '../../utils/theme.js';
  * WelcomeScreen props
  */
 interface WelcomeScreenProps {
-  /** Agent 名称 */
+  /** Agent name */
   agentName?: string;
-  /** 当前模型名 */
+  /** Current model name */
   model?: string;
 }
 
 /**
- * 欢迎屏幕组件
+ * Welcome screen component
  *
- * 显示欢迎语、agent 名称和模型信息。
+ * Displays welcome message, agent name, and model information.
  */
 export function WelcomeScreen({ agentName, model }: WelcomeScreenProps) {
   return (
