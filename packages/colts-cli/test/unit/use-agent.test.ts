@@ -100,5 +100,46 @@ describe('use-agent', () => {
       expect(result).toHaveProperty('type');
       expect(result).toHaveProperty('raw');
     });
+
+    // /skill 命令测试
+    it('能解析 /skill <name> 命令', () => {
+      const result = parseCommand('/skill code-review');
+      expect(result.type).toBe('skill');
+      expect(result.raw).toBe('/skill code-review');
+      expect(result.skillName).toBe('code-review');
+    });
+
+    it('/skill 命令能解析带空格后的名称', () => {
+      const result = parseCommand('  /skill my-skill  ');
+      expect(result.type).toBe('skill');
+      expect(result.skillName).toBe('my-skill');
+    });
+
+    it('/skill 无名称时不被识别为 skill 命令', () => {
+      // '/skill ' 会被 trim 为 '/skill'，不匹配 startsWith('/skill ')
+      const result = parseCommand('/skill ');
+      expect(result.type).toBe('message');
+    });
+
+    it('/skillx 不被识别为 /skill 命令', () => {
+      const result = parseCommand('/skillx');
+      expect(result.type).toBe('message');
+    });
+
+    it('/skilling 不被识别为 /skill 命令', () => {
+      const result = parseCommand('/skilling');
+      expect(result.type).toBe('message');
+    });
+
+    it('/skill 支持带连字符的名称', () => {
+      const result = parseCommand('/skill my-awesome-skill');
+      expect(result.type).toBe('skill');
+      expect(result.skillName).toBe('my-awesome-skill');
+    });
+
+    it('ParsedCommand 包含 skillName 可选字段', () => {
+      const result: ParsedCommand = parseCommand('/skill test');
+      expect(result).toHaveProperty('skillName');
+    });
   });
 });

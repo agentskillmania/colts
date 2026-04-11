@@ -29,6 +29,14 @@ const EVENT_COLORS: Record<string, string> = {
   error: theme.error,
   compressing: theme.warning,
   compressed: theme.warning,
+  // Skill 事件
+  'skill:loading': theme.warning,
+  'skill:loaded': theme.success,
+  // Subagent 事件
+  'subagent:start': theme.info,
+  'subagent:token': theme.dim,
+  'subagent:step:end': theme.dim,
+  'subagent:end': theme.success,
 };
 
 /**
@@ -58,7 +66,7 @@ export function Events({ events }: EventsProps) {
   return (
     <Box flexDirection="column" flexGrow={1}>
       {events.map((evt) => (
-        <Box key={evt.id}>
+        <Box key={evt.id} marginLeft={evt.indent ?? 0}>
           <Text color={getEventColor(evt.type)}>{evt.text}</Text>
         </Box>
       ))}

@@ -56,6 +56,20 @@ export function formatEvent(event: StreamEvent): string {
       return 'Compressing context...';
     case 'compressed':
       return `Compressed: ${event.removedCount} messages`;
+    // Skill 事件
+    case 'skill:loading':
+      return `Skill loading: ${event.name}...`;
+    case 'skill:loaded':
+      return `Skill loaded: ${event.name} (${event.tokenCount} chars)`;
+    // Subagent 事件
+    case 'subagent:start':
+      return `[${event.name}] Starting: ${event.task}`;
+    case 'subagent:token':
+      return `[${event.name}] ${event.token}`;
+    case 'subagent:step:end':
+      return `[${event.name}] Step ${event.step} complete`;
+    case 'subagent:end':
+      return `[${event.name}] Done`;
     default:
       return JSON.stringify(event);
   }

@@ -8,3 +8,5 @@ dist/
 coverage/
 .test-output/
 .vibe/
+AGENTS.md
+CLAUDE.md

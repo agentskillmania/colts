@@ -4,11 +4,11 @@
  * 提供与 AgentRunner 交互的核心逻辑，包括：
  * - 消息发送和接收（支持流式传输）
  * - 执行模式切换（run / step / advance）
- * - 命令解析（/run, /step, /advance, /clear, /help）
+ * - 命令解析（/run, /step, /advance, /clear, /help, /skill <name>）
  */
 
 import { useState, useCallback } from 'react';
-import type { AgentRunner, AgentState } from '@agentskillmania/colts';
+import type { AgentRunner, AgentState, ISkillProvider } from '@agentskillmania/colts';
 
 /**
  * 执行模式
@@ -40,9 +40,11 @@ export interface ChatMessage {
  */
 export interface ParsedCommand {
   /** 命令类型 */
-  type: 'mode-run' | 'mode-step' | 'mode-advance' | 'clear' | 'help' | 'message';
+  type: 'mode-run' | 'mode-step' | 'mode-advance' | 'clear' | 'help' | 'skill' | 'message';
   /** 原始输入 */
   raw: string;
+  /** Skill 名称（仅当 type 为 'skill' 时有值） */
+  skillName?: string;
 }
 
 /**
@@ -59,6 +61,8 @@ export function parseCommand(input: string): ParsedCommand {
   if (trimmed === '/advance') return { type: 'mode-advance', raw: trimmed };
   if (trimmed === '/clear') return { type: 'clear', raw: trimmed };
   if (trimmed === '/help') return { type: 'help', raw: trimmed };
+  if (trimmed.startsWith('/skill '))
+    return { type: 'skill', raw: trimmed, skillName: trimmed.slice(7).trim() };
 
   return { type: 'message', raw: trimmed };
 }
@@ -93,6 +97,7 @@ export interface UseAgentReturn {
  *
  * @param runner - AgentRunner 实例（可为 null）
  * @param initialState - 初始 AgentState（可为 null）
+ * @param skillProvider - Skill 提供者（可选，用于 /skill 命令）
  * @returns Agent 交互状态和操作方法
  *
  * @example
@@ -108,7 +113,8 @@ export interface UseAgentReturn {
  */
 export function useAgent(
   runner: AgentRunner | null,
-  initialState: AgentState | null
+  initialState: AgentState | null,
+  skillProvider?: ISkillProvider
 ): UseAgentReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState<ExecutionMode>('run');
@@ -188,11 +194,90 @@ export function useAgent(
               id: Date.now().toString(),
               role: 'system',
               content:
-                '可用命令：/run（完整运行） /step（单步） /advance（微步） /clear（清空） /help（帮助）',
+                '可用命令：/run（完整运行） /step（单步） /advance（微步） /skill <name>（加载技能） /clear（清空） /help（帮助）',
               timestamp: Date.now(),
             },
           ]);
           return;
+
+        case 'skill': {
+          // 加载 Skill 指令并作为系统消息注入
+          const skillName = command.skillName;
+          if (!skillName) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: 'system',
+                content: '用法：/skill <name>',
+                timestamp: Date.now(),
+              },
+            ]);
+            return;
+          }
+
+          if (!skillProvider) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: 'system',
+                content: 'Skill 提供者未配置',
+                timestamp: Date.now(),
+              },
+            ]);
+            return;
+          }
+
+          try {
+            const manifest = skillProvider.getManifest(skillName);
+            if (!manifest) {
+              const available = skillProvider
+                .listSkills()
+                .map((s) => s.name)
+                .join(', ');
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: Date.now().toString(),
+                  role: 'system',
+                  content: `Skill '${skillName}' 未找到。可用 Skill：${available || '无'}`,
+                  timestamp: Date.now(),
+                },
+              ]);
+              return;
+            }
+
+            const instructions = await skillProvider.loadInstructions(skillName);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: 'system',
+                content: `Skill '${skillName}' 已加载（${instructions.length} 字符）`,
+                timestamp: Date.now(),
+              },
+              {
+                id: (Date.now() + 1).toString(),
+                role: 'system',
+                content: `[Skill: ${skillName}]\n${instructions}`,
+                timestamp: Date.now(),
+              },
+            ]);
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: 'system',
+                content: `加载 Skill 失败：${errorMsg}`,
+                timestamp: Date.now(),
+              },
+            ]);
+          }
+          return;
+        }
 
         case 'message':
           break;
@@ -244,7 +329,7 @@ export function useAgent(
         setIsRunning(false);
       }
     },
-    [runner, state, mode, clearMessages]
+    [runner, state, mode, clearMessages, skillProvider]
   );
 
   return { messages, mode, isRunning, state, sendMessage, setMode, clearMessages };

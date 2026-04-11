@@ -110,6 +110,67 @@ describe('use-events', () => {
       const text = formatEvent(event);
       expect(text).toBe('');
     });
+
+    // Skill 事件
+    it('能格式化 skill:loading 事件', () => {
+      const event: StreamEvent = {
+        type: 'skill:loading',
+        name: 'code-review',
+      };
+      const text = formatEvent(event);
+      expect(text).toBe('Skill loading: code-review...');
+    });
+
+    it('能格式化 skill:loaded 事件', () => {
+      const event: StreamEvent = {
+        type: 'skill:loaded',
+        name: 'code-review',
+        tokenCount: 2048,
+      };
+      const text = formatEvent(event);
+      expect(text).toBe('Skill loaded: code-review (2048 chars)');
+    });
+
+    // Subagent 事件
+    it('能格式化 subagent:start 事件', () => {
+      const event: StreamEvent = {
+        type: 'subagent:start',
+        name: 'researcher',
+        task: '调查性能问题',
+      };
+      const text = formatEvent(event);
+      expect(text).toBe('[researcher] Starting: 调查性能问题');
+    });
+
+    it('能格式化 subagent:token 事件', () => {
+      const event: StreamEvent = {
+        type: 'subagent:token',
+        name: 'researcher',
+        token: '分析中...',
+      };
+      const text = formatEvent(event);
+      expect(text).toBe('[researcher] 分析中...');
+    });
+
+    it('能格式化 subagent:step:end 事件', () => {
+      const event: StreamEvent = {
+        type: 'subagent:step:end',
+        name: 'researcher',
+        step: 3,
+      };
+      const text = formatEvent(event);
+      expect(text).toBe('[researcher] Step 3 complete');
+    });
+
+    it('能格式化 subagent:end 事件', () => {
+      const event: StreamEvent = {
+        type: 'subagent:end',
+        name: 'researcher',
+        result: { answer: '完成', totalSteps: 5, finalState: null },
+      };
+      const text = formatEvent(event);
+      expect(text).toBe('[researcher] Done');
+    });
   });
 
   describe('事件缓冲逻辑', () => {
