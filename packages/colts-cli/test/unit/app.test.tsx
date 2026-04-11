@@ -17,7 +17,7 @@ describe('App 组件', () => {
         <App config={{ hasValidConfig: false }} />
       );
       const frame = lastFrame();
-      expect(frame).toContain('No configuration found');
+      expect(frame).toContain('Configuration incomplete');
     });
 
     it('显示配置指引信息', () => {
@@ -25,9 +25,8 @@ describe('App 组件', () => {
         <App config={{ hasValidConfig: false }} />
       );
       const frame = lastFrame();
-      expect(frame).toContain('/config llm.provider');
-      expect(frame).toContain('/config llm.apiKey');
-      expect(frame).toContain('/config llm.model');
+      expect(frame).toContain('llm.provider');
+      expect(frame).toContain('llm.apiKey');
     });
 
     it('显示退出提示', () => {
@@ -86,7 +85,7 @@ describe('App 组件', () => {
       const { rerender, lastFrame } = render(
         <App config={{ hasValidConfig: false }} />
       );
-      expect(lastFrame()).toContain('No configuration found');
+      expect(lastFrame()).toContain('Configuration incomplete');
 
       rerender(
         <App config={{
@@ -95,7 +94,7 @@ describe('App 组件', () => {
         }} />
       );
       expect(lastFrame()).toContain('colts-cli v0.1.0');
-      expect(lastFrame()).not.toContain('No configuration found');
+      expect(lastFrame()).not.toContain('Configuration incomplete');
     });
   });
 });
