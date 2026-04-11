@@ -5,16 +5,71 @@
  */
 
 /**
- * Deep merge objects, filling missing fields in target with values from defaultValue
+ * Recursively merge two arrays element by element
  *
- * Merge rules:
- * - For nested objects, recursively merge
- * - For arrays, use target's value directly (don't merge array elements)
- * - For primitive types, use target's value directly
+ * Rules:
+ * - Same index, both plain objects → recursively deepMerge
+ * - Same index, both arrays → recursively deepMergeArrays
+ * - Target has element, default doesn't → deep copy target's element
+ * - Default has element, target doesn't → deep copy default's element
+ */
+function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[] {
+  const maxLen = Math.max(targetArr.length, defaultArr.length);
+  const result: unknown[] = new Array(maxLen);
+
+  for (let i = 0; i < maxLen; i++) {
+    const t = targetArr[i];
+    const d = defaultArr[i];
+
+    // Both plain objects → merge
+    if (
+      t !== null &&
+      t !== undefined &&
+      typeof t === 'object' &&
+      !Array.isArray(t) &&
+      d !== null &&
+      d !== undefined &&
+      typeof d === 'object' &&
+      !Array.isArray(d)
+    ) {
+      result[i] = deepMerge(t as Record<string, unknown>, d as Record<string, unknown>);
+      continue;
+    }
+
+    // Both arrays → merge recursively
+    if (Array.isArray(t) && Array.isArray(d)) {
+      result[i] = deepMergeArrays(t, d);
+      continue;
+    }
+
+    // Target takes priority, fallback to default; deep clone objects/arrays
+    const value = t !== undefined ? t : d;
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      result[i] = deepMerge(value as Record<string, unknown>, {});
+    } else if (Array.isArray(value)) {
+      result[i] = deepMergeArrays(value, []);
+    } else {
+      result[i] = value;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Deep merge objects: prefer target values, fill missing from defaultValue
  *
- * @param target - Target object (user config)
+ * All values are deep copied — the result shares no references with inputs.
+ *
+ * Rules:
+ * - Both target and default have a plain object at the same key → recursively merge
+ * - Both have arrays at the same key → merge element by element
+ * - Target has a value and default doesn't → deep copy target's value
+ * - Target doesn't have a key → deep copy default's value
+ *
+ * @param target - Target object (user config, higher priority)
  * @param defaultValue - Default values object
- * @returns Merged object
+ * @returns Deep-copied merged object
  *
  * @example
  * ```typescript
@@ -29,27 +84,52 @@ export function deepMerge<T extends Record<string, unknown>>(
   target: Record<string, unknown>,
   defaultValue: T
 ): T {
-  const result: Record<string, unknown> = { ...defaultValue };
+  const result: Record<string, unknown> = {};
 
+  // Deep copy default values for keys not present in target
+  for (const key of Object.keys(defaultValue)) {
+    if (!(key in target)) {
+      const d = defaultValue[key as keyof T];
+      if (d !== null && typeof d === 'object' && !Array.isArray(d)) {
+        result[key] = deepMerge({} as Record<string, unknown>, d as Record<string, unknown>);
+      } else if (Array.isArray(d)) {
+        result[key] = deepMergeArrays([], d);
+      } else {
+        result[key] = d;
+      }
+    }
+  }
+
+  // Handle target keys: merge with default where applicable
   for (const key of Object.keys(target)) {
     const targetValue = target[key];
     const defaultValueFieldValue = defaultValue[key as keyof T];
 
-    if (
-      targetValue !== null &&
-      typeof targetValue === 'object' &&
-      !Array.isArray(targetValue) &&
-      defaultValueFieldValue !== null &&
-      typeof defaultValueFieldValue === 'object' &&
-      !Array.isArray(defaultValueFieldValue)
-    ) {
-      // Both values are objects, recursively merge
-      result[key] = deepMerge(
-        targetValue as Record<string, unknown>,
-        defaultValueFieldValue as Record<string, unknown>
-      );
+    if (targetValue !== null && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
+      if (
+        defaultValueFieldValue !== null &&
+        typeof defaultValueFieldValue === 'object' &&
+        !Array.isArray(defaultValueFieldValue)
+      ) {
+        // Both are plain objects → recursively merge
+        result[key] = deepMerge(
+          targetValue as Record<string, unknown>,
+          defaultValueFieldValue as Record<string, unknown>
+        );
+      } else {
+        // Only target has an object → deep copy it
+        result[key] = deepMerge(targetValue as Record<string, unknown>, {});
+      }
+    } else if (Array.isArray(targetValue)) {
+      if (Array.isArray(defaultValueFieldValue)) {
+        // Both are arrays → merge element by element
+        result[key] = deepMergeArrays(targetValue, defaultValueFieldValue);
+      } else {
+        // Only target has an array → deep copy it
+        result[key] = deepMergeArrays(targetValue, []);
+      }
     } else {
-      // Use target's value directly (including arrays, primitives, etc.)
+      // Primitives, null → direct assignment (immutable)
       result[key] = targetValue;
     }
   }

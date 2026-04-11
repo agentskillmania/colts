@@ -9,11 +9,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as yaml from 'js-yaml';
 import { deepMerge } from './deepMerge.js';
-import { mkdirp } from './mkdirp.js';
-
-// Export utility functions for external use
-export { deepMerge } from './deepMerge.js';
-export { mkdirp } from './mkdirp.js';
 
 /**
  * Initialization options
@@ -107,7 +102,7 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
 
       // Create parent directories
       const dir = path.dirname(this.configPath);
-      await mkdirp(dir);
+      await fs.mkdir(dir, { recursive: true });
 
       // Write default config
       await fs.writeFile(this.configPath, defaultYaml, 'utf-8');
@@ -143,5 +138,114 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
       throw new Error('Settings not initialized. Call initialize() first.');
     }
     return this.values;
+  }
+
+  /**
+   * Check if a nested key exists by dot-separated path
+   *
+   * @param keyPath - Dot-separated key path (e.g. "llm.provider")
+   * @returns True if the key exists in the config
+   * @throws Error if not initialized
+   *
+   * @example
+   * ```typescript
+   * settings.has('llm.apiKey'); // true or false
+   * ```
+   */
+  has(keyPath: string): boolean {
+    if (this.values === null) {
+      throw new Error('Settings not initialized. Call initialize() first.');
+    }
+    const keys = keyPath.split('.');
+    let current: unknown = this.values;
+    for (const key of keys) {
+      if (current === null || current === undefined || typeof current !== 'object') {
+        return false;
+      }
+      if (!(key in (current as Record<string, unknown>))) {
+        return false;
+      }
+      current = (current as Record<string, unknown>)[key];
+    }
+    return true;
+  }
+
+  /**
+   * Update a nested configuration value by dot-separated path
+   *
+   * Modifies the in-memory config. Call {@link save} to persist to disk.
+   * The config object remains frozen between operations.
+   *
+   * @param keyPath - Dot-separated key path (e.g. "llm.provider")
+   * @param value - New value to set
+   * @throws Error if not initialized
+   *
+   * @example
+   * ```typescript
+   * settings.set('llm.apiKey', 'sk-new-key');
+   * await settings.save();
+   * ```
+   */
+  set(keyPath: string, value: unknown): void {
+    if (this.values === null) {
+      throw new Error('Settings not initialized. Call initialize() first.');
+    }
+
+    // Deep copy via deepMerge, modify, then freeze
+    const obj = deepMerge(this.values as Record<string, unknown>, {} as T);
+    const keys = keyPath.split('.');
+    let current: Record<string, unknown> = obj;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!current[key] || typeof current[key] !== 'object') {
+        current[key] = {};
+      }
+      current = current[key] as Record<string, unknown>;
+    }
+
+    current[keys[keys.length - 1]] = value;
+    this.values = Object.freeze(obj) as T;
+  }
+
+  /**
+   * Return a mutable deep copy of the current configuration
+   *
+   * Uses deep copy to ensure the returned object is fully isolated from internal state.
+   *
+   * @returns A mutable copy of the configuration object
+   * @throws Error if not initialized
+   */
+  toObject(): Record<string, unknown> {
+    if (this.values === null) {
+      throw new Error('Settings not initialized. Call initialize() first.');
+    }
+    return deepMerge(this.values as Record<string, unknown>, {} as T);
+  }
+
+  /**
+   * Persist current configuration to the YAML file on disk
+   *
+   * Creates parent directories if they don't exist.
+   * The in-memory values remain frozen after save.
+   *
+   * @throws Error if not initialized
+   *
+   * @example
+   * ```typescript
+   * settings.set('llm.model', 'gpt-4o');
+   * await settings.save();
+   * ```
+   */
+  async save(): Promise<void> {
+    if (this.values === null) {
+      throw new Error('Settings not initialized. Call initialize() first.');
+    }
+
+    const dir = path.dirname(this.configPath);
+    await fs.mkdir(dir, { recursive: true });
+
+    const content = yaml.dump(this.values as Record<string, unknown>);
+    await fs.writeFile(this.configPath, content, 'utf-8');
   }
 }

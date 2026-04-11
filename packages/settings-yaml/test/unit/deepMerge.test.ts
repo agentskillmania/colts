@@ -98,156 +98,226 @@ describe('deepMerge', () => {
   });
 
   describe('array handling', () => {
-    it('should replace arrays entirely instead of merging', () => {
+    it('should merge arrays element by element, keeping extra default elements', () => {
+      const target = { items: ['a', 'b'] };
+      const defaultValue = { items: ['x', 'y', 'z'] };
+
+      const result = deepMerge(target, defaultValue);
+
+      expect(result).toEqual({ items: ['a', 'b', 'z'] });
+    });
+
+    it('should merge object array elements by index', () => {
       const target = {
-        items: ['a', 'b'],
+        servers: [{ host: 'a.com' }],
       };
       const defaultValue = {
-        items: ['x', 'y', 'z'],
+        servers: [
+          { host: 'localhost', port: 80 },
+          { host: 'backup.com', port: 8080 },
+        ],
       };
 
       const result = deepMerge(target, defaultValue);
 
       expect(result).toEqual({
-        items: ['a', 'b'],
+        servers: [
+          { host: 'a.com', port: 80 },
+          { host: 'backup.com', port: 8080 },
+        ],
       });
     });
 
-    it('should override non-array value in defaultValue with array from target', () => {
-      const target = {
-        items: ['a', 'b'],
-      };
-      const defaultValue = {
-        items: 'not-array',
-      };
+    it('should deep copy target arrays — no shared references', () => {
+      const target = { items: ['a', 'b'] };
 
-      const result = deepMerge(target, defaultValue);
+      const result = deepMerge(target, {});
 
-      expect(result).toEqual({
-        items: ['a', 'b'],
-      });
+      (result as { items: string[] }).items.push('c');
+
+      expect(target.items).toEqual(['a', 'b']);
+      expect((result as { items: string[] }).items).toEqual(['a', 'b', 'c']);
     });
 
-    it('should override array in defaultValue with non-array value from target', () => {
+    it('should deep copy nested objects inside arrays', () => {
       const target = {
-        items: 'not-array',
+        servers: [
+          { host: 'a.com', port: 80 },
+          { host: 'b.com', port: 443 },
+        ],
       };
-      const defaultValue = {
-        items: ['x', 'y', 'z'],
+
+      const result = deepMerge(target, {});
+
+      const resultServers = (result as { servers: Array<Record<string, unknown>> }).servers;
+      resultServers[0].host = 'hacked';
+
+      expect(target.servers[0].host).toBe('a.com');
+      expect(resultServers[0].host).toBe('hacked');
+    });
+
+    it('should deep copy nested arrays inside arrays', () => {
+      const target = {
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
       };
+
+      const result = deepMerge(target, {});
+
+      (result as { matrix: number[][] }).matrix[0].push(99);
+
+      expect(target.matrix[0]).toEqual([1, 2]);
+      expect((result as { matrix: number[][] }).matrix[0]).toEqual([1, 2, 99]);
+    });
+
+    it('should deep copy default arrays when target has no such key', () => {
+      const target = { name: 'test' };
+      const defaultValue = { items: ['x', 'y', 'z'] };
 
       const result = deepMerge(target, defaultValue);
 
-      expect(result).toEqual({
-        items: 'not-array',
-      });
+      (result as { items: string[] }).items.push('w');
+
+      expect(defaultValue.items).toEqual(['x', 'y', 'z']);
+      expect((result as { items: string[] }).items).toEqual(['x', 'y', 'z', 'w']);
+    });
+
+    it('should handle type mismatch: target array vs default non-array', () => {
+      const target = { items: ['a', 'b'] };
+      const defaultValue = { items: 'not-array' };
+
+      const result = deepMerge(target, defaultValue);
+
+      expect(result).toEqual({ items: ['a', 'b'] });
+    });
+
+    it('should handle type mismatch: target non-array vs default array', () => {
+      const target = { items: 'not-array' };
+      const defaultValue = { items: ['x', 'y', 'z'] };
+
+      const result = deepMerge(target, defaultValue);
+
+      expect(result).toEqual({ items: 'not-array' });
+    });
+  });
+
+  describe('deep copy — no shared references', () => {
+    it('should deep copy default-only nested objects', () => {
+      const target = { name: 'test' };
+      const defaultValue = { server: { port: 3000, host: 'localhost' } };
+
+      const result = deepMerge(target, defaultValue);
+
+      (result as { server: Record<string, unknown> }).server.port = 9999;
+
+      expect(defaultValue.server.port).toBe(3000);
+      expect((result as { server: Record<string, unknown> }).server.port).toBe(9999);
+    });
+
+    it('should deep copy merged nested objects from both sides', () => {
+      const target = { server: { port: 8080 } };
+      const defaultValue = { server: { port: 3000, host: 'localhost' } };
+
+      const result = deepMerge(target, defaultValue);
+
+      (result as { server: Record<string, unknown> }).server.host = 'changed';
+
+      expect(target.server).not.toHaveProperty('host');
+      expect(defaultValue.server.host).toBe('localhost');
+      expect((result as { server: Record<string, unknown> }).server.host).toBe('changed');
+    });
+
+    it('should deep copy default-only nested objects with further nesting', () => {
+      const target = { name: 'test' };
+      const defaultValue = { db: { connection: { host: 'localhost', port: 5432 } } };
+
+      const result = deepMerge(target, defaultValue);
+
+      const resultDb = (result as { db: { connection: Record<string, unknown> } }).db;
+      resultDb.connection.host = 'hacked';
+
+      expect(defaultValue.db.connection.host).toBe('localhost');
+      expect(resultDb.connection.host).toBe('hacked');
     });
   });
 
   describe('null handling', () => {
     it('should override defaultValue with null from target', () => {
-      const target = {
-        value: null,
-      };
-      const defaultValue = {
-        value: 'default',
-      };
+      const target = { value: null };
+      const defaultValue = { value: 'default' };
 
       const result = deepMerge(target, defaultValue);
 
-      expect(result).toEqual({
-        value: null,
-      });
+      expect(result).toEqual({ value: null });
     });
 
     it('should not recursively merge when target has null object field', () => {
-      const target = {
-        config: null,
-      };
-      const defaultValue = {
-        config: { nested: 'value' },
-      };
+      const target = { config: null };
+      const defaultValue = { config: { nested: 'value' } };
 
       const result = deepMerge(target, defaultValue);
 
-      expect(result).toEqual({
-        config: null,
-      });
+      expect(result).toEqual({ config: null });
     });
 
     it('should not treat null in defaultValue as an object', () => {
-      const target = {
-        config: { nested: 'value' },
-      };
-      const defaultValue = {
-        config: null,
-      };
+      const target = { config: { nested: 'value' } };
+      const defaultValue = { config: null };
 
       const result = deepMerge(target, defaultValue);
 
-      expect(result).toEqual({
-        config: { nested: 'value' },
-      });
+      expect(result).toEqual({ config: { nested: 'value' } });
     });
   });
 
   describe('edge cases', () => {
-    it('should return copy of defaultValue when target is empty', () => {
+    it('should return deep copy of defaultValue when target is empty', () => {
       const target = {};
-      const defaultValue = { name: 'default' };
+      const defaultValue = { name: 'default', nested: { key: 'value' } };
 
       const result = deepMerge(target, defaultValue);
 
-      expect(result).toEqual({ name: 'default' });
+      expect(result).toEqual({ name: 'default', nested: { key: 'value' } });
+      (result as { nested: Record<string, unknown> }).nested.key = 'changed';
+      expect(defaultValue.nested.key).toBe('value');
     });
 
-    it('should return target when defaultValue is empty', () => {
-      const target = { name: 'target' };
+    it('should return deep copy of target when defaultValue is empty', () => {
+      const target = { name: 'target', nested: { key: 'value' } };
       const defaultValue = {};
 
       const result = deepMerge(target, defaultValue);
 
-      expect(result).toEqual({ name: 'target' });
+      expect(result).toEqual({ name: 'target', nested: { key: 'value' } });
+      (result as { nested: Record<string, unknown> }).nested.key = 'changed';
+      expect(target.nested.key).toBe('value');
     });
 
     it('should return empty object when both are empty', () => {
-      const target = {};
-      const defaultValue = {};
-
-      const result = deepMerge(target, defaultValue);
+      const result = deepMerge({}, {});
 
       expect(result).toEqual({});
     });
 
     it('should not modify original objects', () => {
-      const target = { name: 'target' };
-      const defaultValue = { name: 'default', extra: 'value' };
+      const target = { name: 'target', nested: { key: 't' } };
+      const defaultValue = { name: 'default', extra: 'value', nested2: { key: 'd' } };
 
       deepMerge(target, defaultValue);
 
-      expect(target).toEqual({ name: 'target' });
-      expect(defaultValue).toEqual({ name: 'default', extra: 'value' });
+      expect(target).toEqual({ name: 'target', nested: { key: 't' } });
+      expect(defaultValue).toEqual({ name: 'default', extra: 'value', nested2: { key: 'd' } });
     });
 
     it('should support various primitive types', () => {
-      const target = {
-        string: 'target',
-        number: 100,
-        boolean: false,
-      };
-      const defaultValue = {
-        string: 'default',
-        number: 0,
-        boolean: true,
-      };
+      const target = { string: 'target', number: 100, boolean: false };
+      const defaultValue = { string: 'default', number: 0, boolean: true };
 
       const result = deepMerge(target, defaultValue);
 
-      expect(result).toEqual({
-        string: 'target',
-        number: 100,
-        boolean: false,
-      });
+      expect(result).toEqual({ string: 'target', number: 100, boolean: false });
     });
   });
 });

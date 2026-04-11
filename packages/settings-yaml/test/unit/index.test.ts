@@ -215,7 +215,7 @@ database:
       });
     });
 
-    it('should replace arrays entirely instead of merging', async () => {
+    it('should merge arrays element by element, keeping extra defaults', async () => {
       const configPath = path.join(tempDir, 'config.yaml');
       const userYaml = `
 items:
@@ -235,7 +235,7 @@ items:
 
       const values = settings.getValues();
       expect(values).toEqual({
-        items: ['a', 'b'], // user array completely replaces default array
+        items: ['a', 'b', 'z'], // target overrides by index, extra defaults kept
       });
     });
 
@@ -512,6 +512,202 @@ mode: normal
         level: 2, // config value (not specified in override)
         mode: 'normal', // default value
       });
+    });
+  });
+
+  describe('has', () => {
+    it('should return true for existing top-level key', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: test' });
+
+      expect(settings.has('name')).toBe(true);
+    });
+
+    it('should return true for existing nested key', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({
+        defaultYaml: `
+server:
+  port: 3000
+`,
+      });
+
+      expect(settings.has('server.port')).toBe(true);
+    });
+
+    it('should return false for missing key', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: test' });
+
+      expect(settings.has('missing')).toBe(false);
+    });
+
+    it('should return false for missing nested key', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({
+        defaultYaml: `
+server:
+  port: 3000
+`,
+      });
+
+      expect(settings.has('server.host')).toBe(false);
+    });
+
+    it('should throw if not initialized', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+
+      expect(() => settings.has('key')).toThrow('Settings not initialized');
+    });
+  });
+
+  describe('set', () => {
+    it('should set a top-level value', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: old' });
+
+      settings.set('name', 'new');
+      expect(settings.getValues().name).toBe('new');
+    });
+
+    it('should set a nested value', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({
+        defaultYaml: `
+server:
+  port: 3000
+`,
+      });
+
+      settings.set('server.port', 8080);
+      expect(settings.getValues().server.port).toBe(8080);
+    });
+
+    it('should create intermediate objects for new nested keys', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: test' });
+
+      settings.set('deep.nested.key', 'value');
+      expect(settings.getValues().deep.nested.key).toBe('value');
+    });
+
+    it('should keep values frozen after set', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: test' });
+
+      settings.set('name', 'new');
+      expect(Object.isFrozen(settings.getValues())).toBe(true);
+    });
+
+    it('should throw if not initialized', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+
+      expect(() => settings.set('key', 'value')).toThrow('Settings not initialized');
+    });
+  });
+
+  describe('toObject', () => {
+    it('should return a mutable copy', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: test' });
+
+      const obj = settings.toObject();
+      expect(obj).toEqual({ name: 'test' });
+      expect(Object.isFrozen(obj)).toBe(false);
+    });
+
+    it('should not affect original when mutated', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: test' });
+
+      const obj = settings.toObject();
+      obj.name = 'changed';
+
+      expect(settings.getValues().name).toBe('test');
+    });
+
+    it('should throw if not initialized', () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+
+      expect(() => settings.toObject()).toThrow('Settings not initialized');
+    });
+  });
+
+  describe('save', () => {
+    it('should persist changes to disk', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: old' });
+
+      settings.set('name', 'new');
+      await settings.save();
+
+      // Read file directly and verify
+      const content = await fs.readFile(configPath, 'utf-8');
+      expect(content).toContain('new');
+    });
+
+    it('should persist nested changes to disk', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({
+        defaultYaml: `
+server:
+  port: 3000
+`,
+      });
+
+      settings.set('server.port', 8080);
+      await settings.save();
+
+      // Reload from disk
+      const settings2 = new Settings(configPath);
+      await settings2.initialize();
+      expect(settings2.getValues().server.port).toBe(8080);
+    });
+
+    it('should create parent directories if needed', async () => {
+      const configPath = path.join(tempDir, 'a', 'b', 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: test' });
+
+      settings.set('name', 'updated');
+      await settings.save();
+
+      const content = await fs.readFile(configPath, 'utf-8');
+      expect(content).toContain('updated');
+    });
+
+    it('should throw if not initialized', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+
+      await expect(settings.save()).rejects.toThrow('Settings not initialized');
+    });
+
+    it('should keep values frozen after save', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml: 'name: test' });
+
+      settings.set('name', 'updated');
+      await settings.save();
+
+      expect(Object.isFrozen(settings.getValues())).toBe(true);
+      expect(settings.getValues().name).toBe('updated');
     });
   });
 });
