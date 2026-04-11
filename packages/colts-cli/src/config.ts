@@ -1,19 +1,20 @@
 /**
- * @fileoverview Configuration management — uses settings-yaml Settings class for config read/write
+ * @fileoverview 配置管理 — 使用 settings-yaml 读写 CLI 配置
+ *
+ * 配置文件查找顺序：./colts.yaml > ~/.agentskillmania/colts/config.yaml
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Settings } from '@agentskillmania/settings-yaml';
-import type { AppConfig } from './app.js';
 
-/** Default path for global configuration directory */
+/** 默认配置目录 */
 const CONFIG_DIR = path.join(os.homedir(), '.agentskillmania', 'colts');
 const CONFIG_FILE = 'config.yaml';
 
 /**
- * colts-cli configuration structure
+ * colts.yaml 配置结构
  */
 export interface ColtsConfig extends Record<string, unknown> {
   llm?: {
@@ -40,8 +41,32 @@ export interface ColtsConfig extends Record<string, unknown> {
 }
 
 /**
- * Default configuration YAML
+ * 应用配置（经过验证的结构）
  */
+export interface AppConfig {
+  /** 是否有有效配置（provider + apiKey） */
+  hasValidConfig: boolean;
+  /** 配置文件路径 */
+  configPath?: string;
+  /** LLM 配置 */
+  llm?: {
+    provider: string;
+    apiKey: string;
+    model: string;
+    baseUrl?: string;
+  };
+  /** Agent 配置 */
+  agent?: {
+    name: string;
+    instructions: string;
+  };
+  /** Skill 目录列表 */
+  skills?: string[];
+  /** SubAgent 配置列表 */
+  subAgents?: ColtsConfig['subAgents'];
+}
+
+/** 默认配置 YAML */
 const DEFAULT_CONFIG_YAML = `llm:
   provider: openai
   model: gpt-4
@@ -55,65 +80,65 @@ persistence:
 `;
 
 /**
- * Options for loading configuration
+ * 配置加载选项
  */
 export interface LoadConfigOptions {
-  /** Override global config directory (for testing) */
+  /** 覆盖全局配置目录（测试用） */
   globalDir?: string;
 }
 
 /**
- * Find configuration file path
+ * 查找配置文件路径
  *
- * Search order: ./colts.yaml > {globalDir}/config.yaml
+ * 搜索顺序：./colts.yaml → {globalDir}/config.yaml
+ *
+ * @param globalDir - 全局配置目录
+ * @returns 配置文件路径，未找到返回 null
  */
 async function findConfigPath(globalDir?: string): Promise<string | null> {
-  // 1. Local project config
   const localPath = path.resolve('colts.yaml');
   try {
     await fs.access(localPath);
     return localPath;
   } catch {
-    // Local config not found, continue searching
+    // 本地配置不存在
   }
 
-  // 2. Global config
   const dir = globalDir ?? CONFIG_DIR;
   const globalPath = path.join(dir, CONFIG_FILE);
   try {
     await fs.access(globalPath);
     return globalPath;
   } catch {
-    // Global config not found either
+    // 全局配置不存在
   }
 
   return null;
 }
 
 /**
- * Get global config file path
+ * 获取全局配置文件路径
  */
 function getGlobalConfigPath(globalDir?: string): string {
   return path.join(globalDir ?? CONFIG_DIR, CONFIG_FILE);
 }
 
 /**
- * Check if config has required LLM settings
+ * 检查配置是否包含必要的 LLM 设置
  */
 function isValidConfig(config: ColtsConfig): boolean {
   return !!(config.llm?.apiKey && config.llm?.provider);
 }
 
 /**
- * Load configuration
+ * 加载配置
  *
- * Search order: ./colts.yaml > {globalDir}/config.yaml
- * If neither exists, creates default config at global location via Settings.initialize().
+ * 搜索顺序：./colts.yaml → {globalDir}/config.yaml
+ * 如果都找不到，通过 Settings.initialize() 创建默认配置。
  *
- * @param options - Load options (inject globalDir for testing)
+ * @param options - 加载选项
  */
 export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig> {
-  // Try local config first, fall back to global
   let configPath = await findConfigPath(options?.globalDir);
   if (!configPath) {
     configPath = getGlobalConfigPath(options?.globalDir);
@@ -121,7 +146,6 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
 
   try {
     const settings = new Settings<ColtsConfig>(configPath);
-    // initialize() creates the file with defaults if it doesn't exist
     await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
     const config = settings.getValues();
 
@@ -138,6 +162,12 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
         model: config.llm!.model ?? 'gpt-4',
         baseUrl: config.llm!.baseUrl,
       },
+      agent: {
+        name: config.agent?.name ?? 'colts-agent',
+        instructions: config.agent?.instructions ?? 'You are a helpful assistant.',
+      },
+      skills: config.skills,
+      subAgents: config.subAgents,
     };
   } catch {
     return { hasValidConfig: false, configPath };
@@ -145,14 +175,13 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
 }
 
 /**
- * Save a configuration value
+ * 保存配置值
  *
- * Uses the Settings class to read, update, and persist config.
- * Creates the config file with defaults if it doesn't exist yet.
+ * 使用 Settings 类读写配置。自动创建配置文件。
  *
- * @param keyPath - Dot-separated config key path (e.g. "llm.provider")
- * @param value - Config value to set
- * @param options - Save options (inject globalDir for testing)
+ * @param keyPath - 点分隔的配置键路径（如 "llm.provider"）
+ * @param value - 配置值
+ * @param options - 保存选项
  */
 export async function saveConfig(
   keyPath: string,
@@ -161,21 +190,17 @@ export async function saveConfig(
 ): Promise<void> {
   const configPath = getGlobalConfigPath(options?.globalDir);
   const settings = new Settings<ColtsConfig>(configPath);
-
-  // Initialize with defaults, creating the file if it doesn't exist
   await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
-
-  // Update the value and persist
   settings.set(keyPath, value);
   await settings.save();
 }
 
 /**
- * Set a nested value in an object by dot-separated path
+ * 通过点分隔路径设置嵌套值
  *
- * @param obj - Target object to mutate
- * @param keyPath - Dot-separated key path (e.g. "llm.provider")
- * @param value - Value to set
+ * @param obj - 目标对象
+ * @param keyPath - 点分隔键路径
+ * @param value - 值
  */
 export function setNestedValue(obj: Record<string, unknown>, keyPath: string, value: string): void {
   const keys = keyPath.split('.');

@@ -1,80 +1,145 @@
 /**
- * @fileoverview Root ink component — TUI main entry point
+ * @fileoverview 根组件 — 路由到主界面或配置引导
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
+import { ThemeProvider } from '@inkjs/ui';
+import { coltsTheme } from './theme/index.js';
+import { HeaderBar } from './components/layout/header-bar.js';
+import { SplitPane } from './components/layout/split-pane.js';
+import { InputBar } from './components/input/input-bar.js';
+import type { ExecutionMode } from './components/input/mode-badge.js';
+import type { AppConfig } from './config.js';
+import type { AgentRunner } from '@agentskillmania/colts';
 import { theme } from './utils/theme.js';
 
-export interface AppConfig {
-  /** Whether a valid config exists (LLM provider + apiKey) */
-  hasValidConfig: boolean;
-  /** Path to the config file (for display) */
-  configPath?: string;
-  /** LLM configuration */
-  llm?: {
-    provider: string;
-    apiKey: string;
-    model: string;
-    baseUrl?: string;
-  };
-}
-
+/**
+ * App props
+ */
 interface AppProps {
+  /** 应用配置 */
   config: AppConfig;
+  /** Agent Runner 实例（可能为 null，如果配置无效） */
+  runner: AgentRunner | null;
 }
 
 /**
- * colts-cli root component
+ * 根组件
  *
- * @param props - Application configuration
+ * 根据配置有效性路由到 MainTUI 或配置引导提示。
+ * 使用 ThemeProvider 包裹整个应用，统一 @inkjs/ui 组件风格。
  */
-export function App({ config }: AppProps) {
+export function App({ config, runner }: AppProps) {
+  return (
+    <ThemeProvider theme={coltsTheme}>
+      {config.hasValidConfig && runner ? (
+        <MainTUI config={config} runner={runner} />
+      ) : (
+        <ConfigPrompt configPath={config.configPath} />
+      )}
+    </ThemeProvider>
+  );
+}
+
+/**
+ * 主界面
+ *
+ * 包含 HeaderBar + SplitPane（Chat + Events）+ InputBar。
+ * Step 1 只搭建框架，Step 2 会接入 useAgent 实现对话。
+ */
+function MainTUI({ config }: { config: AppConfig; runner: AgentRunner }) {
+  const [status] = useState<'idle' | 'running' | 'error'>('idle');
+  const [eventsVisible, setEventsVisible] = useState(true);
+  const [mode] = useState<ExecutionMode>('run');
   const { exit } = useApp();
-  const isSetup = !config.hasValidConfig;
 
-  useInput((inputKey, key) => {
-    if (key.ctrl && inputKey === 'c') {
+  useInput((input, key) => {
+    if (key.ctrl && input === 'c') {
       exit();
-      return;
     }
-
-    if (key.escape) {
-      exit();
-      return;
+    if (input === 'e' && key.ctrl) {
+      setEventsVisible((v) => !v);
     }
   });
 
-  if (isSetup) {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Text color={theme.warning}>Configuration incomplete</Text>
-        {config.configPath && (
-          <Box marginTop={1}>
-            <Text color={theme.dim}>Config file: </Text>
-            <Text color={theme.info}>{config.configPath}</Text>
-          </Box>
-        )}
-        <Box marginTop={1}>
-          <Text color={theme.dim}>Edit the file and fill in at least:</Text>
-        </Box>
-        <Text color={theme.info}>  llm.provider</Text>
-        <Text color={theme.info}>  llm.apiKey</Text>
-        <Box marginTop={1}>
-          <Text color={theme.dim}>
-            Press Ctrl+C to exit.
-          </Text>
-        </Box>
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleSubmit = (_value: string) => {
+    // Step 2 会接入 agent 对话
+  };
+
+  const model = config.llm?.model ?? 'unknown';
+
+  return (
+    <Box flexDirection="column" height="100%">
+      <HeaderBar model={model} status={status} eventsVisible={eventsVisible} />
+      <Box flexGrow={1}>
+        <SplitPane
+          leftTitle="Chat"
+          rightTitle="Events"
+          rightVisible={eventsVisible}
+          left={
+            <Box paddingX={1}>
+              <Text color={theme.dim}>Ready. Type a message to start.</Text>
+            </Box>
+          }
+          right={
+            <Box paddingX={1}>
+              <Text color={theme.dim}>No events yet.</Text>
+            </Box>
+          }
+        />
       </Box>
-    );
-  }
+      <InputBar onSubmit={handleSubmit} mode={mode} isRunning={status === 'running'} />
+    </Box>
+  );
+}
+
+/**
+ * 配置引导提示
+ *
+ * 配置无效时显示，提示用户编辑配置文件或使用向导。
+ * Step 10 会实现完整的 SetupWizard 替换此组件。
+ */
+function ConfigPrompt({ configPath }: { configPath?: string }) {
+  const { exit } = useApp();
+
+  useInput((_input, key) => {
+    if (key.ctrl && _input === 'c') {
+      exit();
+    }
+  });
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Text color={theme.success}>colts-cli v0.1.0</Text>
-      <Text color={theme.dim}>Ready. Type your message and press Enter.</Text>
+      <Text bold color={theme.error}>
+        AI Key Configuration Required
+      </Text>
       <Box marginTop={1}>
-        <Text color={theme.info}>{'>'} </Text>
+        <Text>
+          Please configure your LLM provider and API key.
+        </Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text color={theme.dim}>
+          Config file: {configPath ?? 'N/A'}
+        </Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text color={theme.dim}>
+          Example:
+        </Text>
+      </Box>
+      <Box marginLeft={2}>
+        <Text color={theme.dim}>
+          llm:{'\n'}
+          {'  '}provider: openai{'\n'}
+          {'  '}apiKey: sk-your-key-here{'\n'}
+          {'  '}model: gpt-4o
+        </Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text color={theme.dim}>Press Ctrl+C to exit</Text>
       </Box>
     </Box>
   );
