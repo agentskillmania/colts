@@ -9,6 +9,8 @@ import { theme } from './utils/theme.js';
 export interface AppConfig {
   /** Whether a valid config exists (LLM provider + apiKey) */
   hasValidConfig: boolean;
+  /** Path to the config file (for display) */
+  configPath?: string;
   /** LLM configuration */
   llm?: {
     provider: string;
@@ -46,13 +48,18 @@ export function App({ config }: AppProps) {
   if (isSetup) {
     return (
       <Box flexDirection="column" padding={1}>
-        <Text color={theme.warning}>No configuration found</Text>
-        <Text color={theme.dim}>
-          Set up your LLM provider using:
-        </Text>
-        <Text color={theme.info}>  /config llm.provider openai</Text>
-        <Text color={theme.info}>  /config llm.apiKey sk-...</Text>
-        <Text color={theme.info}>  /config llm.model gpt-4</Text>
+        <Text color={theme.warning}>Configuration incomplete</Text>
+        {config.configPath && (
+          <Box marginTop={1}>
+            <Text color={theme.dim}>Config file: </Text>
+            <Text color={theme.info}>{config.configPath}</Text>
+          </Box>
+        )}
+        <Box marginTop={1}>
+          <Text color={theme.dim}>Edit the file and fill in at least:</Text>
+        </Box>
+        <Text color={theme.info}>  llm.provider</Text>
+        <Text color={theme.info}>  llm.apiKey</Text>
         <Box marginTop={1}>
           <Text color={theme.dim}>
             Press Ctrl+C to exit.

@@ -107,28 +107,31 @@ function isValidConfig(config: ColtsConfig): boolean {
 /**
  * Load configuration
  *
- * Reads from config file if found, returns unconfigured state otherwise.
+ * Search order: ./colts.yaml > {globalDir}/config.yaml
+ * If neither exists, creates default config at global location via Settings.initialize().
  *
  * @param options - Load options (inject globalDir for testing)
  */
 export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig> {
-  const configPath = await findConfigPath(options?.globalDir);
-
+  // Try local config first, fall back to global
+  let configPath = await findConfigPath(options?.globalDir);
   if (!configPath) {
-    return { hasValidConfig: false };
+    configPath = getGlobalConfigPath(options?.globalDir);
   }
 
   try {
     const settings = new Settings<ColtsConfig>(configPath);
+    // initialize() creates the file with defaults if it doesn't exist
     await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
     const config = settings.getValues();
 
     if (!isValidConfig(config)) {
-      return { hasValidConfig: false };
+      return { hasValidConfig: false, configPath };
     }
 
     return {
       hasValidConfig: true,
+      configPath,
       llm: {
         provider: config.llm!.provider!,
         apiKey: config.llm!.apiKey!,
@@ -137,7 +140,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
       },
     };
   } catch {
-    return { hasValidConfig: false };
+    return { hasValidConfig: false, configPath };
   }
 }
 
