@@ -1,5 +1,5 @@
 /**
- * @fileoverview InputBar 组件单元测试
+ * @fileoverview InputBar component unit tests
  */
 
 import React from 'react';
@@ -8,7 +8,7 @@ import { render } from 'ink-testing-library';
 import { InputBar } from '../../../src/components/input/input-bar.js';
 
 describe('InputBar', () => {
-  it('空闲时显示输入框', () => {
+  it('should show input bar when idle', () => {
     const onSubmit = vi.fn();
     const { lastFrame } = render(
       <InputBar onSubmit={onSubmit} mode="run" isRunning={false} />
@@ -18,7 +18,7 @@ describe('InputBar', () => {
     expect(frame).toContain('Type your message...');
   });
 
-  it('运行时显示 Spinner', () => {
+  it('should show spinner when running', () => {
     const onSubmit = vi.fn();
     const { lastFrame } = render(
       <InputBar onSubmit={onSubmit} mode="run" isRunning={true} />
@@ -26,7 +26,7 @@ describe('InputBar', () => {
     expect(lastFrame()).toContain('Agent is thinking...');
   });
 
-  it('step 模式显示 STEP 标签', () => {
+  it('should show STEP label in step mode', () => {
     const onSubmit = vi.fn();
     const { lastFrame } = render(
       <InputBar onSubmit={onSubmit} mode="step" isRunning={false} />
@@ -34,7 +34,7 @@ describe('InputBar', () => {
     expect(lastFrame()).toContain('STEP');
   });
 
-  it('advance 模式显示 ADV 标签', () => {
+  it('should show ADV label in advance mode', () => {
     const onSubmit = vi.fn();
     const { lastFrame } = render(
       <InputBar onSubmit={onSubmit} mode="advance" isRunning={false} />
@@ -42,12 +42,12 @@ describe('InputBar', () => {
     expect(lastFrame()).toContain('ADV');
   });
 
-  it('有边框', () => {
+  it('should have border', () => {
     const onSubmit = vi.fn();
     const { lastFrame } = render(
       <InputBar onSubmit={onSubmit} mode="run" isRunning={false} />
     );
-    // ink border 使用 box drawing 字符
+    // ink border uses box drawing characters
     const frame = lastFrame();
     expect(frame).toBeTruthy();
   });

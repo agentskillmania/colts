@@ -1,5 +1,5 @@
 /**
- * @fileoverview WelcomeScreen 组件单元测试
+ * @fileoverview WelcomeScreen component unit tests
  */
 
 import React from 'react';
@@ -8,27 +8,27 @@ import { render } from 'ink-testing-library';
 import { WelcomeScreen } from '../../../src/components/screens/welcome-screen.js';
 
 describe('WelcomeScreen', () => {
-  it('显示欢迎语', () => {
+  it('should display welcome message', () => {
     const { lastFrame } = render(<WelcomeScreen />);
     expect(lastFrame()).toContain('Welcome to colts-cli');
   });
 
-  it('显示 agent 名称', () => {
+  it('should display agent name', () => {
     const { lastFrame } = render(<WelcomeScreen agentName="my-agent" />);
     expect(lastFrame()).toContain('my-agent');
   });
 
-  it('显示模型名', () => {
+  it('should display model name', () => {
     const { lastFrame } = render(<WelcomeScreen model="gpt-4o" />);
     expect(lastFrame()).toContain('gpt-4o');
   });
 
-  it('显示帮助提示', () => {
+  it('should display help hint', () => {
     const { lastFrame } = render(<WelcomeScreen />);
     expect(lastFrame()).toContain('/help');
   });
 
-  it('无参数只显示欢迎语和提示', () => {
+  it('should show only welcome message and hint with no props', () => {
     const { lastFrame } = render(<WelcomeScreen />);
     const frame = lastFrame();
     expect(frame).toContain('Welcome to colts-cli');

@@ -1,5 +1,5 @@
 /**
- * session.ts 单元测试
+ * session.ts unit tests
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -18,7 +18,7 @@ import { createAgentState, addUserMessage, addAssistantMessage } from '@agentski
 describe('session', () => {
   const testDir = path.join(os.tmpdir(), `colts-test-session-${Date.now()}`);
 
-  /** 创建一个带消息的测试用 AgentState */
+  /** Create a test AgentState with messages */
   function createTestState(messageContents: string[] = []) {
     const config = {
       name: 'test-agent',
@@ -40,17 +40,17 @@ describe('session', () => {
     try {
       await fs.rm(testDir, { recursive: true, force: true });
     } catch {
-      // 忽略清理错误
+      // Ignore cleanup errors
     }
   });
 
   describe('getSessionDir', () => {
-    it('使用自定义 baseDir 时返回自定义路径', () => {
+    it('should return custom path when custom baseDir is provided', () => {
       const result = getSessionDir('/tmp/test-sessions');
       expect(result).toBe('/tmp/test-sessions');
     });
 
-    it('不传 baseDir 时返回默认路径', () => {
+    it('should return default path when baseDir is not provided', () => {
       const result = getSessionDir();
       expect(result).toContain('.agentskillmania');
       expect(result).toContain('sessions');
@@ -58,7 +58,7 @@ describe('session', () => {
   });
 
   describe('saveSession & loadSession', () => {
-    it('能保存并加载会话', async () => {
+    it('should save and load a session', async () => {
       const state = createTestState(['Hello', 'World']);
       await saveSession(state, testDir);
 
@@ -69,7 +69,7 @@ describe('session', () => {
       expect(loaded.context.messages[1].content).toBe('World');
     });
 
-    it('保存的文件是合法 JSON', async () => {
+    it('should save valid JSON file', async () => {
       const state = createTestState(['test message']);
       await saveSession(state, testDir);
 
@@ -82,11 +82,11 @@ describe('session', () => {
       expect(parsed.config.name).toBe('test-agent');
     });
 
-    it('加载不存在的会话时抛出错误', async () => {
+    it('should throw when loading a non-existent session', async () => {
       await expect(loadSession('non-existent-id', testDir)).rejects.toThrow();
     });
 
-    it('能保存和加载无消息的空会话', async () => {
+    it('should save and load an empty session with no messages', async () => {
       const state = createTestState([]);
       await saveSession(state, testDir);
 
@@ -95,7 +95,7 @@ describe('session', () => {
       expect(loaded.context.messages).toHaveLength(0);
     });
 
-    it('保存后再保存同一会话会覆盖', async () => {
+    it('should overwrite when saving the same session again', async () => {
       const state1 = createTestState(['first']);
       await saveSession(state1, testDir);
 
@@ -109,7 +109,7 @@ describe('session', () => {
   });
 
   describe('listSessions', () => {
-    it('空目录返回空列表', async () => {
+    it('should return empty list for empty directory', async () => {
       const emptyDir = path.join(testDir, 'empty');
       await fs.mkdir(emptyDir, { recursive: true });
 
@@ -117,13 +117,13 @@ describe('session', () => {
       expect(sessions).toEqual([]);
     });
 
-    it('目录不存在时返回空列表', async () => {
+    it('should return empty list when directory does not exist', async () => {
       const nonExistent = path.join(testDir, 'does-not-exist');
       const sessions = await listSessions(nonExistent);
       expect(sessions).toEqual([]);
     });
 
-    it('能正确列出单个会话的元数据', async () => {
+    it('should correctly list metadata for a single session', async () => {
       const state = createTestState(['Hello world']);
       await saveSession(state, testDir);
 
@@ -134,7 +134,7 @@ describe('session', () => {
       expect(sessions[0].lastMessage).toBe('Hello world');
     });
 
-    it('消息计数正确', async () => {
+    it('should count messages correctly', async () => {
       const state = createTestState(['msg1', 'msg2', 'msg3']);
       await saveSession(state, testDir);
 
@@ -142,7 +142,7 @@ describe('session', () => {
       expect(sessions[0].messageCount).toBe(3);
     });
 
-    it('lastMessage 预览截断至 50 字符', async () => {
+    it('should truncate lastMessage preview to 50 characters', async () => {
       const longContent = 'A'.repeat(100);
       const state = createTestState([longContent]);
       await saveSession(state, testDir);
@@ -152,7 +152,7 @@ describe('session', () => {
       expect(sessions[0].lastMessage).toBe('A'.repeat(50));
     });
 
-    it('无消息时 lastMessage 为空字符串', async () => {
+    it('should return empty string for lastMessage when no messages', async () => {
       const state = createTestState([]);
       await saveSession(state, testDir);
 
@@ -160,7 +160,7 @@ describe('session', () => {
       expect(sessions[0].lastMessage).toBe('');
     });
 
-    it('无消息时 messageCount 为 0', async () => {
+    it('should return 0 for messageCount when no messages', async () => {
       const state = createTestState([]);
       await saveSession(state, testDir);
 
@@ -168,7 +168,7 @@ describe('session', () => {
       expect(sessions[0].messageCount).toBe(0);
     });
 
-    it('能正确列出多个会话', async () => {
+    it('should correctly list multiple sessions', async () => {
       const state1 = createTestState(['session1 msg']);
       const state2 = createTestState(['session2 msg']);
       const state3 = createTestState(['session3 msg']);
@@ -186,36 +186,36 @@ describe('session', () => {
       expect(ids).toContain(state3.id);
     });
 
-    it('会话按创建时间降序排列', async () => {
-      // 创建带不同时间戳的消息
+    it('should sort sessions by creation time descending', async () => {
+      // Create messages with different timestamps
       const state1 = createTestState(['first']);
       await saveSession(state1, testDir);
 
-      // 模拟稍后创建的会话：直接写入不同时间戳
+      // Simulate a later-created session: directly write with different timestamp
       const state2 = createTestState(['second']);
       await saveSession(state2, testDir);
 
       const sessions = await listSessions(testDir);
-      // 至少应该能返回两个会话
+      // At least should return two sessions
       expect(sessions).toHaveLength(2);
     });
 
-    it('忽略损坏的 JSON 文件', async () => {
+    it('should ignore corrupted JSON files', async () => {
       const state = createTestState(['valid']);
       await saveSession(state, testDir);
 
-      // 写入一个损坏的 JSON 文件
+      // Write a corrupted JSON file
       const corruptPath = path.join(testDir, 'corrupt-session.json');
       await fs.writeFile(corruptPath, 'not valid json {{{', 'utf-8');
 
       const sessions = await listSessions(testDir);
-      // 只返回有效的会话
+      // Only return valid sessions
       expect(sessions).toHaveLength(1);
       expect(sessions[0].id).toBe(state.id);
     });
 
-    it('处理缺少 context 字段的会话文件', async () => {
-      // 写入一个合法 JSON 但缺少 context 的文件
+    it('should handle session files missing context field', async () => {
+      // Write a valid JSON file but missing context
       const malformedPath = path.join(testDir, 'malformed.json');
       const malformed = JSON.stringify({ id: 'malformed-id' });
       await fs.writeFile(malformedPath, malformed, 'utf-8');
@@ -227,11 +227,11 @@ describe('session', () => {
       expect(sessions[0].lastMessage).toBe('');
     });
 
-    it('忽略非 JSON 文件', async () => {
+    it('should ignore non-JSON files', async () => {
       const state = createTestState(['valid']);
       await saveSession(state, testDir);
 
-      // 写入一个非 JSON 文件
+      // Write a non-JSON file
       const txtPath = path.join(testDir, 'readme.txt');
       await fs.writeFile(txtPath, 'some text', 'utf-8');
 
@@ -241,26 +241,26 @@ describe('session', () => {
   });
 
   describe('deleteSession', () => {
-    it('能删除已保存的会话', async () => {
+    it('should delete a saved session', async () => {
       const state = createTestState(['to be deleted']);
       await saveSession(state, testDir);
 
-      // 确认文件存在
+      // Confirm file exists
       const filePath = path.join(testDir, `${state.id}.json`);
       await fs.access(filePath);
 
       await deleteSession(state.id, testDir);
 
-      // 确认文件已删除
+      // Confirm file is deleted
       await expect(fs.access(filePath)).rejects.toThrow();
     });
 
-    it('删除不存在的会话不抛出错误', async () => {
-      // 应该静默通过，不抛出异常
+    it('should not throw when deleting a non-existent session', async () => {
+      // Should pass silently without throwing
       await expect(deleteSession('non-existent-id', testDir)).resolves.toBeUndefined();
     });
 
-    it('删除后列出会话不包含该会话', async () => {
+    it('should not include deleted session in listing', async () => {
       const state1 = createTestState(['keep']);
       const state2 = createTestState(['remove']);
       await saveSession(state1, testDir);

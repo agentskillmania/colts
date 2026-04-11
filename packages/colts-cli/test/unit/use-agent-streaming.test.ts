@@ -1,7 +1,7 @@
 /**
- * @fileoverview useAgent streaming 逻辑单元测试
+ * @fileoverview Unit tests for useAgent streaming logic
  *
- * 直接测试 parseCommand + 模拟 streaming 逻辑，验证消息状态更新正确性。
+ * Directly test parseCommand + simulated streaming logic, verifying message state update correctness.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -16,7 +16,7 @@ import { parseCommand } from '../../src/hooks/use-agent.js';
 import type { ChatMessage } from '../../src/hooks/use-agent.js';
 
 /**
- * 模拟 chatStream 返回的 chunks
+ * Mock chunks returned by chatStream
  */
 function createMockChatStream() {
   const chunks = [
@@ -47,7 +47,7 @@ function createMockChatStream() {
 
 describe('useAgent streaming logic', () => {
   describe('parseCommand', () => {
-    it('所有命令类型都能解析', () => {
+    it('should parse all command types', () => {
       expect(parseCommand('/run').type).toBe('mode-run');
       expect(parseCommand('/step').type).toBe('mode-step');
       expect(parseCommand('/advance').type).toBe('mode-advance');
@@ -57,20 +57,20 @@ describe('useAgent streaming logic', () => {
       expect(parseCommand('hello').type).toBe('message');
     });
 
-    it('/skill 参数提取', () => {
+    it('should extract /skill argument', () => {
       const cmd = parseCommand('/skill my-skill');
       expect(cmd.skillName).toBe('my-skill');
     });
 
-    it('空 skill 名匹配不到', () => {
-      // /skill 后跟空格但无名称 -> trim 后是 "/skill"，不匹配 startsWith('/skill ')
+    it('should not match empty skill name', () => {
+      // /skill followed by space but no name -> trim results in "/skill", does not match startsWith('/skill ')
       const cmd = parseCommand('/skill ');
       expect(cmd.type).toBe('message');
     });
   });
 
-  describe('消息状态更新模拟', () => {
-    it('模拟 chatStream 消息累积', () => {
+  describe('Message state update simulation', () => {
+    it('should simulate chatStream message accumulation', () => {
       const chunks = createMockChatStream();
       const assistantMsg: ChatMessage = {
         id: 'test-id',
@@ -101,7 +101,7 @@ describe('useAgent streaming logic', () => {
       expect(messages[0].isStreaming).toBe(false);
     });
 
-    it('模拟 chatStream 错误处理', () => {
+    it('should simulate chatStream error handling', () => {
       const chunks = [
         { type: 'error' as const, error: 'API rate limit', state: null as unknown as AgentState },
       ];
@@ -130,7 +130,7 @@ describe('useAgent streaming logic', () => {
       expect(messages[0].isStreaming).toBe(false);
     });
 
-    it('模拟 stepStream token 累积', () => {
+    it('should simulate stepStream token accumulation', () => {
       const events: StreamEvent[] = [
         { type: 'token', token: 'Step ' },
         { type: 'token', token: 'result' },
@@ -153,7 +153,7 @@ describe('useAgent streaming logic', () => {
       expect(toolCalls).toEqual(['read_file']);
     });
 
-    it('模拟 advanceStream phase 变化', () => {
+    it('should simulate advanceStream phase changes', () => {
       const events: StreamEvent[] = [
         { type: 'phase-change', from: { type: 'idle' }, to: { type: 'calling-llm' } },
         { type: 'token', token: 'thinking...' },
@@ -177,9 +177,9 @@ describe('useAgent streaming logic', () => {
     });
   });
 
-  describe('用户消息 + 助手消息组合', () => {
-    it('完整对话流程模拟', () => {
-      // 1. 用户消息
+  describe('User message + assistant message combination', () => {
+    it('should simulate a complete conversation flow', () => {
+      // 1. User message
       const userMsg: ChatMessage = {
         id: 'user-1',
         role: 'user',
@@ -187,7 +187,7 @@ describe('useAgent streaming logic', () => {
         timestamp: Date.now(),
       };
 
-      // 2. 助手开始流式
+      // 2. Assistant starts streaming
       const assistantMsg: ChatMessage = {
         id: 'asst-1',
         role: 'assistant',
@@ -198,7 +198,7 @@ describe('useAgent streaming logic', () => {
 
       let messages = [userMsg, assistantMsg];
 
-      // 3. 模拟流式更新
+      // 3. Simulate streaming updates
       const chunks = [
         {
           type: 'text' as const,

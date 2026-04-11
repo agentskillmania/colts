@@ -1,5 +1,5 @@
 /**
- * @fileoverview MessageBubble 组件单元测试
+ * @fileoverview MessageBubble component unit tests
  */
 
 import React from 'react';
@@ -9,7 +9,7 @@ import { MessageBubble } from '../../../src/components/chat/message-bubble.js';
 import type { ChatMessage } from '../../../src/hooks/use-agent.js';
 
 describe('MessageBubble', () => {
-  it('渲染用户消息', () => {
+  it('should render user message', () => {
     const msg: ChatMessage = {
       id: '1',
       role: 'user',
@@ -22,7 +22,7 @@ describe('MessageBubble', () => {
     expect(frame).toContain('Hello world');
   });
 
-  it('渲染助手消息', () => {
+  it('should render assistant message', () => {
     const msg: ChatMessage = {
       id: '2',
       role: 'assistant',
@@ -35,7 +35,7 @@ describe('MessageBubble', () => {
     expect(frame).toContain('Hi there!');
   });
 
-  it('渲染系统消息', () => {
+  it('should render system message', () => {
     const msg: ChatMessage = {
       id: '3',
       role: 'system',
@@ -48,7 +48,7 @@ describe('MessageBubble', () => {
     expect(frame).toContain('Switched to STEP mode');
   });
 
-  it('流式状态显示游标', () => {
+  it('should show cursor in streaming state', () => {
     const msg: ChatMessage = {
       id: '4',
       role: 'assistant',
@@ -60,7 +60,7 @@ describe('MessageBubble', () => {
     expect(lastFrame()).toContain('|');
   });
 
-  it('非流式状态不显示游标', () => {
+  it('should not show cursor in non-streaming state', () => {
     const msg: ChatMessage = {
       id: '5',
       role: 'assistant',
@@ -72,7 +72,7 @@ describe('MessageBubble', () => {
     expect(lastFrame()).toContain('Done');
   });
 
-  it('空内容也能渲染', () => {
+  it('should render even with empty content', () => {
     const msg: ChatMessage = {
       id: '6',
       role: 'user',
@@ -83,7 +83,7 @@ describe('MessageBubble', () => {
     expect(lastFrame()).toContain('You');
   });
 
-  it('未知角色使用默认标签', () => {
+  it('should use default label for unknown role', () => {
     const msg = {
       id: '7',
       role: 'other' as 'user' | 'assistant' | 'system',

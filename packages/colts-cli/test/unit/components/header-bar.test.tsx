@@ -1,5 +1,5 @@
 /**
- * @fileoverview HeaderBar 组件单元测试
+ * @fileoverview HeaderBar component unit tests
  */
 
 import React from 'react';
@@ -8,34 +8,34 @@ import { render } from 'ink-testing-library';
 import { HeaderBar } from '../../../src/components/layout/header-bar.js';
 
 describe('HeaderBar', () => {
-  it('显示版本号和模型名', () => {
+  it('should display version and model name', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4o" status="idle" eventsVisible={true} />);
     const frame = lastFrame();
     expect(frame).toContain('colts-cli v0.1.0');
     expect(frame).toContain('gpt-4o');
   });
 
-  it('空闲时显示 Ready 状态', () => {
+  it('should show Ready status when idle', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="idle" eventsVisible={true} />);
     expect(lastFrame()).toContain('READY');
   });
 
-  it('运行时显示 Running 状态', () => {
+  it('should show Running status when running', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="running" eventsVisible={true} />);
     expect(lastFrame()).toContain('Running');
   });
 
-  it('错误时显示 Error 状态', () => {
+  it('should show Error status on error', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="error" eventsVisible={true} />);
     expect(lastFrame()).toContain('ERROR');
   });
 
-  it('events 可见时显示 hide 提示', () => {
+  it('should show hide hint when events are visible', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="idle" eventsVisible={true} />);
     expect(lastFrame()).toContain('hide events');
   });
 
-  it('events 隐藏时显示 show 提示', () => {
+  it('should show show hint when events are hidden', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="idle" eventsVisible={false} />);
     expect(lastFrame()).toContain('show events');
   });

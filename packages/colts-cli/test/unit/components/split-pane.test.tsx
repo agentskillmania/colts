@@ -1,5 +1,5 @@
 /**
- * @fileoverview SplitPane 组件单元测试
+ * @fileoverview SplitPane component unit tests
  */
 
 import React from 'react';
@@ -9,7 +9,7 @@ import { render } from 'ink-testing-library';
 import { SplitPane } from '../../../src/components/layout/split-pane.js';
 
 describe('SplitPane', () => {
-  it('渲染左右两侧内容', () => {
+  it('should render left and right content', () => {
     const { lastFrame } = render(
       <SplitPane
         left={<Text>Left Content</Text>}
@@ -21,7 +21,7 @@ describe('SplitPane', () => {
     expect(frame).toContain('Right Content');
   });
 
-  it('显示左侧标题', () => {
+  it('should display left title', () => {
     const { lastFrame } = render(
       <SplitPane
         leftTitle="Chat"
@@ -32,7 +32,7 @@ describe('SplitPane', () => {
     expect(lastFrame()).toContain('Chat');
   });
 
-  it('显示右侧标题', () => {
+  it('should display right title', () => {
     const { lastFrame } = render(
       <SplitPane
         rightTitle="Events"
@@ -43,7 +43,7 @@ describe('SplitPane', () => {
     expect(lastFrame()).toContain('Events');
   });
 
-  it('rightVisible=false 时隐藏右侧内容', () => {
+  it('should hide right content when rightVisible=false', () => {
     const { lastFrame } = render(
       <SplitPane
         left={<Text>Left Content</Text>}
@@ -56,7 +56,7 @@ describe('SplitPane', () => {
     expect(frame).not.toContain('Right Content');
   });
 
-  it('折叠时隐藏右侧标题', () => {
+  it('should hide right title when collapsed', () => {
     const { lastFrame } = render(
       <SplitPane
         leftTitle="Chat"
@@ -71,7 +71,7 @@ describe('SplitPane', () => {
     expect(frame).not.toContain('Events');
   });
 
-  it('不传标题时不显示标题栏', () => {
+  it('should not show title bar when no titles are provided', () => {
     const { lastFrame } = render(
       <SplitPane left={<Text>L</Text>} right={<Text>R</Text>} />
     );
@@ -80,7 +80,7 @@ describe('SplitPane', () => {
     expect(frame).toContain('R');
   });
 
-  it('默认右侧可见', () => {
+  it('should show right content by default', () => {
     const { lastFrame } = render(
       <SplitPane left={<Text>L</Text>} right={<Text>R</Text>} />
     );

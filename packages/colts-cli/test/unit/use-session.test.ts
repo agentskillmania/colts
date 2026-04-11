@@ -1,12 +1,12 @@
 /**
- * @fileoverview useSession hook 和 scheduleAutoSave 单元测试
+ * @fileoverview Unit tests for useSession hook and scheduleAutoSave
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { scheduleAutoSave } from '../../src/hooks/use-session.js';
 import type { AgentState } from '@agentskillmania/colts';
 
-// Mock session 模块
+// Mock session module
 vi.mock('../../src/session.js', () => ({
   saveSession: vi.fn().mockResolvedValue(undefined),
   loadSession: vi.fn().mockResolvedValue({
@@ -35,18 +35,18 @@ describe('scheduleAutoSave', () => {
     vi.useRealTimers();
   });
 
-  it('state 为 null 时不保存', () => {
+  it('should not save when state is null', () => {
     scheduleAutoSave(null, null, saveFn, timerRef);
     expect(saveFn).not.toHaveBeenCalled();
   });
 
-  it('state.id 等于 sessionId 时不保存', () => {
+  it('should not save when state.id equals sessionId', () => {
     const state = { id: 'same-id' } as AgentState;
     scheduleAutoSave(state, 'same-id', saveFn, timerRef);
     expect(saveFn).not.toHaveBeenCalled();
   });
 
-  it('state.id 不等于 sessionId 时延迟保存', () => {
+  it('should save with delay when state.id differs from sessionId', () => {
     const state = { id: 'new-id' } as AgentState;
     scheduleAutoSave(state, 'old-id', saveFn, timerRef);
     expect(saveFn).not.toHaveBeenCalled();
@@ -55,7 +55,7 @@ describe('scheduleAutoSave', () => {
     expect(saveFn).toHaveBeenCalledWith(state);
   });
 
-  it('连续调用取消前一次保存', () => {
+  it('should cancel previous save on consecutive calls', () => {
     const state1 = { id: 'id-1' } as AgentState;
     const state2 = { id: 'id-2' } as AgentState;
 

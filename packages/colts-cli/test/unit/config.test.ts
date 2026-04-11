@@ -1,5 +1,5 @@
 /**
- * config.ts 单元测试
+ * config.ts unit tests
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -21,24 +21,24 @@ describe('config', () => {
     try {
       await fs.rm(testDir, { recursive: true, force: true });
     } catch {
-      // 忽略清理错误
+      // Ignore cleanup errors
     }
   });
 
   describe('setNestedValue', () => {
-    it('能设置顶级键', () => {
+    it('should set top-level key', () => {
       const obj: Record<string, unknown> = {};
       setNestedValue(obj, 'name', 'test');
       expect(obj.name).toBe('test');
     });
 
-    it('能设置嵌套路径', () => {
+    it('should set nested path', () => {
       const obj: Record<string, unknown> = {};
       setNestedValue(obj, 'llm.provider', 'openai');
       expect((obj.llm as Record<string, unknown>).provider).toBe('openai');
     });
 
-    it('能设置深层嵌套路径', () => {
+    it('should set deeply nested path', () => {
       const obj: Record<string, unknown> = {};
       setNestedValue(obj, 'a.b.c', 'value');
       const a = obj.a as Record<string, unknown>;
@@ -46,13 +46,13 @@ describe('config', () => {
       expect(b.c).toBe('value');
     });
 
-    it('能覆盖已存在的值', () => {
+    it('should overwrite existing value', () => {
       const obj: Record<string, unknown> = { name: 'old' };
       setNestedValue(obj, 'name', 'new');
       expect(obj.name).toBe('new');
     });
 
-    it('能在已有对象上设置嵌套值', () => {
+    it('should set nested value on existing object', () => {
       const obj: Record<string, unknown> = {
         llm: { provider: 'openai' },
       };
@@ -62,7 +62,7 @@ describe('config', () => {
       expect(llm.model).toBe('gpt-4');
     });
 
-    it('能覆盖非对象值为对象', () => {
+    it('should overwrite non-object value with object', () => {
       const obj: Record<string, unknown> = { llm: 'string' };
       setNestedValue(obj, 'llm.provider', 'openai');
       expect(typeof obj.llm).toBe('object');
@@ -70,8 +70,8 @@ describe('config', () => {
   });
 
   describe('loadConfig', () => {
-    it('无配置文件时返回 hasValidConfig=false', async () => {
-      // 使用隔离的空目录，无本地也无全局配置
+    it('should return hasValidConfig=false when no config file exists', async () => {
+      // Use an isolated empty directory with no local or global config
       const emptyDir = path.join(testDir, 'empty');
       await fs.mkdir(emptyDir, { recursive: true });
 
@@ -86,7 +86,7 @@ describe('config', () => {
       }
     });
 
-    it('有有效本地配置时返回正确配置', async () => {
+    it('should return correct config when valid local config exists', async () => {
       const yamlContent = `
 llm:
   provider: openai
@@ -113,12 +113,12 @@ agent:
       }
     });
 
-    it('有有效全局配置时返回正确配置', async () => {
-      // 确保本地没有配置
+    it('should return correct config when valid global config exists', async () => {
+      // Ensure no local config exists
       const localOnlyDir = path.join(testDir, 'nolocal');
       await fs.mkdir(localOnlyDir, { recursive: true });
 
-      // 全局目录放配置
+      // Place config in global directory
       const yamlContent = `
 llm:
   provider: anthropic
@@ -141,7 +141,7 @@ llm:
       }
     });
 
-    it('缺少 apiKey 时返回 hasValidConfig=false', async () => {
+    it('should return hasValidConfig=false when apiKey is missing', async () => {
       const yamlContent = `
 llm:
   provider: openai
@@ -161,7 +161,7 @@ llm:
       }
     });
 
-    it('有空 YAML 时返回 hasValidConfig=false', async () => {
+    it('should return hasValidConfig=false when YAML is empty', async () => {
       const localConfig = path.join(testDir, 'colts.yaml');
       await fs.writeFile(localConfig, '', 'utf-8');
 
@@ -176,8 +176,8 @@ llm:
       }
     });
 
-    it('本地配置优先于全局配置', async () => {
-      // 本地配置
+    it('should prefer local config over global config', async () => {
+      // Local config
       const localYaml = `
 llm:
   provider: openai
@@ -186,7 +186,7 @@ llm:
 `;
       await fs.writeFile(path.join(testDir, 'colts.yaml'), localYaml, 'utf-8');
 
-      // 全局配置（不同值）
+      // Global config (different values)
       const globalYaml = `
 llm:
   provider: anthropic
@@ -201,7 +201,7 @@ llm:
       try {
         const config = await loadConfig({ globalDir });
         expect(config.hasValidConfig).toBe(true);
-        // 本地配置应该优先
+        // Local config should take priority
         expect(config.llm?.apiKey).toBe('sk-local');
         expect(config.llm?.provider).toBe('openai');
       } finally {
@@ -211,14 +211,14 @@ llm:
   });
 
   describe('saveConfig', () => {
-    it('能保存配置到指定全局路径', async () => {
+    it('should save config to specified global path', async () => {
       await saveConfig('llm.provider', 'openai', { globalDir });
 
       const content = await fs.readFile(path.join(globalDir, 'config.yaml'), 'utf-8');
       expect(content).toContain('openai');
     });
 
-    it('能设置嵌套路径的值', async () => {
+    it('should set nested path value', async () => {
       await saveConfig('llm.apiKey', 'sk-test-new', { globalDir });
       await saveConfig('llm.model', 'gpt-4o', { globalDir });
 
@@ -227,19 +227,19 @@ llm:
       expect(content).toContain('gpt-4o');
     });
 
-    it('能设置新的顶级键', async () => {
+    it('should set new top-level key', async () => {
       await saveConfig('agent.name', 'my-test-agent', { globalDir });
 
       const content = await fs.readFile(path.join(globalDir, 'config.yaml'), 'utf-8');
       expect(content).toContain('my-test-agent');
     });
 
-    it('保存后能加载配置', async () => {
+    it('should load config after saving', async () => {
       await saveConfig('llm.provider', 'openai', { globalDir });
       await saveConfig('llm.apiKey', 'sk-test-key', { globalDir });
       await saveConfig('llm.model', 'gpt-4', { globalDir });
 
-      // 使用隔离目录避免本地配置干扰
+      // Use isolated directory to avoid local config interference
       const noLocalDir = path.join(testDir, 'nolocal2');
       await fs.mkdir(noLocalDir, { recursive: true });
 
@@ -251,6 +251,38 @@ llm:
         expect(config.hasValidConfig).toBe(true);
         expect(config.llm?.provider).toBe('openai');
         expect(config.llm?.apiKey).toBe('sk-test-key');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
+  describe('loadConfig error handling', () => {
+    it('should return hasValidConfig=false for malformed YAML', async () => {
+      // Write invalid YAML (unclosed quote)
+      const localConfig = path.join(testDir, 'colts.yaml');
+      await fs.writeFile(localConfig, 'llm:\n  provider: openai\n  apiKey: "unclosed', 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(false);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should return hasValidConfig=false when config file path is unreadable', async () => {
+      // Use a non-existent path, but Settings constructor may throw
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: '/dev/null/impossible' });
+        // Whether it throws or not, returning false is fine
+        expect(config.hasValidConfig).toBe(false);
       } finally {
         process.chdir(originalCwd);
       }

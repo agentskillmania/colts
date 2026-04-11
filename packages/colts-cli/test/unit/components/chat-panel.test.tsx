@@ -1,5 +1,5 @@
 /**
- * @fileoverview ChatPanel 组件单元测试
+ * @fileoverview ChatPanel component unit tests
  */
 
 import React from 'react';
@@ -9,12 +9,12 @@ import { ChatPanel } from '../../../src/components/chat/chat-panel.js';
 import type { ChatMessage } from '../../../src/hooks/use-agent.js';
 
 describe('ChatPanel', () => {
-  it('无消息时显示空提示', () => {
+  it('should show empty state prompt when no messages', () => {
     const { lastFrame } = render(<ChatPanel messages={[]} />);
     expect(lastFrame()).toContain('No messages yet');
   });
 
-  it('渲染单条用户消息', () => {
+  it('should render a single user message', () => {
     const messages: ChatMessage[] = [
       { id: '1', role: 'user', content: 'Hello', timestamp: Date.now() },
     ];
@@ -23,7 +23,7 @@ describe('ChatPanel', () => {
     expect(lastFrame()).toContain('Hello');
   });
 
-  it('渲染多条消息', () => {
+  it('should render multiple messages', () => {
     const messages: ChatMessage[] = [
       { id: '1', role: 'user', content: 'Hi', timestamp: Date.now() },
       { id: '2', role: 'assistant', content: 'Hey', timestamp: Date.now() },
@@ -33,7 +33,7 @@ describe('ChatPanel', () => {
     expect(lastFrame()).toContain('Hey');
   });
 
-  it('渲染系统消息', () => {
+  it('should render system messages', () => {
     const messages: ChatMessage[] = [
       { id: '1', role: 'system', content: 'Switched to RUN mode', timestamp: Date.now() },
     ];
@@ -42,7 +42,7 @@ describe('ChatPanel', () => {
     expect(lastFrame()).toContain('Switched to RUN mode');
   });
 
-  it('渲染流式消息', () => {
+  it('should render streaming messages', () => {
     const messages: ChatMessage[] = [
       { id: '1', role: 'assistant', content: 'Thinking...', timestamp: Date.now(), isStreaming: true },
     ];
