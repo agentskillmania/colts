@@ -6,6 +6,7 @@
 
 import type { Message } from './types.js';
 import type { ToolCall } from './parser.js';
+import type { DelegateResult } from './subagent/types.js';
 
 /**
  * Action extracted from LLM response (represents a tool call)
@@ -55,7 +56,11 @@ export type StreamEvent =
   | { type: 'compressing' }
   | { type: 'compressed'; summary: string; removedCount: number }
   | { type: 'skill:loading'; name: string }
-  | { type: 'skill:loaded'; name: string; tokenCount: number };
+  | { type: 'skill:loaded'; name: string; tokenCount: number }
+  | { type: 'subagent:start'; name: string; task: string }
+  | { type: 'subagent:token'; name: string; token: string }
+  | { type: 'subagent:step:end'; name: string; step: number }
+  | { type: 'subagent:end'; name: string; result: DelegateResult };
 
 /**
  * Options for advance execution

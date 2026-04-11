@@ -7,6 +7,7 @@ import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../src/runner.js';
 import { createAgentState } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
+import type { SubAgentConfig } from '../../src/subagent/types.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { createExecutionState } from '../../src/execution.js';
 import { z } from 'zod';
@@ -592,6 +593,211 @@ describe('step()', () => {
         expect(result.result.toolResult).toContain('Error');
         expect(result.result.toolResult).toContain('Tool not found');
       }
+    });
+  });
+
+  // ============================================================
+  // SubAgent 事件传播
+  // ============================================================
+  describe('subagent events in stepStream', () => {
+    /** 创建测试用子 agent 配置 */
+    const createTestSubAgents = (): SubAgentConfig[] => [
+      {
+        name: 'researcher',
+        description: 'Information research specialist',
+        config: {
+          name: 'researcher',
+          instructions: 'You are a research specialist.',
+          tools: [],
+        },
+        maxSteps: 5,
+      },
+    ];
+
+    it('应该在 delegate 工具执行时 emit subagent:start 和 subagent:end 事件', async () => {
+      // 第一个响应：主 agent LLM 返回 delegate 工具调用
+      const mainResponse: LLMResponse = {
+        content: 'Delegating to researcher',
+        toolCalls: [
+          {
+            id: 'call-delegate-1',
+            name: 'delegate',
+            arguments: { agent: 'researcher', task: 'Research TypeScript' },
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      // 第二个响应：子 agent 的 LLM 响应（在 delegate tool 内部执行）
+      const subAgentResponse: LLMResponse = {
+        content: 'TypeScript is a typed superset of JavaScript.',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mainResponse, subAgentResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: createTestSubAgents(),
+      });
+
+      const state = createAgentState(defaultConfig);
+      const events: { type: string }[] = [];
+
+      for await (const event of runner.stepStream(state)) {
+        events.push(event as { type: string });
+      }
+
+      // 验证 subagent:start 事件
+      const startEvents = events.filter((e) => e.type === 'subagent:start');
+      expect(startEvents.length).toBe(1);
+      if (startEvents.length > 0) {
+        const startEvent = startEvents[0] as { type: string; name: string; task: string };
+        expect(startEvent.name).toBe('researcher');
+        expect(startEvent.task).toBe('Research TypeScript');
+      }
+
+      // 验证 subagent:end 事件
+      const endEvents = events.filter((e) => e.type === 'subagent:end');
+      expect(endEvents.length).toBe(1);
+      if (endEvents.length > 0) {
+        const endEvent = endEvents[0] as {
+          type: string;
+          name: string;
+          result: { answer: string; totalSteps: number };
+        };
+        expect(endEvent.name).toBe('researcher');
+        expect(endEvent.result.answer).toBe('TypeScript is a typed superset of JavaScript.');
+        expect(endEvent.result.totalSteps).toBe(1);
+      }
+    });
+
+    it('subagent:start 应该在 subagent:end 之前 emit', async () => {
+      const mainResponse: LLMResponse = {
+        content: 'Delegating',
+        toolCalls: [
+          {
+            id: 'call-delegate-1',
+            name: 'delegate',
+            arguments: { agent: 'researcher', task: 'Do research' },
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      const subAgentResponse: LLMResponse = {
+        content: 'Done',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mainResponse, subAgentResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: createTestSubAgents(),
+      });
+
+      const state = createAgentState(defaultConfig);
+      const events: { type: string }[] = [];
+
+      for await (const event of runner.stepStream(state)) {
+        events.push(event as { type: string });
+      }
+
+      const startIndex = events.findIndex((e) => e.type === 'subagent:start');
+      const endIndex = events.findIndex((e) => e.type === 'subagent:end');
+
+      expect(startIndex).toBeGreaterThanOrEqual(0);
+      expect(endIndex).toBeGreaterThanOrEqual(0);
+      expect(startIndex).toBeLessThan(endIndex);
+    });
+
+    it('非 delegate 工具调用不应产生 subagent 事件', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Let me calculate',
+        toolCalls: [
+          {
+            id: 'call-123',
+            name: 'calculate',
+            arguments: { expression: '2+2' },
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const registry = new ToolRegistry();
+      registry.register({
+        name: 'calculate',
+        description: 'Calculate',
+        parameters: z.object({ expression: z.string() }),
+        execute: async ({ expression }) => eval(expression).toString(),
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: createTestSubAgents(),
+      });
+
+      const state = createAgentState(defaultConfig);
+      const events: { type: string }[] = [];
+
+      for await (const event of runner.stepStream(state, registry)) {
+        events.push(event as { type: string });
+      }
+
+      // 不应该有 subagent 事件
+      expect(events.every((e) => !e.type.startsWith('subagent:'))).toBe(true);
+      // 应该有普通的 tool:start 和 tool:end
+      expect(events.some((e) => e.type === 'tool:start')).toBe(true);
+      expect(events.some((e) => e.type === 'tool:end')).toBe(true);
+    });
+
+    it('没有配置子 agent 时不应产生 subagent 事件', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Calculating',
+        toolCalls: [
+          {
+            id: 'call-123',
+            name: 'calculate',
+            arguments: { expression: '1+1' },
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const registry = new ToolRegistry();
+      registry.register({
+        name: 'calculate',
+        description: 'Calculate',
+        parameters: z.object({ expression: z.string() }),
+        execute: async ({ expression }) => eval(expression).toString(),
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        // 不配置子 agent
+      });
+
+      const state = createAgentState(defaultConfig);
+      const events: { type: string }[] = [];
+
+      for await (const event of runner.stepStream(state, registry)) {
+        events.push(event as { type: string });
+      }
+
+      expect(events.every((e) => !e.type.startsWith('subagent:'))).toBe(true);
     });
   });
 });

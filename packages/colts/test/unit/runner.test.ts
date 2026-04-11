@@ -8,6 +8,7 @@ import { AgentRunner } from '../../src/runner.js';
 import { createAgentState, addUserMessage, addAssistantMessage } from '../../src/state.js';
 import type { AgentConfig, IContextCompressor, CompressResult } from '../../src/types.js';
 import type { ISkillProvider, SkillManifest } from '../../src/skills/types.js';
+import type { SubAgentConfig } from '../../src/subagent/types.js';
 import { FilesystemSkillProvider } from '../../src/skills/filesystem-provider.js';
 
 describe('AgentRunner', () => {
@@ -905,6 +906,245 @@ describe('AgentRunner', () => {
 
       const tools = runner.getToolRegistry().toToolSchemas();
       expect(tools.some((t) => t.function.name === 'load_skill')).toBe(false);
+    });
+  });
+
+  // ============================================================
+  // SubAgent 集成
+  // ============================================================
+  describe('subagent integration', () => {
+    /** 模拟 token 统计 */
+    const mockTokens = { input: 10, output: 5 };
+
+    /** 创建模拟 LLM Client（支持多响应序列） */
+    const createMultiResponseClient = (responses: LLMResponse[]): LLMClient => {
+      let callIndex = 0;
+      return {
+        call: vi.fn().mockImplementation(() => {
+          if (callIndex >= responses.length) {
+            throw new Error(`No more mock responses (index ${callIndex})`);
+          }
+          return Promise.resolve(responses[callIndex++]);
+        }),
+        stream: vi.fn(),
+      } as unknown as LLMClient;
+    };
+
+    /** 创建测试用子 agent 配置 */
+    const createTestSubAgents = (): SubAgentConfig[] => [
+      {
+        name: 'researcher',
+        description: 'Information research specialist',
+        config: {
+          name: 'researcher',
+          instructions: 'You are a research specialist.',
+          tools: [{ name: 'search', description: 'Search the web', parameters: {} }],
+        },
+        maxSteps: 5,
+      },
+      {
+        name: 'writer',
+        description: 'Content writing specialist',
+        config: {
+          name: 'writer',
+          instructions: 'You are a writing specialist.',
+          tools: [],
+        },
+      },
+    ];
+
+    it('应该在提供 subAgents 时自动注册 delegate 工具', () => {
+      const client = createMockClient();
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: createTestSubAgents(),
+      });
+
+      const tools = runner.getToolRegistry().toToolSchemas();
+      const delegateTool = tools.find((t) => t.function.name === 'delegate');
+      expect(delegateTool).toBeDefined();
+      expect(delegateTool!.function.description).toBeTruthy();
+    });
+
+    it('不在提供 subAgents 时不注册 delegate 工具', () => {
+      const client = createMockClient();
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const tools = runner.getToolRegistry().toToolSchemas();
+      expect(tools.some((t) => t.function.name === 'delegate')).toBe(false);
+    });
+
+    it('空 subAgents 数组不注册 delegate 工具', () => {
+      const client = createMockClient();
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: [],
+      });
+
+      const tools = runner.getToolRegistry().toToolSchemas();
+      expect(tools.some((t) => t.function.name === 'delegate')).toBe(false);
+    });
+
+    it('应该将子 agent 列表注入系统提示', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Response',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: createTestSubAgents(),
+      });
+
+      const state = createAgentState(defaultConfig);
+      await runner.chat(state, 'Hello');
+
+      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
+
+      // 系统提示应包含子 agent 列表
+      expect(firstUserMsg?.content).toContain('Available sub-agents:');
+      expect(firstUserMsg?.content).toContain('researcher: Information research specialist');
+      expect(firstUserMsg?.content).toContain('writer: Content writing specialist');
+      expect(firstUserMsg?.content).toContain('Use the delegate tool');
+    });
+
+    it('不应在系统提示中包含子 agent 相关内容当没有配置子 agent 时', async () => {
+      const client = createMockClient();
+      vi.mocked(client.call).mockResolvedValue({
+        content: 'Response',
+        tokens: { input: 5, output: 5 },
+        stopReason: 'stop',
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      await runner.chat(state, 'Hello');
+
+      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
+
+      expect(firstUserMsg?.content).not.toContain('Available sub-agents:');
+    });
+
+    it('delegate 工具应可通过 registry 执行', async () => {
+      // 主 agent 调用 LLM 返回 delegate 工具调用
+      // 子 agent 的 LLM 调用（在 delegate tool 内部）也需要一个响应
+      const client = createMultiResponseClient([
+        {
+          // 子 agent 的 LLM 响应
+          content: 'Research complete: found 3 relevant papers.',
+          toolCalls: [],
+          tokens: mockTokens,
+          stopReason: 'stop',
+        },
+      ]);
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: createTestSubAgents(),
+      });
+
+      // 直接通过 registry 执行 delegate 工具
+      const result = await runner.getToolRegistry().execute('delegate', {
+        agent: 'researcher',
+        task: 'Research TypeScript',
+      });
+
+      expect(result).toBeDefined();
+      const delegateResult = result as { answer: string; totalSteps: number };
+      expect(delegateResult.answer).toBe('Research complete: found 3 relevant papers.');
+      expect(delegateResult.totalSteps).toBe(1);
+    });
+
+    it('delegate 工具应该处理未知子 agent', async () => {
+      const client = createMockClient();
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: createTestSubAgents(),
+      });
+
+      const result = await runner.getToolRegistry().execute('delegate', {
+        agent: 'unknown_agent',
+        task: 'Do something',
+      });
+
+      const delegateResult = result as { answer: string; totalSteps: number };
+      expect(delegateResult.answer).toContain('Error');
+      expect(delegateResult.totalSteps).toBe(0);
+    });
+
+    it('subAgents 应该与其他选项（skills、tools）共存', () => {
+      const client = createMockClient();
+      const skillProvider = {
+        getManifest: vi.fn(),
+        loadInstructions: vi.fn(),
+        loadResource: vi.fn(),
+        listSkills: vi.fn(() => []),
+        refresh: vi.fn(),
+      } as unknown as ISkillProvider;
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents: createTestSubAgents(),
+        skillProvider,
+        tools: [
+          {
+            name: 'custom_tool',
+            description: 'A custom tool',
+            parameters: { _def: {} },
+            execute: async () => 'ok',
+          },
+        ],
+      });
+
+      const tools = runner.getToolRegistry().toToolSchemas();
+      const toolNames = tools.map((t) => t.function.name);
+
+      // delegate、load_skill、custom_tool 都应该注册
+      expect(toolNames).toContain('delegate');
+      expect(toolNames).toContain('load_skill');
+      expect(toolNames).toContain('custom_tool');
+    });
+
+    it('应该正确处理子 agent 配置中带 allowDelegation 的情况', () => {
+      const client = createMockClient();
+      const subAgents: SubAgentConfig[] = [
+        {
+          name: 'delegator',
+          description: 'Can delegate to others',
+          config: {
+            name: 'delegator',
+            instructions: 'You can delegate.',
+            tools: [],
+          },
+          allowDelegation: true,
+        },
+      ];
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        subAgents,
+      });
+
+      const tools = runner.getToolRegistry().toToolSchemas();
+      expect(tools.some((t) => t.function.name === 'delegate')).toBe(true);
     });
   });
 });

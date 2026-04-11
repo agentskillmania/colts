@@ -7,6 +7,7 @@
 
 import type { AgentState, ILLMProvider, IToolRegistry } from './types.js';
 import type { ISkillProvider } from './skills/types.js';
+import type { SubAgentConfig } from './subagent/types.js';
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.js';
 import { toolCallToAction } from './execution.js';
 import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
@@ -19,6 +20,8 @@ export interface RunnerContext {
   llmProvider: ILLMProvider;
   toolRegistry: IToolRegistry;
   skillProvider?: ISkillProvider;
+  /** 子 agent 配置映射（name → SubAgentConfig） */
+  subAgentConfigs?: Map<string, SubAgentConfig>;
   options: {
     model: string;
     systemPrompt?: string;
@@ -90,6 +93,7 @@ function advanceToPreparing(
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,
     skillProvider: ctx.skillProvider,
+    subAgentConfigs: ctx.subAgentConfigs,
   });
   execState.preparedMessages = messages;
   const displayMessages: import('./types.js').Message[] = messages.map((m) => ({
@@ -234,5 +238,6 @@ export function buildMessagesFromCtx(
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,
     skillProvider: ctx.skillProvider,
+    subAgentConfigs: ctx.subAgentConfigs,
   });
 }

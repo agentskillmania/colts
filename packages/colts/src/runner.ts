@@ -39,6 +39,8 @@ import { executeStep, executeRun, executeRunStream } from './runner-run.js';
 import type { ISkillProvider } from './skills/types.js';
 import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
 import { createLoadSkillTool } from './skills/load-skill-tool.js';
+import type { SubAgentConfig } from './subagent/types.js';
+import { createDelegateTool } from './subagent/delegate-tool.js';
 
 /**
  * Configuration options for AgentRunner
@@ -78,6 +80,10 @@ export interface RunnerOptions {
   skillProvider?: ISkillProvider;
   /** Skill 目录列表（快速初始化，内部创建 FilesystemSkillProvider） */
   skillDirectories?: string[];
+
+  // --- SubAgents: 子 agent 配置 ---
+  /** 子 agent 配置列表，提供后自动注册 delegate 工具 */
+  subAgents?: SubAgentConfig[];
 }
 
 /**
@@ -171,6 +177,7 @@ export class AgentRunner {
   private toolRegistry: IToolRegistry;
   private compressor?: IContextCompressor;
   private skillProvider?: ISkillProvider;
+  private subAgentConfigs?: Map<string, SubAgentConfig>;
   private options: RunnerOptions;
 
   constructor(options: RunnerOptions) {
@@ -233,6 +240,16 @@ export class AgentRunner {
       const loadSkillTool = createLoadSkillTool(this.skillProvider);
       this.toolRegistry.register(loadSkillTool);
     }
+
+    // 初始化子 agent 配置并注册 delegate 工具
+    if (options.subAgents && options.subAgents.length > 0) {
+      this.subAgentConfigs = new Map(options.subAgents.map((sa) => [sa.name, sa]));
+      const delegateTool = createDelegateTool({
+        subAgentConfigs: this.subAgentConfigs,
+        llmProvider: this.llmProvider,
+      });
+      this.toolRegistry.register(delegateTool);
+    }
   }
 
   /**
@@ -291,6 +308,7 @@ export class AgentRunner {
       llmProvider: this.llmProvider,
       toolRegistry: this.toolRegistry,
       skillProvider: this.skillProvider,
+      subAgentConfigs: this.subAgentConfigs,
       options: {
         model: this.options.model,
         systemPrompt: this.options.systemPrompt,
@@ -478,6 +496,7 @@ export class AgentRunner {
       systemPrompt: this.options.systemPrompt,
       model: this.options.model,
       skillProvider: this.skillProvider,
+      subAgentConfigs: this.subAgentConfigs,
     });
   }
 

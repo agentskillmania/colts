@@ -175,10 +175,29 @@ export async function* executeStepStream(
     yield { type: 'phase-change', from: fromPhase, to: phase };
 
     if (phase.type === 'tool-result') {
+      // 当 delegate 工具执行完成时，包装 yield 子 agent 事件
+      if (fromPhase.type === 'executing-tool' && fromPhase.action.tool === 'delegate') {
+        const delegateAction = fromPhase.action;
+        const agentName = String(delegateAction.arguments.agent ?? '');
+        const taskDesc = String(delegateAction.arguments.task ?? '');
+        yield { type: 'subagent:start', name: agentName, task: taskDesc };
+      }
+
       yield {
         type: 'tool:end',
         result: phase.result,
       };
+
+      // 当 delegate 工具执行完成时，yield subagent:end 事件
+      if (fromPhase.type === 'executing-tool' && fromPhase.action.tool === 'delegate') {
+        const agentName = String(fromPhase.action.arguments.agent ?? '');
+        yield {
+          type: 'subagent:end',
+          name: agentName,
+          result: phase.result as import('./subagent/types.js').DelegateResult,
+        };
+      }
+
       return {
         state: currentState,
         result: {

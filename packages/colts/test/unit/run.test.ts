@@ -7,6 +7,7 @@ import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../src/runner.js';
 import { createAgentState } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
+import type { SubAgentConfig } from '../../src/subagent/types.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { z } from 'zod';
 
@@ -569,5 +570,91 @@ describe('runStream()', () => {
     if (returnValue!.result.type === 'error') {
       expect(returnValue!.result.error.message).toContain('LLM down');
     }
+  });
+
+  // ============================================================
+  // SubAgent runStream 事件传播
+  // ============================================================
+  it('应该通过 runStream 传播 subagent 事件', async () => {
+    /** 创建测试用子 agent 配置 */
+    const createTestSubAgents = (): SubAgentConfig[] => [
+      {
+        name: 'researcher',
+        description: 'Information research specialist',
+        config: {
+          name: 'researcher',
+          instructions: 'You are a research specialist.',
+          tools: [],
+        },
+        maxSteps: 5,
+      },
+    ];
+
+    // 第一步：主 agent 委派给子 agent
+    const delegateResponse: LLMResponse = {
+      content: 'Delegating to researcher',
+      toolCalls: [
+        {
+          id: 'call-delegate-1',
+          name: 'delegate',
+          arguments: { agent: 'researcher', task: 'Research topic X' },
+        },
+      ],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+
+    // 子 agent 的 LLM 响应（在 delegate tool 内部）
+    const subAgentResponse: LLMResponse = {
+      content: 'Research result: found relevant info.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    // 第二步：主 agent 基于子 agent 结果给出最终答案
+    const finalResponse: LLMResponse = {
+      content: 'Based on research, the answer is X.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([delegateResponse, subAgentResponse, finalResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      subAgents: createTestSubAgents(),
+    });
+
+    const state = createAgentState(defaultConfig);
+    const events: { type: string }[] = [];
+
+    for await (const event of runner.runStream(state)) {
+      events.push(event as { type: string });
+    }
+
+    // 应该有 subagent:start 和 subagent:end 事件
+    expect(events.some((e) => e.type === 'subagent:start')).toBe(true);
+    expect(events.some((e) => e.type === 'subagent:end')).toBe(true);
+
+    // 应该有正常的 step:start、step:end 和 complete 事件
+    expect(events.some((e) => e.type === 'step:start')).toBe(true);
+    expect(events.some((e) => e.type === 'step:end')).toBe(true);
+    expect(events.some((e) => e.type === 'complete')).toBe(true);
+
+    // 验证 subagent:start 在 subagent:end 之前
+    const startIndex = events.findIndex((e) => e.type === 'subagent:start');
+    const endIndex = events.findIndex((e) => e.type === 'subagent:end');
+    expect(startIndex).toBeLessThan(endIndex);
+
+    // 验证最终结果
+    const completeEvent = events.find((e) => e.type === 'complete') as {
+      type: string;
+      result: { type: string; answer: string; totalSteps: number };
+    };
+    expect(completeEvent.result.type).toBe('success');
+    expect(completeEvent.result.answer).toBe('Based on research, the answer is X.');
+    expect(completeEvent.result.totalSteps).toBe(2);
   });
 });

@@ -8,6 +8,7 @@
 import type { Message as PiAIMessage, TextContent, Tool } from '@mariozechner/pi-ai';
 import type { AgentState, IToolRegistry } from './types.js';
 import type { ISkillProvider } from './skills/types.js';
+import type { SubAgentConfig } from './subagent/types.js';
 import type { ToolSchema } from './tools/registry.js';
 
 /**
@@ -20,6 +21,8 @@ export interface BuildMessagesOptions {
   model: string;
   /** Skill 提供者，用于将 skill 列表注入系统提示 */
   skillProvider?: ISkillProvider;
+  /** 子 agent 配置映射，用于将子 agent 列表注入系统提示 */
+  subAgentConfigs?: Map<string, SubAgentConfig>;
 }
 
 /**
@@ -51,6 +54,16 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
         `Available skills:\n${skillLines.join('\n')}\nUse the load_skill tool to load detailed instructions when needed.`
       );
     }
+  }
+
+  // 注入子 agent 列表到系统提示
+  if (opts.subAgentConfigs && opts.subAgentConfigs.size > 0) {
+    const subAgentLines = Array.from(opts.subAgentConfigs.values()).map(
+      (sa) => `- ${sa.name}: ${sa.description}`
+    );
+    systemParts.push(
+      `Available sub-agents:\n${subAgentLines.join('\n')}\nUse the delegate tool to delegate tasks to specialized sub-agents.`
+    );
   }
 
   // Add combined system prompt as first message if exists
