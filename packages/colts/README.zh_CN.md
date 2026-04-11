@@ -14,6 +14,8 @@
 - **人机交互**：内置 `ask_human` 工具和 `ConfirmableRegistry`
 - **取消支持**：全链路标准 AbortSignal 取消机制
 - **工具系统**：基于 Zod 的参数验证，自动生成 JSON Schema
+- **Skill 系统**：从 SKILL.md 文件加载领域专用指令，支持目录自动发现
+- **Subagent 系统**：将任务委派给具有独立状态和工具的专业子 agent
 
 ## 安装
 
@@ -89,6 +91,98 @@ for await (const event of runner.runStream(state)) {
   if (event.type === 'complete') console.log('\n完成:', event.result);
 }
 ```
+
+## Skill 系统
+
+Skill 是 agent 可以按需加载的领域专用指令集。
+
+```typescript
+import { AgentRunner, FilesystemSkillProvider } from '@agentskillmania/colts';
+
+// 从目录自动发现 Skill
+const runner = new AgentRunner({
+  model: 'gpt-4',
+  llmClient: myLLMClient,
+  skillDirectories: ['./skills'],
+});
+
+// 或注入自定义 Skill 提供者
+const skillProvider = new FilesystemSkillProvider(['./skills', '~/.colts/skills']);
+const runner2 = new AgentRunner({
+  model: 'gpt-4',
+  llmClient: myLLMClient,
+  skillProvider,
+});
+```
+
+Skill 从带有 YAML frontmatter 的 `SKILL.md` 文件中发现：
+
+```markdown
+---
+name: code-review
+description: 执行全面的代码审查
+---
+
+# 代码审查 Skill
+
+你是一个代码审查专家...
+```
+
+配置 skill 提供者后，`load_skill` 工具会自动注册。
+
+## Subagent 系统
+
+将任务委派给具有独立状态和工具集的专业子 agent。
+
+```typescript
+import { AgentRunner } from '@agentskillmania/colts';
+import type { SubAgentConfig } from '@agentskillmania/colts';
+
+const researcher: SubAgentConfig = {
+  name: 'researcher',
+  description: '信息研究专家',
+  config: {
+    name: 'researcher',
+    instructions: '你深入研究各种主题。',
+    tools: [{ name: 'search', description: '搜索网络', parameters: {} }],
+  },
+  maxSteps: 5,
+};
+
+const writer: SubAgentConfig = {
+  name: 'writer',
+  description: '内容写作专家',
+  config: {
+    name: 'writer',
+    instructions: '你撰写清晰、引人入胜的内容。',
+    tools: [],
+  },
+};
+
+const runner = new AgentRunner({
+  model: 'gpt-4',
+  llmClient: myLLMClient,
+  subAgents: [researcher, writer],
+});
+```
+
+`delegate` 工具会自动注册，使主 agent 能够将任务委派给子 agent。
+
+## 流式事件
+
+| 事件 | 描述 |
+|------|------|
+| `phase-change` | 执行阶段转换 |
+| `token` | 实时 token 输出 |
+| `tool:start` | 工具执行开始 |
+| `tool:end` | 工具执行完成 |
+| `skill:loading` | Skill 指令加载中 |
+| `skill:loaded` | Skill 指令已加载 |
+| `subagent:start` | 子 agent 任务开始 |
+| `subagent:end` | 子 agent 任务完成 |
+| `compressing` | 上下文压缩开始 |
+| `compressed` | 上下文压缩完成 |
+| `error` | 执行错误 |
 
 ## License
 

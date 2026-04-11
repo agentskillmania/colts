@@ -8,7 +8,8 @@ Monorepo for agent framework and utilities.
 
 | Package | Description |
 |---------|-------------|
-| [@agentskillmania/colts](./packages/colts/) | Agent framework with detailed output and state transparency |
+| [@agentskillmania/colts](./packages/colts/) | Agent framework with detailed output, step-by-step execution, and state transparency |
+| [@agentskillmania/colts-cli](./packages/colts-cli/) | Terminal UI (TUI) for interactive agent debugging and development |
 | [@agentskillmania/llm-client](./packages/llm-client/) | Unified LLM client with multi-provider support |
 | [@agentskillmania/settings-yaml](./packages/settings-yaml/) | YAML configuration file reader |
 

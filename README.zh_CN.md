@@ -8,7 +8,8 @@ Agent 框架和工具的 Monorepo。
 
 | 包 | 描述 |
 |---------|-------------|
-| [@agentskillmania/colts](./packages/colts/) | 具有详细输出和状态透明性的 Agent 框架 |
+| [@agentskillmania/colts](./packages/colts/) | 具有详细输出、分步执行和状态透明性的 Agent 框架 |
+| [@agentskillmania/colts-cli](./packages/colts-cli/) | 用于交互式 agent 调试和开发的终端 UI（TUI） |
 | [@agentskillmania/llm-client](./packages/llm-client/) | 支持多提供商的统一 LLM 客户端 |
 | [@agentskillmania/settings-yaml](./packages/settings-yaml/) | YAML 配置文件读取器 |
 
