@@ -19,9 +19,9 @@ export interface BuildMessagesOptions {
   systemPrompt?: string;
   /** Model identifier for assistant messages */
   model: string;
-  /** Skill 提供者，用于将 skill 列表注入系统提示 */
+  /** Skill provider for injecting skill list into system prompt */
   skillProvider?: ISkillProvider;
-  /** 子 agent 配置映射，用于将子 agent 列表注入系统提示 */
+  /** Sub-agent config map for injecting sub-agent list into system prompt */
   subAgentConfigs?: Map<string, SubAgentConfig>;
 }
 
@@ -45,7 +45,7 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
     systemParts.push(state.config.instructions);
   }
 
-  // 注入 skill 列表到系统提示
+  // Inject skill list into system prompt
   if (opts.skillProvider) {
     const skills = opts.skillProvider.listSkills();
     if (skills.length > 0) {
@@ -56,7 +56,7 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
     }
   }
 
-  // 注入子 agent 列表到系统提示
+  // Inject sub-agent list into system prompt
   if (opts.subAgentConfigs && opts.subAgentConfigs.size > 0) {
     const subAgentLines = Array.from(opts.subAgentConfigs.values()).map(
       (sa) => `- ${sa.name}: ${sa.description}`

@@ -20,7 +20,7 @@ export interface RunnerContext {
   llmProvider: ILLMProvider;
   toolRegistry: IToolRegistry;
   skillProvider?: ISkillProvider;
-  /** 子 agent 配置映射（name → SubAgentConfig） */
+  /** Sub-agent configuration map (name → SubAgentConfig) */
   subAgentConfigs?: Map<string, SubAgentConfig>;
   options: {
     model: string;
@@ -153,7 +153,7 @@ function advanceToParsing(state: AgentState, execState: ExecutionState): Advance
 }
 
 function advanceToParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
-  // action 已在 advanceToLLMResponse 中从原始响应提取，无需重新解析
+  // Action already extracted from raw response in advanceToLLMResponse, no need to re-parse
   const thought = execState.llmResponse ?? '';
   execState.thought = thought;
 
@@ -222,7 +222,7 @@ function advanceToCompleted(state: AgentState, execState: ExecutionState): Advan
     return { state: newState, phase: execState.phase, done: true };
   }
 
-  // tool-result → completed: 消息已在前面写入（thought + tool message），不重复写
+  // tool-result → completed: messages already written (thought + tool message), don't duplicate
   return { state, phase: execState.phase, done: true };
 }
 

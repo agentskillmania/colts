@@ -1,7 +1,7 @@
 /**
- * @fileoverview Skills 模块
+ * @fileoverview Skills module
  *
- * Skill 系统的类型定义和提供者实现。
+ * Skill system type definitions and provider implementations.
  */
 
 export { type SkillManifest, type ISkillProvider } from './types.js';

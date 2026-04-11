@@ -53,7 +53,7 @@ export async function executeStep(
     }
   }
 
-  // 不应到达此处：所有终止 phase 在循环体内已处理
+  // Should not reach here: all terminal phases are handled inside the loop body
   throw new Error('Unexpected: executeStep loop exited without reaching terminal phase');
 }
 

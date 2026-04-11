@@ -1,70 +1,70 @@
 /**
- * @fileoverview Skill 类型定义
+ * @fileoverview Skill type definitions
  *
- * 定义 Skill 系统的核心接口和元数据结构。
+ * Defines core interfaces and metadata structures for the Skill system.
  */
 
 /**
- * Skill 元数据（Level 1，始终加载）
+ * Skill manifest (Level 1, always loaded)
  *
- * 描述一个 Skill 的基本信息，无需加载完整内容即可获取。
+ * Describes basic information about a skill without loading full content.
  */
 export interface SkillManifest {
-  /** Skill 名称（唯一标识符） */
+  /** Skill name (unique identifier) */
   name: string;
-  /** Skill 描述 */
+  /** Skill description */
   description: string;
-  /** Skill 源目录路径 */
+  /** Skill source directory path */
   source: string;
-  /** 资源文件相对路径列表 */
+  /** Relative paths to resource files */
   resources?: string[];
-  /** 脚本文件相对路径列表 */
+  /** Relative paths to script files */
   scripts?: string[];
 }
 
 /**
- * Skill 提供者接口
+ * Skill provider interface
  *
- * 定义 Skill 发现、加载和资源访问的抽象接口，
- * 支持不同的存储后端实现（文件系统、远程服务等）。
+ * Defines the abstract interface for skill discovery, loading, and resource access.
+ * Supports different storage backends (filesystem, remote services, etc.).
  */
 export interface ISkillProvider {
   /**
-   * 获取指定 Skill 的元数据
+   * Get manifest for a specific skill
    *
-   * @param name - Skill 名称
-   * @returns Skill 元数据，未找到时返回 undefined
+   * @param name - Skill name
+   * @returns Skill manifest, or undefined if not found
    */
   getManifest(name: string): SkillManifest | undefined;
 
   /**
-   * 加载指定 Skill 的指令内容（SKILL.md 正文部分）
+   * Load a skill's instruction content (SKILL.md body section)
    *
-   * @param name - Skill 名称
-   * @returns SKILL.md 正文内容
-   * @throws Error 当 Skill 不存在时抛出
+   * @param name - Skill name
+   * @returns SKILL.md body content
+   * @throws Error when skill is not found
    */
   loadInstructions(name: string): Promise<string>;
 
   /**
-   * 加载指定 Skill 的资源文件内容
+   * Load a skill's resource file content
    *
-   * @param name - Skill 名称
-   * @param relativePath - 相对于 Skill 目录的资源文件路径
-   * @returns 资源文件内容
-   * @throws Error 当 Skill 不存在或资源文件无法读取时抛出
+   * @param name - Skill name
+   * @param relativePath - Resource file path relative to the skill directory
+   * @returns Resource file content
+   * @throws Error when skill is not found or resource cannot be read
    */
   loadResource(name: string, relativePath: string): Promise<string>;
 
   /**
-   * 列出所有已发现的 Skill 元数据
+   * List all discovered skill manifests
    *
-   * @returns 所有 Skill 元数据数组
+   * @returns Array of all skill manifests
    */
   listSkills(): SkillManifest[];
 
   /**
-   * 重新扫描目录，刷新 Skill 缓存
+   * Rescan directories and refresh skill cache
    */
   refresh(): void;
 }

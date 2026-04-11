@@ -76,13 +76,13 @@ export interface RunnerOptions {
   compressor?: CompressionConfig | IContextCompressor;
 
   // --- Skills: injection or quick initialization ---
-  /** Skill 提供者实例（注入模式） */
+  /** Skill provider instance (injection mode) */
   skillProvider?: ISkillProvider;
-  /** Skill 目录列表（快速初始化，内部创建 FilesystemSkillProvider） */
+  /** Skill directory list (quick init, creates FilesystemSkillProvider internally) */
   skillDirectories?: string[];
 
-  // --- SubAgents: 子 agent 配置 ---
-  /** 子 agent 配置列表，提供后自动注册 delegate 工具 */
+  // --- SubAgents ---
+  /** Sub-agent configuration list, auto-registers delegate tool when provided */
   subAgents?: SubAgentConfig[];
 }
 
@@ -235,13 +235,13 @@ export class AgentRunner {
       this.skillProvider = new FilesystemSkillProvider(options.skillDirectories);
     }
 
-    // 自动注册 load_skill 工具
+    // Auto-register load_skill tool
     if (this.skillProvider) {
       const loadSkillTool = createLoadSkillTool(this.skillProvider);
       this.toolRegistry.register(loadSkillTool);
     }
 
-    // 初始化子 agent 配置并注册 delegate 工具
+    // Initialize sub-agent configs and register delegate tool
     if (options.subAgents && options.subAgents.length > 0) {
       this.subAgentConfigs = new Map(options.subAgents.map((sa) => [sa.name, sa]));
       const delegateTool = createDelegateTool({

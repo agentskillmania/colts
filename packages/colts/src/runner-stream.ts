@@ -175,7 +175,7 @@ export async function* executeStepStream(
     yield { type: 'phase-change', from: fromPhase, to: phase };
 
     if (phase.type === 'tool-result') {
-      // 当 delegate 工具执行完成时，包装 yield 子 agent 事件
+      // When delegate tool execution completes, wrap and yield sub-agent events
       if (fromPhase.type === 'executing-tool' && fromPhase.action.tool === 'delegate') {
         const delegateAction = fromPhase.action;
         const agentName = String(delegateAction.arguments.agent ?? '');
@@ -188,7 +188,7 @@ export async function* executeStepStream(
         result: phase.result,
       };
 
-      // 当 delegate 工具执行完成时，yield subagent:end 事件
+      // When delegate tool execution completes, yield subagent:end event
       if (fromPhase.type === 'executing-tool' && fromPhase.action.tool === 'delegate') {
         const agentName = String(fromPhase.action.arguments.agent ?? '');
         yield {
@@ -220,6 +220,6 @@ export async function* executeStepStream(
     }
   }
 
-  // 不应到达此处：所有终止 phase 在循环体内已处理
+  // Should not reach here: all terminal phases are handled inside the loop body
   throw new Error('Unexpected: stepStream loop exited without reaching terminal phase');
 }

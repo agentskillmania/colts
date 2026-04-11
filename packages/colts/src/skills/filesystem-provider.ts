@@ -1,7 +1,7 @@
 /**
- * @fileoverview 文件系统 Skill 提供者
+ * @fileoverview Filesystem Skill Provider
  *
- * 从文件系统目录扫描和加载 Skill，支持 YAML frontmatter 解析。
+ * Scans and loads skills from filesystem directories, with YAML frontmatter parsing support.
  */
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
@@ -9,19 +9,19 @@ import { join, resolve } from 'node:path';
 import type { SkillManifest, ISkillProvider } from './types.js';
 
 /**
- * SKILL.md 文件名常量
+ * SKILL.md filename constant
  */
 const SKILL_FILE = 'SKILL.md';
 
 /**
- * 从 SKILL.md 内容解析 YAML frontmatter
+ * Parse YAML frontmatter from SKILL.md content
  *
- * 支持格式：
- * - 简单键值对：`name: value`
- * - 多行字符串：`description: |` 或 `description: >`
+ * Supported formats:
+ * - Simple key-value pairs: `name: value`
+ * - Multiline strings: `description: |` or `description: >`
  *
- * @param content - SKILL.md 文件完整内容
- * @returns 解析结果，包含 frontmatter 字段和正文内容
+ * @param content - Full SKILL.md file content
+ * @returns Parsed result with frontmatter fields and body content
  */
 function parseFrontmatter(content: string): { frontmatter: Record<string, string>; body: string } {
   const result: { frontmatter: Record<string, string>; body: string } = {
@@ -29,20 +29,20 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
     body: '',
   };
 
-  // 匹配以 --- 开头的 frontmatter 块
+  // Match frontmatter block starting with ---
   const frontmatterRegex = /^---\s*\n/;
   if (!frontmatterRegex.test(content)) {
-    // 没有 frontmatter，整个内容作为正文
+    // No frontmatter, entire content is the body
     result.body = content;
     return result;
   }
 
-  // 去掉第一个 ---，查找第二个 ---
+  // Remove first ---, find second ---
   const afterFirstDelimiter = content.replace(frontmatterRegex, '');
   const secondDelimiterIndex = afterFirstDelimiter.indexOf('\n---');
 
   if (secondDelimiterIndex === -1) {
-    // 没有闭合的 ---，整个内容作为正文
+    // No closing ---, entire content is the body
     result.body = content;
     return result;
   }
@@ -51,35 +51,35 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
   const bodyStart = afterFirstDelimiter.indexOf('\n', secondDelimiterIndex + 4);
   result.body = bodyStart === -1 ? '' : afterFirstDelimiter.substring(bodyStart + 1);
 
-  // 解析 YAML 键值对
+  // Parse YAML key-value pairs
   const lines = frontmatterText.split('\n');
   let currentKey = '';
   let currentValue = '';
   let inMultiline = false;
-  // 注：multiline indicator（| 或 >）不存储，当前统一按折叠多行处理
+  // Note: multiline indicator (| or >) is not stored, currently processed uniformly as folded multiline
 
   for (const line of lines) {
     if (inMultiline) {
-      // 多行值收集：遇到缩进减少或空行时结束
+      // Collect multiline value: ends when indentation decreases or empty line
       if (line === '' || (!line.startsWith(' ') && !line.startsWith('\t'))) {
-        // 结束多行值
+        // End multiline value
         result.frontmatter[currentKey] = currentValue.trim();
         inMultiline = false;
-        // 继续处理当前行（可能是新的键值对）
+        // Continue processing current line (may be a new key-value pair)
         const kvMatch = line.match(/^(\w[\w-]*)\s*:\s*(.*)/);
         if (kvMatch) {
           currentKey = kvMatch[1];
           const value = kvMatch[2].trim();
           if (value === '|' || value === '>') {
             inMultiline = true;
-            // 不需要区分 | 和 >，统一处理
+            // No need to distinguish | and >, process uniformly
             currentValue = '';
           } else {
             result.frontmatter[currentKey] = value;
           }
         }
       } else {
-        // 收集多行内容（去掉一级缩进）
+        // Collect multiline content (strip one level of indentation)
         const trimmedLine = line.replace(/^ (\s?.*)/, '$1');
         currentValue += (currentValue ? '\n' : '') + trimmedLine;
       }
@@ -90,7 +90,7 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
         const value = kvMatch[2].trim();
         if (value === '|' || value === '>') {
           inMultiline = true;
-          // 不需要区分 | 和 >，统一处理
+          // No need to distinguish | and >, process uniformly
           currentValue = '';
         } else {
           result.frontmatter[currentKey] = value;
@@ -99,7 +99,7 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
     }
   }
 
-  // 处理最后一个多行值
+  // Handle the last multiline value
   if (inMultiline && currentKey) {
     result.frontmatter[currentKey] = currentValue.trim();
   }
@@ -108,10 +108,10 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
 }
 
 /**
- * 扫描指定目录，发现包含 SKILL.md 的子目录
+ * Scan a directory for sub-directories containing SKILL.md
  *
- * @param directory - 要扫描的根目录
- * @returns 发现的 Skill 元数据数组
+ * @param directory - Root directory to scan
+ * @returns Array of discovered skill manifests
  */
 function scanDirectory(directory: string): SkillManifest[] {
   const manifests: SkillManifest[] = [];
@@ -125,14 +125,14 @@ function scanDirectory(directory: string): SkillManifest[] {
   try {
     entries = readdirSync(resolvedDir);
   } catch {
-    // 无法读取目录，静默跳过
+    // Cannot read directory, skip silently
     return manifests;
   }
 
   for (const entry of entries) {
     const entryPath = join(resolvedDir, entry);
 
-    // 只处理目录
+    // Only process directories
     let stat;
     try {
       stat = statSync(entryPath);
@@ -143,39 +143,39 @@ function scanDirectory(directory: string): SkillManifest[] {
       continue;
     }
 
-    // 检查是否包含 SKILL.md
+    // Check if SKILL.md exists
     const skillFilePath = join(entryPath, SKILL_FILE);
     if (!existsSync(skillFilePath)) {
       continue;
     }
 
-    // 读取并解析 SKILL.md
+    // Read and parse SKILL.md
     let content: string;
     try {
       content = readFileSync(skillFilePath, 'utf-8');
     } catch {
-      // 无法读取文件，跳过
-      console.warn(`[colts] 无法读取 ${skillFilePath}，已跳过`);
+      // Cannot read file, skip
+      console.warn(`[colts] Cannot read ${skillFilePath}, skipping`);
       continue;
     }
 
     const { frontmatter } = parseFrontmatter(content);
 
-    // 验证必需字段
+    // Validate required fields
     const name = frontmatter['name'];
     const description = frontmatter['description'];
 
     if (!name || !description) {
-      console.warn(`[colts] ${skillFilePath} 缺少必需的 name 或 description 字段，已跳过`);
+      console.warn(`[colts] ${skillFilePath} missing required name or description field, skipping`);
       continue;
     }
 
-    // 收集资源文件列表
+    // Collect resource file list
     const resources = collectFiles(entryPath, (fileName) => {
       return fileName !== SKILL_FILE;
     });
 
-    // 收集脚本文件列表
+    // Collect script file list
     const scripts = collectFiles(entryPath, (fileName) => {
       return fileName.endsWith('.js') || fileName.endsWith('.ts') || fileName.endsWith('.mjs');
     });
@@ -193,13 +193,13 @@ function scanDirectory(directory: string): SkillManifest[] {
 }
 
 /**
- * 收集目录下的文件相对路径列表
+ * Collect relative file paths in a directory
  *
- * 只收集顶层文件，不递归子目录。
+ * Only collects top-level files, does not recurse into sub-directories.
  *
- * @param dirPath - 目录绝对路径
- * @param filter - 文件名过滤函数
- * @returns 符合条件的文件相对路径数组
+ * @param dirPath - Absolute directory path
+ * @param filter - Filename filter function
+ * @returns Array of matching relative file paths
  */
 function collectFiles(dirPath: string, filter: (fileName: string) => boolean): string[] {
   const files: string[] = [];
@@ -217,39 +217,39 @@ function collectFiles(dirPath: string, filter: (fileName: string) => boolean): s
       }
     }
   } catch {
-    // 无法读取目录
+    // Cannot read directory
   }
   return files;
 }
 
 /**
- * 文件系统 Skill 提供者
+ * Filesystem Skill Provider
  *
- * 从指定的目录列表中扫描包含 SKILL.md 的子目录，
- * 解析 YAML frontmatter 获取元数据，按需加载指令和资源。
+ * Scans specified directories for sub-directories containing SKILL.md,
+ * parses YAML frontmatter for metadata, and loads instructions and resources on demand.
  *
  * @example
  * ```typescript
  * const provider = new FilesystemSkillProvider(['/path/to/skills']);
  *
- * // 列出所有已发现的 Skill
+ * // List all discovered skills
  * const skills = provider.listSkills();
  *
- * // 加载某个 Skill 的指令
+ * // Load a skill's instructions
  * const instructions = await provider.loadInstructions('my-skill');
  * ```
  */
 export class FilesystemSkillProvider implements ISkillProvider {
-  /** 已发现的 Skill 元数据缓存（name -> manifest） */
+  /** Discovered skill manifest cache (name -> manifest) */
   private manifests = new Map<string, SkillManifest>();
 
-  /** 要扫描的目录列表 */
+  /** Directory list to scan */
   private directories: string[];
 
   /**
-   * 创建文件系统 Skill 提供者
+   * Create a filesystem skill provider
    *
-   * @param directories - 要扫描的目录路径列表
+   * @param directories - List of directory paths to scan
    */
   constructor(directories: string[]) {
     this.directories = directories;
@@ -257,21 +257,21 @@ export class FilesystemSkillProvider implements ISkillProvider {
   }
 
   /**
-   * 获取指定 Skill 的元数据
+   * Get manifest for a specific skill
    *
-   * @param name - Skill 名称
-   * @returns Skill 元数据，未找到时返回 undefined
+   * @param name - Skill name
+   * @returns Skill manifest, or undefined if not found
    */
   getManifest(name: string): SkillManifest | undefined {
     return this.manifests.get(name);
   }
 
   /**
-   * 加载指定 Skill 的指令内容（SKILL.md 正文部分，不含 frontmatter）
+   * Load a skill's instruction content (SKILL.md body section, excluding frontmatter)
    *
-   * @param name - Skill 名称
-   * @returns SKILL.md 正文内容
-   * @throws Error 当 Skill 不存在时抛出
+   * @param name - Skill name
+   * @returns SKILL.md body content
+   * @throws Error when skill is not found
    */
   async loadInstructions(name: string): Promise<string> {
     const manifest = this.manifests.get(name);
@@ -287,12 +287,12 @@ export class FilesystemSkillProvider implements ISkillProvider {
   }
 
   /**
-   * 加载指定 Skill 的资源文件内容
+   * Load a skill's resource file content
    *
-   * @param name - Skill 名称
-   * @param relativePath - 相对于 Skill 目录的资源文件路径
-   * @returns 资源文件内容
-   * @throws Error 当 Skill 不存在或资源文件无法读取时抛出
+   * @param name - Skill name
+   * @param relativePath - Resource file path relative to the skill directory
+   * @returns Resource file content
+   * @throws Error when skill is not found or resource cannot be read
    */
   async loadResource(name: string, relativePath: string): Promise<string> {
     const manifest = this.manifests.get(name);
@@ -305,18 +305,18 @@ export class FilesystemSkillProvider implements ISkillProvider {
   }
 
   /**
-   * 列出所有已发现的 Skill 元数据
+   * List all discovered skill manifests
    *
-   * @returns 所有 Skill 元数据数组
+   * @returns Array of all skill manifests
    */
   listSkills(): SkillManifest[] {
     return Array.from(this.manifests.values());
   }
 
   /**
-   * 重新扫描目录，刷新 Skill 缓存
+   * Rescan directories and refresh skill cache
    *
-   * 清空现有缓存并重新发现所有目录中的 Skill。
+   * Clears existing cache and rediscovers all skills in all directories.
    */
   refresh(): void {
     this.manifests.clear();
@@ -324,7 +324,7 @@ export class FilesystemSkillProvider implements ISkillProvider {
   }
 
   /**
-   * 执行目录扫描，发现所有 Skill
+   * Perform directory scan to discover all skills
    */
   private discover(): void {
     for (const dir of this.directories) {

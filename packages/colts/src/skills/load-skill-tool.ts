@@ -1,17 +1,17 @@
 /**
- * @fileoverview load_skill 内置工具
+ * @fileoverview Built-in load_skill tool
  *
- * 让 agent 能主动加载 skill 指令。
+ * Allows the agent to proactively load skill instructions.
  */
 import { z } from 'zod';
 import type { Tool } from '../tools/registry.js';
 import type { ISkillProvider } from './types.js';
 
 /**
- * 创建 load_skill 工具
+ * Create the load_skill tool
  *
- * @param skillProvider - Skill 提供者实例
- * @returns Tool 定义
+ * @param skillProvider - Skill provider instance
+ * @returns Tool definition
  */
 export function createLoadSkillTool(skillProvider: ISkillProvider): Tool {
   return {

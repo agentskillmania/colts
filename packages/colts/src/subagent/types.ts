@@ -1,38 +1,38 @@
 /**
- * @fileoverview Subagent 核心类型定义
+ * @fileoverview Core sub-agent type definitions
  */
 import type { AgentConfig, AgentState } from '../types.js';
 
 /**
- * 子 agent 配置
+ * Sub-agent configuration
  */
 export interface SubAgentConfig {
-  /** 子 agent 名称 */
+  /** Sub-agent name */
   name: string;
-  /** 描述（主 agent 用来判断什么时候委派） */
+  /** Description (used by parent agent to decide when to delegate) */
   description: string;
-  /** AgentConfig（独立的 instructions、tools） */
+  /** AgentConfig (independent instructions and tools) */
   config: AgentConfig;
-  /** 限制子 agent 的 maxSteps（默认 10） */
+  /** Max steps limit for sub-agent (default: 10) */
   maxSteps?: number;
-  /** 是否允许此子 agent 再次委派（默认 false） */
+  /** Allow this sub-agent to delegate further (default: false) */
   allowDelegation?: boolean;
 }
 
 /**
- * delegate tool 的结果
+ * Delegate tool result
  */
 export interface DelegateResult {
-  /** 子 agent 的最终答案 */
+  /** Sub-agent's final answer */
   answer: string;
-  /** 子 agent 执行的总步数 */
+  /** Total steps executed by sub-agent */
   totalSteps: number;
-  /** 子 agent 的最终状态（未知子 agent 时为 null） */
+  /** Sub-agent's final state (null for unknown sub-agents) */
   finalState: AgentState | null;
 }
 
 /**
- * Subagent 流式事件类型
+ * Sub-agent streaming event types
  */
 export type SubAgentStreamEvent =
   | { type: 'subagent:start'; name: string; task: string }

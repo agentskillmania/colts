@@ -1,7 +1,7 @@
 /**
- * @fileoverview Subagent 模块
+ * @fileoverview Sub-agent module
  *
- * 子 agent 类型定义和工具。
+ * Sub-agent type definitions and tools.
  */
 
 export type { SubAgentConfig, DelegateResult, SubAgentStreamEvent } from './types.js';

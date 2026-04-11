@@ -1,8 +1,8 @@
 /**
- * @fileoverview Delegate Tool 工厂函数
+ * @fileoverview Delegate Tool factory function
  *
- * 创建 "delegate" 工具，允许主 agent 将任务委派给子 agent。
- * 子 agent 拥有独立的 instructions、tools 和 maxSteps 配置。
+ * Creates the 'delegate' tool that allows the parent agent to delegate tasks to sub-agents.
+ * Sub-agents have independent instructions, tools, and maxSteps configuration.
  */
 
 import { z } from 'zod';
@@ -13,25 +13,25 @@ import { AgentRunner } from '../runner.js';
 import type { ILLMProvider } from '../types.js';
 
 /**
- * delegate tool 的依赖注入接口
+ * Dependency injection interface for the delegate tool
  */
 export interface DelegateToolDeps {
-  /** 子 agent 配置映射（name → SubAgentConfig） */
+  /** Sub-agent configuration map (name → SubAgentConfig) */
   subAgentConfigs: Map<string, SubAgentConfig>;
-  /** LLM Provider 实例 */
+  /** LLM provider instance */
   llmProvider: ILLMProvider;
-  /** 子 agent 默认最大步数（默认 10） */
+  /** Default max steps for sub-agents (default: 10) */
   defaultMaxSteps?: number;
 }
 
 /**
- * 创建 delegate 工具
+ * Create the delegate tool
  *
- * 主 agent 通过此工具将特定任务委派给专业子 agent 执行。
- * 子 agent 拥有独立的 instructions、tools 和 maxSteps 配置。
+ * The parent agent uses this tool to delegate specific tasks to specialized sub-agents.
+ * Sub-agents have independent instructions, tools, and maxSteps configuration.
  *
- * @param deps - 依赖注入参数
- * @returns Tool 实例，可注册到 ToolRegistry
+ * @param deps - Dependency injection parameters
+ * @returns Tool instance, registerable with ToolRegistry
  *
  * @example
  * ```typescript
@@ -77,18 +77,18 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
         } satisfies DelegateResult;
       }
 
-      // 构建子 agent 的 instructions，可选追加额外指令
+      // Build sub-agent instructions, optionally appending extra instructions
       let instructions = config.config.instructions;
       if (extraInstructions) {
         instructions = instructions + '\n\n' + extraInstructions;
       }
 
-      // 创建子 agent 状态
+      // Create sub-agent state
       const subConfig = { ...config.config, instructions };
       const subState = createAgentState(subConfig);
       const stateWithTask = addUserMessage(subState, task);
 
-      // 为子 agent 创建 runner
+      // Create a runner for the sub-agent
       const subRunner = new AgentRunner({
         model: 'sub-agent',
         llmClient: llmProvider,
@@ -101,7 +101,7 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
         })),
       });
 
-      // 运行至完成
+      // Run until completion
       const { state: finalState, result } = await subRunner.run(stateWithTask);
 
       if (result.type === 'success') {
