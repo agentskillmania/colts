@@ -1,5 +1,6 @@
 # @agentskillmania/colts
 
+[![CI](https://github.com/agentskillmania/colts/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/agentskillmania/colts/actions/workflows/ci.yml)
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
 Agent 框架和工具的 Monorepo。
