@@ -201,7 +201,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
     it('should throw ConfigurationError when both llmClient and llm are provided', () => {
       // 创建一个独立的 mock LLMClient，不依赖集成测试配置
       const mockClient = new LLMClient({ baseUrl: 'http://localhost:8080' });
-      
+
       expect(() => {
         new AgentRunner({
           model: 'gpt-4',
