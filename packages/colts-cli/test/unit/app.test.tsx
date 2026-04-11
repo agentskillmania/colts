@@ -16,6 +16,11 @@ vi.mock('@agentskillmania/colts', () => ({
     stepStream: vi.fn(),
     advanceStream: vi.fn(),
   })),
+  createAgentState: vi.fn().mockReturnValue({
+    id: 'test-state-1',
+    config: { name: 'test-agent', instructions: 'Test', tools: [] },
+    context: { messages: [], stepCount: 0 },
+  }),
 }));
 
 describe('App', () => {
@@ -46,18 +51,23 @@ describe('App', () => {
       agent: { name: 'test-agent', instructions: 'Test' },
     };
 
-    it('显示主界面', () => {
+    it('显示欢迎屏幕（无消息时）', () => {
       const runner = new AgentRunner({ model: 'gpt-4o', llm: { apiKey: 'sk-test' } });
       const { lastFrame } = render(<App config={validConfig} runner={runner} />);
       const frame = lastFrame();
-      expect(frame).toContain('colts-cli v0.1.0');
-      expect(frame).toContain('gpt-4o');
+      expect(frame).toContain('Welcome to colts-cli');
     });
 
-    it('显示 Ready 状态', () => {
+    it('显示模型名', () => {
       const runner = new AgentRunner({ model: 'gpt-4o', llm: { apiKey: 'sk-test' } });
       const { lastFrame } = render(<App config={validConfig} runner={runner} />);
-      expect(lastFrame()).toContain('Ready');
+      expect(lastFrame()).toContain('gpt-4o');
+    });
+
+    it('显示 Agent 名称', () => {
+      const runner = new AgentRunner({ model: 'gpt-4o', llm: { apiKey: 'sk-test' } });
+      const { lastFrame } = render(<App config={validConfig} runner={runner} />);
+      expect(lastFrame()).toContain('test-agent');
     });
 
     it('显示输入框', () => {
