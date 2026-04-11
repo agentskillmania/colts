@@ -2,7 +2,7 @@
  * @fileoverview 根组件 — 路由到主界面或配置引导
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { ThemeProvider } from '@inkjs/ui';
 import { coltsTheme } from './theme/index.js';
@@ -13,6 +13,7 @@ import { ChatPanel } from './components/chat/chat-panel.js';
 import { WelcomeScreen } from './components/screens/welcome-screen.js';
 import { useAgent } from './hooks/use-agent.js';
 import { useEvents } from './hooks/use-events.js';
+import { useSession } from './hooks/use-session.js';
 import type { ExecutionMode } from './components/input/mode-badge.js';
 import type { AppConfig } from './config.js';
 import type { AgentRunner, AgentState } from '@agentskillmania/colts';
@@ -61,8 +62,12 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
   // 事件面板
   const { events, addEvent, clearEvents } = useEvents();
 
+  // Session 持久化
+  const { sessionId, save, restoreLatest, setSessionId } = useSession();
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Agent 交互
-  const { messages, mode, isRunning, sendMessage, setMode, clearMessages } = useAgent(
+  const { messages, mode, isRunning, state, sendMessage, setMode, clearMessages } = useAgent(
     runner,
     initialState,
     undefined,
@@ -70,6 +75,34 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
   );
 
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'error'>('idle');
+
+  // 启动时恢复最近 session
+  useEffect(() => {
+    if (initialState) {
+      setSessionId(initialState.id);
+      return;
+    }
+    restoreLatest().then((restored) => {
+      if (restored) {
+        setSessionId(restored.id);
+      }
+    });
+  }, []);
+
+  // state 变化自动保存
+  useEffect(() => {
+    if (!state || !isRunning) {
+      // 只在非运行时保存（运行中 state 频繁变化）
+      if (state && state.id !== sessionId) {
+        save(state);
+      }
+    }
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [state, isRunning, sessionId, save]);
 
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
