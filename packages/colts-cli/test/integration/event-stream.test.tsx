@@ -1,11 +1,11 @@
 /**
- * 事件流端到端集成测试
+ * Event stream end-to-end integration tests
  *
  * User Story: Event Stream End-to-End
- * 作为 TUI 开发者，我希望 AgentRunner 产生的 StreamEvent 能被正确格式化和缓冲，
- * 以便在事件面板中展示。
+ * As a TUI developer, I want StreamEvents produced by AgentRunner to be correctly formatted and buffered,
+ * so they can be displayed in the events panel.
  *
- * 测试 formatEvent 对所有事件类型的格式化、事件缓冲的定时刷新、唯一 ID 等完整流程。
+ * Tests formatEvent for all event types, event buffer timed flush, unique IDs and the complete flow.
  */
 
 import React from 'react';
@@ -14,13 +14,13 @@ import { render } from 'ink-testing-library';
 import { formatEvent, useEvents } from '../../src/hooks/use-events.js';
 import type { StreamEvent } from '@agentskillmania/colts';
 
-describe('事件流端到端', () => {
-  describe('formatEvent 事件类型覆盖', () => {
+describe('Event stream end-to-end', () => {
+  describe('formatEvent event type coverage', () => {
     /**
-     * 场景 1: formatEvent 能正确处理所有事件类型
+     * Scenario 1: formatEvent correctly handles all event types
      */
 
-    it('格式化 phase-change 事件', () => {
+    it('formats phase-change event', () => {
       const event: StreamEvent = {
         type: 'phase-change',
         from: { type: 'idle' },
@@ -29,15 +29,15 @@ describe('事件流端到端', () => {
       expect(formatEvent(event)).toBe('Phase: idle → calling-llm');
     });
 
-    it('格式化 token 事件', () => {
+    it('formats token event', () => {
       const event: StreamEvent = {
         type: 'token',
-        token: '你好世界',
+        token: 'Hello world',
       };
-      expect(formatEvent(event)).toBe('你好世界');
+      expect(formatEvent(event)).toBe('Hello world');
     });
 
-    it('格式化 tool:start 事件', () => {
+    it('formats tool:start event', () => {
       const event: StreamEvent = {
         type: 'tool:start',
         action: {
@@ -49,18 +49,18 @@ describe('事件流端到端', () => {
       expect(formatEvent(event)).toBe('Tool: file-reader');
     });
 
-    it('格式化 tool:end 事件（字符串结果）', () => {
+    it('formats tool:end event (string result)', () => {
       const event: StreamEvent = {
         type: 'tool:end',
-        result: '这是一个很长很长很长很长很长很长很长很长的工具执行结果需要被截断',
+        result: 'This is a very long tool execution result that needs to be truncated for display',
       };
       const text = formatEvent(event);
       expect(text).toContain('Result: ');
-      // 字符串结果截断到 50 字符
+      // String result is truncated to 50 characters
       expect(text.length).toBeLessThanOrEqual('Result: '.length + 50);
     });
 
-    it('格式化 tool:end 事件（对象结果）', () => {
+    it('formats tool:end event (object result)', () => {
       const event: StreamEvent = {
         type: 'tool:end',
         result: { files: ['a.ts', 'b.ts'], count: 2 },
@@ -70,32 +70,32 @@ describe('事件流端到端', () => {
       expect(text).toContain('files');
     });
 
-    it('格式化 error 事件', () => {
+    it('formats error event', () => {
       const event: StreamEvent = {
         type: 'error',
-        error: new Error('连接超时'),
+        error: new Error('Connection timeout'),
         context: { step: 3, toolName: 'http-client' },
       };
-      expect(formatEvent(event)).toBe('Error: 连接超时');
+      expect(formatEvent(event)).toBe('Error: Connection timeout');
     });
 
-    it('格式化 compressing 事件', () => {
+    it('formats compressing event', () => {
       const event: StreamEvent = {
         type: 'compressing',
       };
       expect(formatEvent(event)).toBe('Compressing context...');
     });
 
-    it('格式化 compressed 事件', () => {
+    it('formats compressed event', () => {
       const event: StreamEvent = {
         type: 'compressed',
-        summary: '摘要内容',
+        summary: 'Summary content',
         removedCount: 42,
       };
       expect(formatEvent(event)).toBe('Compressed: 42 messages');
     });
 
-    it('格式化 skill:loading 事件', () => {
+    it('formats skill:loading event', () => {
       const event: StreamEvent = {
         type: 'skill:loading',
         name: 'code-review',
@@ -103,7 +103,7 @@ describe('事件流端到端', () => {
       expect(formatEvent(event)).toBe('Skill loading: code-review...');
     });
 
-    it('格式化 skill:loaded 事件', () => {
+    it('formats skill:loaded event', () => {
       const event: StreamEvent = {
         type: 'skill:loaded',
         name: 'code-review',
@@ -112,25 +112,25 @@ describe('事件流端到端', () => {
       expect(formatEvent(event)).toBe('Skill loaded: code-review (4096 chars)');
     });
 
-    it('格式化 subagent:start 事件', () => {
+    it('formats subagent:start event', () => {
       const event: StreamEvent = {
         type: 'subagent:start',
         name: 'researcher',
-        task: '搜索最新文档',
+        task: 'Search latest docs',
       };
-      expect(formatEvent(event)).toBe('[researcher] Starting: 搜索最新文档');
+      expect(formatEvent(event)).toBe('[researcher] Starting: Search latest docs');
     });
 
-    it('格式化 subagent:token 事件', () => {
+    it('formats subagent:token event', () => {
       const event: StreamEvent = {
         type: 'subagent:token',
         name: 'researcher',
-        token: '正在分析...',
+        token: 'Analyzing...',
       };
-      expect(formatEvent(event)).toBe('[researcher] 正在分析...');
+      expect(formatEvent(event)).toBe('[researcher] Analyzing...');
     });
 
-    it('格式化 subagent:step:end 事件', () => {
+    it('formats subagent:step:end event', () => {
       const event: StreamEvent = {
         type: 'subagent:step:end',
         name: 'researcher',
@@ -139,20 +139,20 @@ describe('事件流端到端', () => {
       expect(formatEvent(event)).toBe('[researcher] Step 7 complete');
     });
 
-    it('格式化 subagent:end 事件', () => {
+    it('formats subagent:end event', () => {
       const event: StreamEvent = {
         type: 'subagent:end',
         name: 'researcher',
-        result: { answer: '完成', totalSteps: 7, finalState: null },
+        result: { answer: 'Done', totalSteps: 7, finalState: null },
       };
       expect(formatEvent(event)).toBe('[researcher] Done');
     });
   });
 
   /**
-   * 场景 2: formatEvent 处理未知事件类型，使用 JSON.stringify 回退
+   * Scenario 2: formatEvent handles unknown event types using JSON.stringify fallback
    */
-  it('formatEvent 处理未知事件类型时返回 JSON 字符串', () => {
+  it('formatEvent returns JSON string for unknown event types', () => {
     const unknownEvent = {
       type: 'custom-unknown-type',
       data: { foo: 'bar', nested: { value: 42 } },
@@ -161,34 +161,34 @@ describe('事件流端到端', () => {
     const text = formatEvent(unknownEvent);
     expect(text).toContain('custom-unknown-type');
     expect(text).toContain('foo');
-    // 应该是合法的 JSON 字符串
+    // Should be a valid JSON string
     expect(() => JSON.parse(text)).not.toThrow();
   });
 
-  describe('useEvents hook 事件缓冲', () => {
+  describe('useEvents hook event buffering', () => {
     /**
-     * 创建一个使用 useEvents hook 的测试包装组件。
+     * Create a test wrapper component that uses the useEvents hook.
      *
-     * 使用响应式容器对象（reactive）保存 hook 返回值。
-     * 每次 React 重渲染时，容器中的 hookResult 会被更新。
-     * 由于 useEvents 通过 useState 管理 events，flushEvents 触发
-     * setState 后组件会重渲染，hookResult 会指向最新的返回值。
+     * Uses a reactive container object to hold hook return values.
+     * Each time React re-renders, hookResult in the container is updated.
+     * Since useEvents manages events via useState, after flushEvents triggers
+     * setState the component re-renders and hookResult points to the latest return value.
      */
     function createWrapper() {
-      // 使用可变容器，确保每次渲染都能拿到最新 hook 返回值
+      // Use mutable container to ensure latest hook return value on each render
       const container: { current: ReturnType<typeof useEvents> | null } = {
         current: null,
       };
 
       function Wrapper() {
-        // 每次渲染（包括 setState 触发的重渲染）都会更新 container.current
+        // Every render (including setState-triggered re-renders) updates container.current
         container.current = useEvents();
         return null;
       }
 
       return {
         Wrapper,
-        /** 获取最新的 hook 返回值 */
+        /** Get the latest hook return value */
         getHook: () => container.current!,
       };
     }
@@ -202,77 +202,77 @@ describe('事件流端到端', () => {
     });
 
     /**
-     * 场景 3: 事件缓冲区在 100ms 后刷新（使用 vi.useFakeTimers）
+     * Scenario 3: Event buffer flushes after 100ms (using vi.useFakeTimers)
      */
-    it('事件缓冲区在 100ms 后刷新', () => {
+    it('Event buffer flushes after 100ms', () => {
       const { Wrapper, getHook } = createWrapper();
       render(<Wrapper />);
 
-      // 添加事件，此时在缓冲区中
-      getHook().addEvent({ type: 'token', token: '缓冲测试' } as StreamEvent);
+      // Add event, now in the buffer
+      getHook().addEvent({ type: 'token', token: 'buffer test' } as StreamEvent);
 
-      // 定时器未触发，events 仍为空
+      // Timer not yet triggered, events still empty
       expect(getHook().events).toEqual([]);
 
-      // 推进 100ms，触发刷新（React setState 后组件重渲染，hook 返回值更新）
+      // Advance 100ms to trigger flush (React setState causes re-render, hook return value updates)
       vi.advanceTimersByTime(100);
 
-      // 刷新后事件应该出现在列表中
+      // Flushed events should appear in the list
       expect(getHook().events).toHaveLength(1);
-      expect(getHook().events[0].text).toBe('缓冲测试');
+      expect(getHook().events[0].text).toBe('buffer test');
     });
 
     /**
-     * 场景 4: 快速连续添加多个事件 → 单次刷新
+     * Scenario 4: Rapidly adding multiple events → single flush
      */
-    it('快速连续添加多个事件后仅触发单次刷新', () => {
+    it('Single flush after rapidly adding multiple events', () => {
       const { Wrapper, getHook } = createWrapper();
       render(<Wrapper />);
 
-      // 快速连续添加 5 个事件
-      getHook().addEvent({ type: 'token', token: '事件1' } as StreamEvent);
-      getHook().addEvent({ type: 'token', token: '事件2' } as StreamEvent);
-      getHook().addEvent({ type: 'token', token: '事件3' } as StreamEvent);
-      getHook().addEvent({ type: 'token', token: '事件4' } as StreamEvent);
-      getHook().addEvent({ type: 'token', token: '事件5' } as StreamEvent);
+      // Rapidly add 5 events
+      getHook().addEvent({ type: 'token', token: 'Event 1' } as StreamEvent);
+      getHook().addEvent({ type: 'token', token: 'Event 2' } as StreamEvent);
+      getHook().addEvent({ type: 'token', token: 'Event 3' } as StreamEvent);
+      getHook().addEvent({ type: 'token', token: 'Event 4' } as StreamEvent);
+      getHook().addEvent({ type: 'token', token: 'Event 5' } as StreamEvent);
 
-      // 推进 100ms，应该只触发一次 flush，但所有事件都应该被刷新
+      // Advance 100ms, should trigger only one flush, but all events should be flushed
       vi.advanceTimersByTime(100);
 
-      // 所有 5 个事件应该一起出现在列表中
+      // All 5 events should appear together in the list
       expect(getHook().events).toHaveLength(5);
-      expect(getHook().events[0].text).toBe('事件1');
-      expect(getHook().events[4].text).toBe('事件5');
+      expect(getHook().events[0].text).toBe('Event 1');
+      expect(getHook().events[4].text).toBe('Event 5');
     });
 
     /**
-     * 场景 5: clearEvents 取消待执行的定时器
+     * Scenario 5: clearEvents cancels pending timers
      */
-    it('clearEvents 取消待执行的定时器', () => {
+    it('clearEvents cancels pending timers', () => {
       const { Wrapper, getHook } = createWrapper();
       render(<Wrapper />);
 
-      // 添加事件，启动 100ms 定时器
-      getHook().addEvent({ type: 'token', token: '待清除' } as StreamEvent);
+      // Add event, starts 100ms timer
+      getHook().addEvent({ type: 'token', token: 'to be cleared' } as StreamEvent);
 
-      // 在定时器触发前清除事件
+      // Clear events before timer triggers
       getHook().clearEvents();
 
-      // 推进时间超过 100ms
+      // Advance time past 100ms
       vi.advanceTimersByTime(200);
 
-      // 事件列表应该为空（定时器被取消，缓冲区被清空）
+      // Event list should be empty (timer cancelled, buffer cleared)
       expect(getHook().events).toEqual([]);
     });
 
     /**
-     * 场景 6: 事件有唯一 ID
+     * Scenario 6: Events have unique IDs
      */
-    it('每个事件都有唯一 ID', () => {
+    it('Each event has a unique ID', () => {
       const { Wrapper, getHook } = createWrapper();
       render(<Wrapper />);
 
-      // 添加多个同类型事件
+      // Add multiple events of the same type
       getHook().addEvent({ type: 'token', token: 'A' } as StreamEvent);
       getHook().addEvent({ type: 'token', token: 'B' } as StreamEvent);
       getHook().addEvent({ type: 'token', token: 'C' } as StreamEvent);
@@ -282,12 +282,12 @@ describe('事件流端到端', () => {
       const events = getHook().events;
       expect(events).toHaveLength(3);
 
-      // 所有 ID 应该是唯一的
+      // All IDs should be unique
       const ids = events.map((e) => e.id);
       const uniqueIds = new Set(ids);
       expect(uniqueIds.size).toBe(3);
 
-      // ID 不应为空
+      // IDs should not be empty
       for (const id of ids) {
         expect(id).toBeTruthy();
         expect(typeof id).toBe('string');

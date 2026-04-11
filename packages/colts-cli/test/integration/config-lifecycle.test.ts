@@ -1,11 +1,11 @@
 /**
- * CLI 配置生命周期集成测试
+ * CLI configuration lifecycle integration tests
  *
  * User Story: CLI Configuration Lifecycle
- * 作为 CLI 用户，我希望通过 CLI 命令配置 LLM provider，
- * 以便设置并持久化 API key、model 和 provider。
+ * As a CLI user, I want to configure the LLM provider via CLI commands,
+ * so I can set and persist my API key, model, and provider.
  *
- * 测试配置文件的创建、读取、优先级和持久化等完整生命周期。
+ * Tests the full lifecycle of config file creation, reading, priority, and persistence.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -14,30 +14,30 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { loadConfig, saveConfig } from '../../src/config.js';
 
-describe('CLI 配置生命周期', () => {
+describe('CLI configuration lifecycle', () => {
   const testDir = path.join(os.tmpdir(), `colts-intg-config-${Date.now()}`);
   const globalDir = path.join(testDir, 'global');
 
   beforeEach(async () => {
-    // 每个用例前创建全新的隔离目录
+    // Create fresh isolated directory before each test
     await fs.mkdir(testDir, { recursive: true });
     await fs.mkdir(globalDir, { recursive: true });
   });
 
   afterEach(async () => {
-    // 清理测试目录
+    // Clean up test directory
     try {
       await fs.rm(testDir, { recursive: true, force: true });
     } catch {
-      // 忽略清理错误
+      // Ignore cleanup errors
     }
   });
 
   /**
-   * 场景 1: 无配置文件 → loadConfig 返回 hasValidConfig: false
+   * Scenario 1: No config file → loadConfig returns hasValidConfig: false
    */
-  it('无配置文件时 loadConfig 返回 hasValidConfig 为 false', async () => {
-    // 创建完全空的隔离目录，无本地也无全局配置
+  it('loadConfig returns hasValidConfig false when no config file exists', async () => {
+    // Create completely empty isolated directory with no local or global config
     const emptyDir = path.join(testDir, 'empty');
     await fs.mkdir(emptyDir, { recursive: true });
 
@@ -53,9 +53,9 @@ describe('CLI 配置生命周期', () => {
   });
 
   /**
-   * 场景 2: 本地 colts.yaml 存在且有效 → loadConfig 返回正确值
+   * Scenario 2: Local colts.yaml exists and is valid → loadConfig returns correct values
    */
-  it('本地存在有效 colts.yaml 时 loadConfig 返回正确配置', async () => {
+  it('loadConfig returns correct config when local colts.yaml exists and is valid', async () => {
     const yamlContent = `
 llm:
   provider: openai
@@ -83,14 +83,14 @@ agent:
   });
 
   /**
-   * 场景 3: 仅全局 config.yaml 存在 → loadConfig 返回正确值
+   * Scenario 3: Only global config.yaml exists → loadConfig returns correct values
    */
-  it('仅全局配置文件存在时 loadConfig 返回正确配置', async () => {
-    // 本地无配置
+  it('loadConfig returns correct config when only global config exists', async () => {
+    // No local config
     const localOnlyDir = path.join(testDir, 'nolocal');
     await fs.mkdir(localOnlyDir, { recursive: true });
 
-    // 全局目录放配置
+    // Place config in global directory
     const yamlContent = `
 llm:
   provider: anthropic
@@ -114,10 +114,10 @@ llm:
   });
 
   /**
-   * 场景 4: 本地配置优先于全局配置
+   * Scenario 4: Local config takes priority over global config
    */
-  it('本地配置优先于全局配置', async () => {
-    // 本地配置
+  it('Local config takes priority over global config', async () => {
+    // Local config
     const localYaml = `
 llm:
   provider: openai
@@ -126,7 +126,7 @@ llm:
 `;
     await fs.writeFile(path.join(testDir, 'colts.yaml'), localYaml, 'utf-8');
 
-    // 全局配置（不同值）
+    // Global config (different values)
     const globalYaml = `
 llm:
   provider: anthropic
@@ -141,7 +141,7 @@ llm:
     try {
       const config = await loadConfig({ globalDir });
       expect(config.hasValidConfig).toBe(true);
-      // 本地配置应该优先
+      // Local config should take priority
       expect(config.llm?.apiKey).toBe('sk-local-priority');
       expect(config.llm?.provider).toBe('openai');
       expect(config.llm?.model).toBe('gpt-4');
@@ -151,9 +151,9 @@ llm:
   });
 
   /**
-   * 场景 5: 配置缺少 apiKey → hasValidConfig: false
+   * Scenario 5: Config missing apiKey → hasValidConfig: false
    */
-  it('配置缺少 apiKey 时 hasValidConfig 为 false', async () => {
+  it('hasValidConfig is false when config is missing apiKey', async () => {
     const yamlContent = `
 llm:
   provider: openai
@@ -174,56 +174,56 @@ llm:
   });
 
   /**
-   * 场景 6: saveConfig 创建新配置文件并包含默认值和用户值
+   * Scenario 6: saveConfig creates new config file with defaults and user values
    */
-  it('saveConfig 创建新配置文件并包含默认值和用户值', async () => {
-    // 使用不存在配置文件的全新目录
+  it('saveConfig creates new config file with defaults and user values', async () => {
+    // Use a fresh directory with no existing config file
     const freshGlobalDir = path.join(testDir, 'fresh-global');
 
     await saveConfig('llm.apiKey', 'sk-new-test-key', { globalDir: freshGlobalDir });
 
-    // 验证文件被创建
+    // Verify file was created
     const configPath = path.join(freshGlobalDir, 'config.yaml');
     const content = await fs.readFile(configPath, 'utf-8');
 
-    // 用户设置的值
+    // User-set value
     expect(content).toContain('sk-new-test-key');
-    // 默认值也应该存在（saveConfig 会先用默认值初始化）
+    // Default values should also exist (saveConfig initializes with defaults first)
     expect(content).toContain('openai');
     expect(content).toContain('gpt-4');
   });
 
   /**
-   * 场景 7: saveConfig 更新已有值
+   * Scenario 7: saveConfig updates existing values
    */
-  it('saveConfig 更新已有配置值', async () => {
-    // 先设置一个值
+  it('saveConfig updates existing config values', async () => {
+    // Set a value first
     await saveConfig('llm.apiKey', 'sk-old-key', { globalDir });
     await saveConfig('llm.provider', 'openai', { globalDir });
 
-    // 更新 apiKey
+    // Update apiKey
     await saveConfig('llm.apiKey', 'sk-updated-key', { globalDir });
 
-    // 读取文件验证更新
+    // Read file to verify update
     const content = await fs.readFile(path.join(globalDir, 'config.yaml'), 'utf-8');
     expect(content).toContain('sk-updated-key');
-    // provider 保持不变
+    // provider remains unchanged
     expect(content).toContain('openai');
   });
 
   /**
-   * 场景 8: 多次 saveConfig 调用持久化所有值
+   * Scenario 8: Multiple saveConfig calls persist all values
    */
-  it('多次 saveConfig 调用后所有值都被持久化', async () => {
+  it('All values are persisted after multiple saveConfig calls', async () => {
     const multiGlobalDir = path.join(testDir, 'multi-global');
 
-    // 连续保存多个配置项
+    // Save multiple config items consecutively
     await saveConfig('llm.provider', 'openai', { globalDir: multiGlobalDir });
     await saveConfig('llm.apiKey', 'sk-multi-key', { globalDir: multiGlobalDir });
     await saveConfig('llm.model', 'gpt-4o', { globalDir: multiGlobalDir });
     await saveConfig('llm.baseUrl', 'https://api.custom.com/v1', { globalDir: multiGlobalDir });
 
-    // 验证所有值都被持久化
+    // Verify all values are persisted
     const content = await fs.readFile(path.join(multiGlobalDir, 'config.yaml'), 'utf-8');
     expect(content).toContain('openai');
     expect(content).toContain('sk-multi-key');
@@ -232,35 +232,35 @@ llm:
   });
 
   /**
-   * 场景 9: saveConfig 创建父目录
+   * Scenario 9: saveConfig creates parent directories
    */
-  it('saveConfig 能创建不存在的父目录', async () => {
-    // 使用嵌套的不存在的目录
+  it('saveConfig creates non-existent parent directories', async () => {
+    // Use nested non-existent directories
     const nestedDir = path.join(testDir, 'nested', 'deep', 'config');
 
-    // 确认目录不存在
+    // Confirm directory does not exist
     await expect(fs.access(nestedDir)).rejects.toThrow();
 
     await saveConfig('llm.apiKey', 'sk-nested-key', { globalDir: nestedDir });
 
-    // 验证目录被创建
+    // Verify directory was created
     await fs.access(nestedDir);
     const content = await fs.readFile(path.join(nestedDir, 'config.yaml'), 'utf-8');
     expect(content).toContain('sk-nested-key');
   });
 
   /**
-   * 场景 10: saveConfig 后 loadConfig 能读回保存的值
+   * Scenario 10: saveConfig followed by loadConfig reads back saved values
    */
-  it('saveConfig 后 loadConfig 能正确读回保存的值', async () => {
+  it('loadConfig reads back values saved by saveConfig', async () => {
     const roundtripGlobalDir = path.join(testDir, 'roundtrip-global');
 
-    // 保存配置
+    // Save config
     await saveConfig('llm.provider', 'openai', { globalDir: roundtripGlobalDir });
     await saveConfig('llm.apiKey', 'sk-roundtrip-key', { globalDir: roundtripGlobalDir });
     await saveConfig('llm.model', 'gpt-4o-mini', { globalDir: roundtripGlobalDir });
 
-    // 确保无本地配置干扰
+    // Ensure no local config interference
     const noLocalDir = path.join(testDir, 'roundtrip-nolocal');
     await fs.mkdir(noLocalDir, { recursive: true });
 
@@ -268,7 +268,7 @@ llm:
     process.chdir(noLocalDir);
 
     try {
-      // 加载配置
+      // Load config
       const config = await loadConfig({ globalDir: roundtripGlobalDir });
       expect(config.hasValidConfig).toBe(true);
       expect(config.llm?.provider).toBe('openai');

@@ -1,11 +1,11 @@
 /**
- * 会话持久化集成测试
+ * Session persistence integration tests
  *
  * User Story: Session Persistence
- * 作为调试 agent 的开发者，我希望对话能在会话间持久化，
- * 以便下次能从上次中断的地方继续。
+ * As a developer debugging agents, I want conversations to persist across sessions,
+ * so I can continue from where I left off next time.
  *
- * 测试会话的保存、加载、列表、删除等完整生命周期。
+ * Tests the full lifecycle of session save, load, list, and delete.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -16,10 +16,10 @@ import { saveSession, loadSession, listSessions, deleteSession } from '../../src
 import { createAgentState, addUserMessage, serializeState } from '@agentskillmania/colts';
 import type { AgentState } from '@agentskillmania/colts';
 
-describe('会话持久化', () => {
+describe('Session persistence', () => {
   const testDir = path.join(os.tmpdir(), `colts-intg-session-${Date.now()}`);
 
-  /** 创建一个带消息的测试用 AgentState */
+  /** Create a test AgentState with messages */
   function createTestState(messageContents: string[] = []): AgentState {
     const config = {
       name: 'test-agent',
@@ -34,74 +34,74 @@ describe('会话持久化', () => {
   }
 
   beforeEach(async () => {
-    // 每个用例前创建隔离的临时目录
+    // Create isolated temp directory before each test
     await fs.mkdir(testDir, { recursive: true });
   });
 
   afterEach(async () => {
-    // 清理测试目录
+    // Clean up test directory
     try {
       await fs.rm(testDir, { recursive: true, force: true });
     } catch {
-      // 忽略清理错误
+      // Ignore cleanup errors
     }
   });
 
   /**
-   * 场景 1: saveSession 在会话目录中创建 JSON 文件
+   * Scenario 1: saveSession creates a JSON file in the session directory
    */
-  it('saveSession 在会话目录中创建 JSON 文件', async () => {
+  it('saveSession creates a JSON file in the session directory', async () => {
     const state = createTestState(['Hello']);
     await saveSession(state, testDir);
 
-    // 验证 JSON 文件存在
+    // Verify JSON file exists
     const filePath = path.join(testDir, `${state.id}.json`);
     const content = await fs.readFile(filePath, 'utf-8');
 
-    // 验证是合法 JSON 且包含正确的 id
+    // Verify it is valid JSON with correct id
     const parsed = JSON.parse(content);
     expect(parsed.id).toBe(state.id);
   });
 
   /**
-   * 场景 2: loadSession 读回相同状态（比较序列化形式）
+   * Scenario 2: loadSession reads back the same state (compare serialized form)
    */
-  it('loadSession 读回相同状态（序列化形式一致）', async () => {
-    const state = createTestState(['第一条消息', '第二条消息', '第三条消息']);
+  it('loadSession reads back the same state (serialized form matches)', async () => {
+    const state = createTestState(['First message', 'Second message', 'Third message']);
     await saveSession(state, testDir);
 
     const loaded = await loadSession(state.id, testDir);
 
-    // 比较序列化形式
+    // Compare serialized forms
     const originalJson = serializeState(state);
     const loadedJson = serializeState(loaded);
     expect(loadedJson).toBe(originalJson);
 
-    // 基本字段验证
+    // Basic field verification
     expect(loaded.id).toBe(state.id);
     expect(loaded.context.messages).toHaveLength(3);
-    expect(loaded.context.messages[0].content).toBe('第一条消息');
+    expect(loaded.context.messages[0].content).toBe('First message');
   });
 
   /**
-   * 场景 3: listSessions 返回保存会话的元数据
+   * Scenario 3: listSessions returns metadata for saved sessions
    */
-  it('listSessions 返回保存会话的元数据', async () => {
-    const state = createTestState(['测试消息']);
+  it('listSessions returns metadata for saved sessions', async () => {
+    const state = createTestState(['Test message']);
     await saveSession(state, testDir);
 
     const sessions = await listSessions(testDir);
     expect(sessions).toHaveLength(1);
     expect(sessions[0].id).toBe(state.id);
     expect(sessions[0].messageCount).toBe(1);
-    expect(sessions[0].lastMessage).toBe('测试消息');
+    expect(sessions[0].lastMessage).toBe('Test message');
   });
 
   /**
-   * 场景 4: listSessions 在无会话时返回空数组
+   * Scenario 4: listSessions returns empty array when no sessions exist
    */
-  it('listSessions 在无会话时返回空数组', async () => {
-    // 空目录
+  it('listSessions returns empty array when no sessions exist', async () => {
+    // Empty directory
     const emptyDir = path.join(testDir, 'empty');
     await fs.mkdir(emptyDir, { recursive: true });
 
@@ -110,15 +110,15 @@ describe('会话持久化', () => {
   });
 
   /**
-   * 场景 5: listSessions 按 createdAt 降序排列
+   * Scenario 5: listSessions sorts by createdAt descending
    */
-  it('listSessions 按 createdAt 降序排列', async () => {
-    // 创建三个会话，带不同的时间戳
+  it('listSessions sorts by createdAt descending', async () => {
+    // Create three sessions with different timestamps
     const now = Date.now();
 
-    // 第一个会话：1000ms 前
+    // First session: 2000ms ago
     const state1 = createTestState(['old message']);
-    // 手动修改时间戳以确保排序可测试
+    // Manually modify timestamps to ensure sorting is testable
     const state1Modified: AgentState = {
       ...state1,
       context: {
@@ -130,7 +130,7 @@ describe('会话持久化', () => {
       },
     };
 
-    // 第二个会话：当前时间
+    // Second session: 1000ms ago
     const state2 = createTestState(['newer message']);
     const state2Modified: AgentState = {
       ...state2,
@@ -143,7 +143,7 @@ describe('会话持久化', () => {
       },
     };
 
-    // 第三个会话：最新
+    // Third session: most recent
     const state3 = createTestState(['newest message']);
     const state3Modified: AgentState = {
       ...state3,
@@ -163,7 +163,7 @@ describe('会话持久化', () => {
     const sessions = await listSessions(testDir);
     expect(sessions).toHaveLength(3);
 
-    // 最新的排在最前
+    // Most recent first
     expect(sessions[0].id).toBe(state3Modified.id);
     expect(sessions[0].createdAt).toBe(now);
     expect(sessions[1].id).toBe(state2Modified.id);
@@ -173,49 +173,49 @@ describe('会话持久化', () => {
   });
 
   /**
-   * 场景 6: deleteSession 删除文件
+   * Scenario 6: deleteSession removes the file
    */
-  it('deleteSession 删除会话文件', async () => {
+  it('deleteSession removes the session file', async () => {
     const state = createTestState(['to be deleted']);
     await saveSession(state, testDir);
 
-    // 确认文件存在
+    // Confirm file exists
     const filePath = path.join(testDir, `${state.id}.json`);
     await fs.access(filePath);
 
-    // 删除会话
+    // Delete session
     await deleteSession(state.id, testDir);
 
-    // 确认文件已删除
+    // Confirm file is deleted
     await expect(fs.access(filePath)).rejects.toThrow();
 
-    // listSessions 不再返回该会话
+    // listSessions no longer returns the session
     const sessions = await listSessions(testDir);
     expect(sessions).toHaveLength(0);
   });
 
   /**
-   * 场景 7: deleteSession 忽略不存在的会话
+   * Scenario 7: deleteSession ignores non-existent sessions
    */
-  it('deleteSession 忽略不存在的会话（不抛出错误）', async () => {
-    // 应该静默通过，不抛出异常
+  it('deleteSession ignores non-existent sessions (no error thrown)', async () => {
+    // Should pass silently without throwing
     await expect(deleteSession('non-existent-session-id', testDir)).resolves.toBeUndefined();
   });
 
   /**
-   * 场景 8: saveSession 在目录不存在时创建它
+   * Scenario 8: saveSession creates directory when it does not exist
    */
-  it('saveSession 在目录不存在时自动创建', async () => {
-    // 使用嵌套的不存在的目录
+  it('saveSession creates directory when it does not exist', async () => {
+    // Use a nested non-existent directory
     const nestedDir = path.join(testDir, 'nested', 'deep', 'sessions');
 
-    // 确认目录不存在
+    // Confirm directory does not exist
     await expect(fs.access(nestedDir)).rejects.toThrow();
 
     const state = createTestState(['nested message']);
     await saveSession(state, nestedDir);
 
-    // 验证目录被创建且文件存在
+    // Verify directory was created and file exists
     const filePath = path.join(nestedDir, `${state.id}.json`);
     const content = await fs.readFile(filePath, 'utf-8');
     const parsed = JSON.parse(content);
@@ -223,12 +223,12 @@ describe('会话持久化', () => {
   });
 
   /**
-   * 场景 9: 多个会话，listSessions 返回所有
+   * Scenario 9: Multiple sessions, listSessions returns all
    */
-  it('多个会话 listSessions 返回全部', async () => {
+  it('listSessions returns all sessions when multiple exist', async () => {
     const states: AgentState[] = [];
     for (let i = 0; i < 5; i++) {
-      const state = createTestState([`会话 ${i + 1} 的消息`]);
+      const state = createTestState([`Session ${i + 1} message`]);
       states.push(state);
       await saveSession(state, testDir);
     }
@@ -236,7 +236,7 @@ describe('会话持久化', () => {
     const sessions = await listSessions(testDir);
     expect(sessions).toHaveLength(5);
 
-    // 验证所有会话 ID 都在列表中
+    // Verify all session IDs are in the list
     const ids = sessions.map((s) => s.id);
     for (const state of states) {
       expect(ids).toContain(state.id);
@@ -244,12 +244,12 @@ describe('会话持久化', () => {
   });
 
   /**
-   * 场景 10: 会话含大量消息，预览截断至 50 字符
+   * Scenario 10: Session with long messages, preview truncated to 50 characters
    */
-  it('会话含大量消息时预览截断至 50 字符', async () => {
-    // 创建一条超过 50 字符的消息
+  it('Preview is truncated to 50 characters for sessions with long messages', async () => {
+    // Create a message longer than 50 characters
     const longContent =
-      '这是一条很长的消息，用于测试预览截断功能是否正常工作，超过五十个字符的部分应该被截断。';
+      'This is a very long message used to test whether the preview truncation feature works correctly, characters beyond fifty should be truncated.';
     const state = createTestState(['short', longContent]);
     await saveSession(state, testDir);
 
@@ -257,9 +257,9 @@ describe('会话持久化', () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0].messageCount).toBe(2);
 
-    // lastMessage 是最后一条消息的截断预览，不超过 50 字符
+    // lastMessage is the truncated preview of the last message, no more than 50 characters
     expect(sessions[0].lastMessage.length).toBeLessThanOrEqual(50);
-    // 确认是截断后的内容
+    // Confirm it is the truncated content
     expect(sessions[0].lastMessage).toBe(longContent.slice(0, 50));
   });
 });

@@ -1,9 +1,9 @@
 /**
- * CLI 里程碑集成测试
+ * CLI milestone integration tests
  *
  * User Story: CLI Milestone
- * 验证：启动 → 渲染 → 退出 的完整流程。
- * （不含真正的 LLM 调用，仅验证组件 + hooks + session 串联正确）
+ * Verify: startup → render → exit complete flow.
+ * (No real LLM calls, only verify component + hooks + session wiring is correct)
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -30,7 +30,7 @@ vi.mock('@agentskillmania/colts', async (importOriginal) => {
   };
 });
 
-describe('CLI 里程碑集成', () => {
+describe('CLI milestone integration', () => {
   const testSessionDir = path.join(os.tmpdir(), `colts-cli-milestone-${Date.now()}`);
 
   beforeEach(async () => {
@@ -46,9 +46,9 @@ describe('CLI 里程碑集成', () => {
   });
 
   /**
-   * 场景 1: 首次启动（无配置）显示配置提示
+   * Scenario 1: First startup (no config) shows config prompt
    */
-  it('首次启动无配置时显示配置提示', () => {
+  it('should show config prompt on first startup with no config', () => {
     const noConfig: AppConfig = { hasValidConfig: false, configPath: '/tmp/test.yaml' };
     const { lastFrame } = render(<App config={noConfig} runner={null} />);
     const frame = lastFrame();
@@ -57,9 +57,9 @@ describe('CLI 里程碑集成', () => {
   });
 
   /**
-   * 场景 2: 有效配置启动显示欢迎屏幕
+   * Scenario 2: Valid config startup shows welcome screen
    */
-  it('有效配置启动显示欢迎屏幕', () => {
+  it('should show welcome screen with valid config', () => {
     const config: AppConfig = {
       hasValidConfig: true,
       configPath: '/tmp/test.yaml',
@@ -76,9 +76,9 @@ describe('CLI 里程碑集成', () => {
   });
 
   /**
-   * 场景 3: 带初始 state 启动
+   * Scenario 3: Startup with initial state
    */
-  it('带初始 AgentState 启动正常渲染', () => {
+  it('should render correctly with initial AgentState', () => {
     const config: AppConfig = {
       hasValidConfig: true,
       configPath: '/tmp/test.yaml',
@@ -98,32 +98,32 @@ describe('CLI 里程碑集成', () => {
   });
 
   /**
-   * 场景 4: Session 持久化验证 — 保存 + 加载
+   * Scenario 4: Session persistence verification — save + load
    */
-  it('Session 保存后可加载', async () => {
+  it('should load session after saving', async () => {
     const state = createAgentState({
       name: 'test-agent',
       instructions: 'Test',
       tools: [],
     });
 
-    // 保存
+    // Save
     await saveSession(state, testSessionDir);
 
-    // 加载
+    // Load
     const loaded = await loadSession(state.id, testSessionDir);
     expect(loaded.id).toBe(state.id);
 
-    // 列表
+    // List
     const sessions = await listSessions(testSessionDir);
     expect(sessions).toHaveLength(1);
     expect(sessions[0].id).toBe(state.id);
   });
 
   /**
-   * 场景 5: 多次渲染不报错（组件稳定性）
+   * Scenario 5: Multiple renders without errors (component stability)
    */
-  it('多次渲染不报错', () => {
+  it('should not throw on multiple renders', () => {
     const config: AppConfig = {
       hasValidConfig: true,
       configPath: '/tmp/test.yaml',
@@ -132,7 +132,7 @@ describe('CLI 里程碑集成', () => {
     };
     const runner = new AgentRunner({ model: 'gpt-4o', llm: { apiKey: 'sk-test' } });
 
-    // 连续渲染 3 次
+    // Render 3 times consecutively
     for (let i = 0; i < 3; i++) {
       const { unmount } = render(<App config={config} runner={runner} />);
       expect(() => unmount()).not.toThrow();
