@@ -115,9 +115,10 @@ export interface Snapshot {
 
 // ========== Runner Configuration Interfaces ==========
 
+import type { ZodTypeAny } from 'zod';
 import type { LLMResponse, StreamEvent } from '@agentskillmania/llm-client';
-import type { Message as LLMMessage, Tool } from '@mariozechner/pi-ai';
-import type { ToolSchema } from './tools/registry.js';
+import type { Message as LLMMessage, Tool as LLMTool } from '@mariozechner/pi-ai';
+import type { ToolSchema, Tool as LocalTool } from './tools/registry.js';
 
 /**
  * LLM Provider Interface
@@ -130,7 +131,7 @@ export interface ILLMProvider {
   call(options: {
     model: string;
     messages: LLMMessage[];
-    tools?: Tool[];
+    tools?: LLMTool[];
     priority?: number;
     requestTimeout?: number;
     signal?: AbortSignal;
@@ -140,7 +141,7 @@ export interface ILLMProvider {
   stream(options: {
     model: string;
     messages: LLMMessage[];
-    tools?: Tool[];
+    tools?: LLMTool[];
     priority?: number;
     requestTimeout?: number;
     signal?: AbortSignal;
@@ -159,7 +160,7 @@ export interface IToolRegistry {
   /** Get JSON schemas of all tools (for LLM) */
   toToolSchemas(): ToolSchema[];
   /** Register a new tool */
-  register<T extends import('zod').ZodTypeAny>(tool: {
+  register<T extends ZodTypeAny>(tool: {
     name: string;
     description: string;
     parameters: T;
@@ -171,6 +172,8 @@ export interface IToolRegistry {
   has(name: string): boolean;
   /** Get all registered tool names */
   getToolNames(): string[];
+  /** Get a tool by name (returns undefined if not found) */
+  get(name: string): LocalTool | undefined;
 }
 
 /**
