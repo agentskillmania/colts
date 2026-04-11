@@ -952,4 +952,169 @@ describe('createDelegateTool', () => {
       expect(executionLog).toEqual(['First', 'Second']);
     });
   });
+
+  // ----------------------------------------------------------
+  // allowDelegation 限制
+  // ----------------------------------------------------------
+  describe('allowDelegation restriction', () => {
+    it('allowDelegation=false 时子 agent 不应该有 delegate 工具', async () => {
+      // 父 Agent 注册 delegate 工具
+      const parentRegistry = new ToolRegistry();
+      const delegateToolImpl: Tool = {
+        name: 'delegate',
+        description: 'Delegate tool',
+        parameters: z.object({}),
+        execute: async () => 'delegated',
+      };
+      parentRegistry.register(delegateToolImpl);
+
+      // 子 agent 声明使用 delegate 工具，但 allowDelegation=false
+      const restrictedAgent: SubAgentConfig = {
+        name: 'restricted',
+        description: 'Restricted agent',
+        config: {
+          name: 'restricted',
+          instructions: 'You cannot delegate.',
+          tools: [
+            { name: 'delegate', description: 'Delegate', parameters: {} },
+            { name: 'search', description: 'Search', parameters: {} },
+          ],
+        },
+        allowDelegation: false, // 关键：不允许委派
+      };
+
+      parentRegistry.register({
+        name: 'search',
+        description: 'Search',
+        parameters: z.object({}),
+        execute: async () => 'search result',
+      });
+
+      const configs = new Map<string, SubAgentConfig>();
+      configs.set('restricted', restrictedAgent);
+
+      const client = createMockLLMClient([
+        {
+          content: 'Search result',
+          toolCalls: [],
+          tokens: mockTokens,
+          stopReason: 'stop',
+        },
+      ]);
+
+      const tool = createDelegateTool({
+        parentToolRegistry: parentRegistry,
+        subAgentConfigs: configs,
+        llmProvider: client,
+      });
+
+      await tool.execute({ agent: 'restricted', task: 'Do something' });
+
+      // 验证传给 LLM 的 tools 不包含 delegate
+      const firstCall = vi.mocked(client.call).mock.calls[0][0];
+      expect(firstCall.tools).toBeDefined();
+      const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
+      expect(toolNames).toContain('search'); // 有 search
+      expect(toolNames).not.toContain('delegate'); // 但没有 delegate
+    });
+
+    it('allowDelegation=true 时子 agent 可以有 delegate 工具', async () => {
+      // 父 Agent 注册 delegate 工具
+      const parentRegistry = new ToolRegistry();
+      const delegateToolImpl: Tool = {
+        name: 'delegate',
+        description: 'Delegate tool',
+        parameters: z.object({}),
+        execute: async () => 'delegated',
+      };
+      parentRegistry.register(delegateToolImpl);
+
+      // 子 agent 声明使用 delegate 工具，allowDelegation=true
+      const delegatorAgent: SubAgentConfig = {
+        name: 'delegator',
+        description: 'Delegator agent',
+        config: {
+          name: 'delegator',
+          instructions: 'You can delegate.',
+          tools: [{ name: 'delegate', description: 'Delegate', parameters: {} }],
+        },
+        allowDelegation: true, // 关键：允许委派
+      };
+
+      const configs = new Map<string, SubAgentConfig>();
+      configs.set('delegator', delegatorAgent);
+
+      const client = createMockLLMClient([
+        {
+          content: 'Done',
+          toolCalls: [],
+          tokens: mockTokens,
+          stopReason: 'stop',
+        },
+      ]);
+
+      const tool = createDelegateTool({
+        parentToolRegistry: parentRegistry,
+        subAgentConfigs: configs,
+        llmProvider: client,
+      });
+
+      await tool.execute({ agent: 'delegator', task: 'Do something' });
+
+      // 验证传给 LLM 的 tools 包含 delegate
+      const firstCall = vi.mocked(client.call).mock.calls[0][0];
+      expect(firstCall.tools).toBeDefined();
+      const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
+      expect(toolNames).toContain('delegate'); // 有 delegate
+    });
+
+    it('未设置 allowDelegation 时默认不允许委派', async () => {
+      // 父 Agent 注册 delegate 工具
+      const parentRegistry = new ToolRegistry();
+      parentRegistry.register({
+        name: 'delegate',
+        description: 'Delegate tool',
+        parameters: z.object({}),
+        execute: async () => 'delegated',
+      });
+
+      // 子 agent 未设置 allowDelegation（默认 undefined）
+      const defaultAgent: SubAgentConfig = {
+        name: 'default',
+        description: 'Default agent',
+        config: {
+          name: 'default',
+          instructions: 'You work.',
+          tools: [{ name: 'delegate', description: 'Delegate', parameters: {} }],
+        },
+        // allowDelegation 未设置，默认为 false
+      };
+
+      const configs = new Map<string, SubAgentConfig>();
+      configs.set('default', defaultAgent);
+
+      const client = createMockLLMClient([
+        {
+          content: 'Done',
+          toolCalls: [],
+          tokens: mockTokens,
+          stopReason: 'stop',
+        },
+      ]);
+
+      const tool = createDelegateTool({
+        parentToolRegistry: parentRegistry,
+        subAgentConfigs: configs,
+        llmProvider: client,
+      });
+
+      await tool.execute({ agent: 'default', task: 'Do something' });
+
+      // 验证传给 LLM 的 tools 不包含 delegate
+      const firstCall = vi.mocked(client.call).mock.calls[0][0];
+      expect(firstCall.tools).toBeDefined();
+      const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
+      expect(toolNames).not.toContain('delegate'); // 默认不允许
+    });
+  });
 });

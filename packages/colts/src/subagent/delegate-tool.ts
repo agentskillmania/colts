@@ -93,7 +93,14 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
 
       // Build sub-agent tools from parent registry
       const subAgentTools: Tool[] = [];
+      const canDelegate = config.allowDelegation ?? false;
+
       for (const toolDef of config.config.tools) {
+        // Skip delegate tool if sub-agent is not allowed to delegate
+        if (toolDef.name === 'delegate' && !canDelegate) {
+          continue;
+        }
+
         // Look up tool implementation from parent registry
         const parentTool = parentToolRegistry.get(toolDef.name);
         if (parentTool) {
