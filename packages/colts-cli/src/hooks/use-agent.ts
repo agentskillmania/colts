@@ -91,6 +91,8 @@ export interface UseAgentReturn {
   mode: ExecutionMode;
   /** Whether the agent is currently running */
   isRunning: boolean;
+  /** Whether the agent is paused and waiting for user input to continue */
+  isPaused: boolean;
   /** Current AgentState */
   state: AgentState | null;
   /** Send a message or command */
@@ -135,11 +137,23 @@ export function useAgent(
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState<ExecutionMode>('run');
   const [isRunning, setIsRunning] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [state, setState] = useState<AgentState | null>(initialState);
 
   // Use ref to avoid callback closure issues
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+
+  // Pause/continue mechanism for step/advance modes
+  const continueFnRef = useRef<(() => void) | null>(null);
+
+  /** Resolve the pause promise, allowing step/advance to continue */
+  const resumeExecution = useCallback(() => {
+    if (continueFnRef.current) {
+      continueFnRef.current();
+      continueFnRef.current = null;
+    }
+  }, []);
 
   /** Clear all messages */
   const clearMessages = useCallback(() => {
@@ -161,6 +175,13 @@ export function useAgent(
   const sendMessage = useCallback(
     async (input: string) => {
       const command = parseCommand(input);
+
+      // If paused and user presses Enter (empty input or continuation command), resume
+      if (isPaused && command.type === 'message' && !input.trim()) {
+        setIsPaused(false);
+        resumeExecution();
+        return;
+      }
 
       // Handle commands
       switch (command.type) {
@@ -339,14 +360,31 @@ export function useAgent(
         if (mode === 'run') {
           await executeRunWithStreaming(runner, currentState, input.trim(), setMessages, setState);
         } else if (mode === 'step') {
-          await executeStepWithStreaming(runner, currentState, setMessages, setState, onEventRef);
+          await executeStepWithStreaming(
+            runner,
+            currentState,
+            input.trim(),
+            setMessages,
+            setState,
+            onEventRef,
+            () =>
+              new Promise<void>((resolve) => {
+                continueFnRef.current = resolve;
+                setIsPaused(true);
+              })
+          );
         } else {
           await executeAdvanceWithStreaming(
             runner,
             currentState,
             setMessages,
             setState,
-            onEventRef
+            onEventRef,
+            () =>
+              new Promise<void>((resolve) => {
+                continueFnRef.current = resolve;
+                setIsPaused(true);
+              })
           );
         }
       } catch (error) {
@@ -362,12 +400,13 @@ export function useAgent(
         ]);
       } finally {
         setIsRunning(false);
+        setIsPaused(false);
       }
     },
-    [runner, state, mode, clearMessages, skillProvider]
+    [runner, state, mode, isPaused, clearMessages, skillProvider, resumeExecution]
   );
 
-  return { messages, mode, isRunning, state, sendMessage, setMode, clearMessages };
+  return { messages, mode, isRunning, isPaused, state, sendMessage, setMode, clearMessages };
 }
 
 /**
@@ -441,104 +480,142 @@ async function executeRunWithStreaming(
 /**
  * Execute in step mode (streaming)
  *
- * Uses stepStream for single step execution.
+ * Uses stepStream for single step execution. Pauses after step completes,
+ * waiting for user to press Enter to continue to the next step.
  *
  * @param runner - AgentRunner instance
  * @param currentState - Current AgentState
+ * @param userInput - User message to send
  * @param setMessages - Message state updater
  * @param setState - Agent state updater
  * @param onEventRef - Event callback ref
+ * @param pauseFn - Function that returns a promise resolved when user continues
  */
 async function executeStepWithStreaming(
   runner: AgentRunner,
   currentState: AgentState,
+  userInput: string,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   setState: React.Dispatch<React.SetStateAction<AgentState | null>>,
-  onEventRef: React.RefObject<EventCallback | undefined>
+  onEventRef: React.RefObject<EventCallback | undefined>,
+  pauseFn: () => Promise<void>
 ): Promise<void> {
-  const assistantMsg: ChatMessage = {
-    id: (Date.now() + 1).toString(),
-    role: 'assistant',
-    content: '',
-    timestamp: Date.now(),
-    isStreaming: true,
-  };
-  setMessages((prev) => [...prev, assistantMsg]);
+  // Run steps in a loop until the agent produces a final answer or user stops
+  let runningState = currentState;
+  let stepCount = 0;
+  let continueLoop = true;
 
-  try {
-    let accumulatedContent = '';
-    const gen = runner.stepStream(currentState);
-    let result = await gen.next();
+  while (continueLoop) {
+    const assistantMsg: ChatMessage = {
+      id: `${Date.now()}-${stepCount}`,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      isStreaming: true,
+    };
+    setMessages((prev) => [...prev, assistantMsg]);
 
-    while (!result.done) {
-      const event = result.value;
+    try {
+      // Add user message only on first step
+      let accumulatedContent = '';
+      const gen = runner.stepStream(runningState);
+      let result = await gen.next();
 
-      // Forward event to external handler
-      onEventRef.current?.(event);
+      while (!result.done) {
+        const event = result.value;
 
-      if (event.type === 'token' && event.token) {
-        accumulatedContent += event.token;
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMsg.id ? { ...m, content: accumulatedContent } : m))
-        );
+        // Forward event to external handler
+        onEventRef.current?.(event);
+
+        if (event.type === 'token' && event.token) {
+          accumulatedContent += event.token;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMsg.id ? { ...m, content: accumulatedContent } : m))
+          );
+        }
+
+        if (event.type === 'tool:start') {
+          setMessages((prev) => [
+            ...prev.map((m) => (m.id === assistantMsg.id ? { ...m, isStreaming: false } : m)),
+            {
+              id: (Date.now() + Math.random()).toString(),
+              role: 'system',
+              content: `Tool call: ${event.action.tool}`,
+              timestamp: Date.now(),
+            },
+          ]);
+        }
+
+        result = await gen.next();
       }
 
-      if (event.type === 'tool:start') {
+      // Step completed
+      if (result.done && result.value) {
+        const { state: newState } = result.value;
+        runningState = newState;
+        setState(newState);
+
+        const stepResult = result.value.result;
+        if (stepResult.type === 'done') {
+          // Agent finished — update message and stop
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsg.id
+                ? { ...m, content: stepResult.answer, isStreaming: false }
+                : m
+            )
+          );
+          continueLoop = false;
+          return;
+        }
+
+        // Step completed but agent needs more steps — pause and wait
         setMessages((prev) => [
           ...prev.map((m) => (m.id === assistantMsg.id ? { ...m, isStreaming: false } : m)),
           {
             id: (Date.now() + Math.random()).toString(),
             role: 'system',
-            content: `Tool call: ${event.action.tool}`,
+            content: 'Step complete. Press Enter to continue.',
             timestamp: Date.now(),
           },
         ]);
+
+        stepCount++;
+        await pauseFn();
       }
-
-      result = await gen.next();
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsg.id ? { ...m, content: `Error: ${errorMsg}`, isStreaming: false } : m
+        )
+      );
+      continueLoop = false;
+      return;
     }
-
-    // Final result
-    if (result.done && result.value) {
-      const { state: newState } = result.value;
-      setState(newState);
-
-      const stepResult = result.value.result;
-      if (stepResult.type === 'done') {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: stepResult.answer, isStreaming: false } : m
-          )
-        );
-      }
-    }
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === assistantMsg.id ? { ...m, content: `Error: ${errorMsg}`, isStreaming: false } : m
-      )
-    );
   }
 }
 
 /**
  * Execute in advance mode (streaming)
  *
- * Uses advanceStream for micro-step execution.
+ * Uses advanceStream for micro-step execution. Pauses after each phase change,
+ * waiting for user to press Enter to advance to the next phase.
  *
  * @param runner - AgentRunner instance
  * @param currentState - Current AgentState
  * @param setMessages - Message state updater
  * @param setState - Agent state updater
  * @param onEventRef - Event callback ref
+ * @param pauseFn - Function that returns a promise resolved when user continues
  */
 async function executeAdvanceWithStreaming(
   runner: AgentRunner,
   currentState: AgentState,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   setState: React.Dispatch<React.SetStateAction<AgentState | null>>,
-  onEventRef: React.RefObject<EventCallback | undefined>
+  onEventRef: React.RefObject<EventCallback | undefined>,
+  pauseFn: () => Promise<void>
 ): Promise<void> {
   // advance requires ExecutionState, create a temporary instance
   const { createExecutionState } = await import('@agentskillmania/colts');
@@ -581,6 +658,9 @@ async function executeAdvanceWithStreaming(
             timestamp: Date.now(),
           },
         ]);
+
+        // Pause after phase change, wait for user to press Enter
+        await pauseFn();
       }
 
       result = await gen.next();

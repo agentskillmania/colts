@@ -51,4 +51,20 @@ describe('InputBar', () => {
     const frame = lastFrame();
     expect(frame).toBeTruthy();
   });
+
+  it('should show pause prompt when paused', () => {
+    const onSubmit = vi.fn();
+    const { lastFrame } = render(
+      <InputBar onSubmit={onSubmit} mode="step" isRunning={true} isPaused={true} />
+    );
+    expect(lastFrame()).toContain('Press Enter to continue');
+  });
+
+  it('should show spinner when running but not paused', () => {
+    const onSubmit = vi.fn();
+    const { lastFrame } = render(
+      <InputBar onSubmit={onSubmit} mode="step" isRunning={true} isPaused={false} />
+    );
+    expect(lastFrame()).toContain('Agent is thinking...');
+  });
 });

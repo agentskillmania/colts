@@ -22,6 +22,8 @@ interface InputBarProps {
   mode: ExecutionMode;
   /** Whether the agent is currently running */
   isRunning: boolean;
+  /** Whether the agent is paused and waiting for Enter to continue */
+  isPaused?: boolean;
 }
 
 /**
@@ -29,13 +31,20 @@ interface InputBarProps {
  *
  * Fixed bottom area. Shows a Spinner and disables input while running,
  * accepts user input when idle. Uses @inkjs/ui TextInput (uncontrolled).
+ * When paused (step/advance mode), shows a "Press Enter to continue" prompt.
  *
  * @param props - Component props
  */
-export function InputBar({ onSubmit, mode, isRunning }: InputBarProps) {
+export function InputBar({ onSubmit, mode, isRunning, isPaused }: InputBarProps) {
   const [inputKey, setInputKey] = useState(0);
 
   const handleSubmit = (value: string) => {
+    // When paused, empty input means continue
+    if (isPaused && !value.trim()) {
+      onSubmit('');
+      setInputKey((k) => k + 1);
+      return;
+    }
     if (value.trim() && !isRunning) {
       onSubmit(value.trim());
       // Remount TextInput to clear content
@@ -49,8 +58,10 @@ export function InputBar({ onSubmit, mode, isRunning }: InputBarProps) {
         <ModeBadge mode={mode} />
       </Box>
       <Text color={theme.info}>{'>'} </Text>
-      {isRunning ? (
+      {isRunning && !isPaused ? (
         <Spinner label="Agent is thinking..." />
+      ) : isPaused ? (
+        <Text color={theme.warning}>Press Enter to continue...</Text>
       ) : (
         <TextInput
           key={inputKey}

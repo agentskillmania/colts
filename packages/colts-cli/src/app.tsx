@@ -68,7 +68,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Agent interaction
-  const { messages, mode, isRunning, state, sendMessage, setMode, clearMessages } = useAgent(
+  const { messages, mode, isRunning, isPaused, state, sendMessage, setMode, clearMessages } = useAgent(
     runner,
     initialState,
     undefined,
@@ -167,7 +167,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
           right={<EventsPanel events={events} />}
         />
       </Box>
-      <InputBar onSubmit={handleSubmit} mode={mode} isRunning={isRunning} />
+      <InputBar onSubmit={handleSubmit} mode={mode} isRunning={isRunning} isPaused={isPaused} />
     </Box>
   );
 }
