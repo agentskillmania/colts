@@ -116,7 +116,8 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
 
   const handleSubmit = useCallback(
     async (value: string) => {
-      if (!value.trim()) return;
+      // Allow empty input when paused (user presses Enter to continue)
+      if (!value.trim() && !isPaused) return;
 
       // Parse mode switch commands
       const { parseCommand } = await import('./hooks/use-agent.js');

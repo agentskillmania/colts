@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { AgentRunner, AgentState, ISkillProvider, StreamEvent } from '@agentskillmania/colts';
-import { createAgentState } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
 /**
  * Execution mode
@@ -377,6 +377,7 @@ export function useAgent(
           await executeAdvanceWithStreaming(
             runner,
             currentState,
+            input.trim(),
             setMessages,
             setState,
             onEventRef,
@@ -505,6 +506,11 @@ async function executeStepWithStreaming(
   let stepCount = 0;
   let continueLoop = true;
 
+  // Add user message to state before the first step
+  if (userInput) {
+    runningState = addUserMessage(runningState, userInput);
+  }
+
   while (continueLoop) {
     const assistantMsg: ChatMessage = {
       id: `${Date.now()}-${stepCount}`,
@@ -604,6 +610,7 @@ async function executeStepWithStreaming(
  *
  * @param runner - AgentRunner instance
  * @param currentState - Current AgentState
+ * @param userInput - User message to send
  * @param setMessages - Message state updater
  * @param setState - Agent state updater
  * @param onEventRef - Event callback ref
@@ -612,6 +619,7 @@ async function executeStepWithStreaming(
 async function executeAdvanceWithStreaming(
   runner: AgentRunner,
   currentState: AgentState,
+  userInput: string,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   setState: React.Dispatch<React.SetStateAction<AgentState | null>>,
   onEventRef: React.RefObject<EventCallback | undefined>,
@@ -620,6 +628,12 @@ async function executeAdvanceWithStreaming(
   // advance requires ExecutionState, create a temporary instance
   const { createExecutionState } = await import('@agentskillmania/colts');
   const execState = createExecutionState();
+
+  // Add user message to state before starting
+  let effectiveState = currentState;
+  if (userInput) {
+    effectiveState = addUserMessage(effectiveState, userInput);
+  }
 
   const assistantMsg: ChatMessage = {
     id: (Date.now() + 1).toString(),
@@ -632,7 +646,7 @@ async function executeAdvanceWithStreaming(
 
   try {
     let accumulatedContent = '';
-    const gen = runner.advanceStream(currentState, execState);
+    const gen = runner.advanceStream(effectiveState, execState);
     let result = await gen.next();
 
     while (!result.done) {
