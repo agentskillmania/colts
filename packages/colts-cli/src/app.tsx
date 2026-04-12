@@ -11,6 +11,7 @@ import { SplitPane } from './components/layout/split-pane.js';
 import { InputBar } from './components/input/input-bar.js';
 import { ChatPanel } from './components/chat/chat-panel.js';
 import { WelcomeScreen } from './components/screens/welcome-screen.js';
+import { EventsPanel } from './components/events/events-panel.js';
 import { useAgent } from './hooks/use-agent.js';
 import { useEvents } from './hooks/use-events.js';
 import { useSession } from './hooks/use-session.js';
@@ -163,19 +164,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
           left={hasMessages ? <ChatPanel messages={messages} /> : (
             <WelcomeScreen agentName={config.agent?.name} model={model} />
           )}
-          right={
-            <Box paddingX={1} flexDirection="column">
-              {events.length === 0 ? (
-                <Text color={theme.dim}>No events yet.</Text>
-              ) : (
-                events.slice(-50).map((e) => (
-                  <Text key={e.id} color={theme.dim}>
-                    {e.text}
-                  </Text>
-                ))
-              )}
-            </Box>
-          }
+          right={<EventsPanel events={events} />}
         />
       </Box>
       <InputBar onSubmit={handleSubmit} mode={mode} isRunning={isRunning} />
