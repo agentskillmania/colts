@@ -55,8 +55,8 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
   const { exit } = useApp();
 
   // Session 持久化
-  const { sessionId, save, restoreLatest, setSessionId } = useSession();
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { save, restoreLatest, setSessionId } = useSession();
+  const lastSavedRef = useRef<AgentState | null>(null);
 
   // Agent 交互
   const {
@@ -87,19 +87,13 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
     });
   }, []);
 
-  // state 变化时自动保存
+  // state 变化时自动保存（运行中不保存，避免频繁 IO）
   useEffect(() => {
-    if (!state || !isRunning) {
-      if (state && state.id !== sessionId) {
-        save(state);
-      }
-    }
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-    };
-  }, [state, isRunning, sessionId, save]);
+    if (!state || isRunning) return;
+    if (state === lastSavedRef.current) return;
+    save(state);
+    lastSavedRef.current = state;
+  }, [state, isRunning, save]);
 
   // Ctrl+C: 运行中 → 中断，否则退出
   useInput((input, key) => {

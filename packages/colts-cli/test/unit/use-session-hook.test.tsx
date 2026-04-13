@@ -131,4 +131,53 @@ describe('useSession hook', () => {
 
     expect(getHook().isSaving).toBe(false);
   });
+
+  it('should return null when restoreLatest fails (listSessions throws)', async () => {
+    // Use a path where readdir will fail (not a directory)
+    const badDir = '/dev/null/impossible';
+
+    const { Wrapper, getHook } = createWrapper();
+    render(<Wrapper baseDir={badDir} />);
+
+    const result = await getHook().restoreLatest();
+
+    expect(result).toBeNull();
+    expect(getHook().sessionId).toBeNull();
+  });
+
+  it('should return null when restoreLatest fails (loadSession throws)', async () => {
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'test',
+      tools: [],
+    });
+
+    // Save a valid session so listSessions finds it
+    const { saveSession } = await import('../../src/session.js');
+    await saveSession(state, testDir);
+
+    // Delete the file so loadSession fails with ENOENT
+    const filePath = path.join(testDir, `${state.id}.json`);
+    await fs.unlink(filePath);
+
+    // But leave a non-JSON file with the same name pattern so listSessions still returns nothing
+    // Actually, listSessions won't find it either. Let's create a valid session entry,
+    // then delete the file between list and load.
+    // Simpler: mock listSessions to return a fake entry, loadSession will fail.
+    const sessionModule = await import('../../src/session.js');
+    const origList = sessionModule.listSessions;
+    vi.spyOn(sessionModule, 'listSessions').mockResolvedValueOnce([
+      { id: 'deleted-session', createdAt: Date.now(), messageCount: 1, lastMessage: 'test' },
+    ]);
+
+    const { Wrapper, getHook } = createWrapper();
+    render(<Wrapper baseDir={testDir} />);
+
+    const result = await getHook().restoreLatest();
+
+    expect(result).toBeNull();
+    expect(getHook().sessionId).toBeNull();
+
+    vi.restoreAllMocks();
+  });
 });

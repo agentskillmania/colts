@@ -5,16 +5,9 @@
  * Supports auto-save (on state change) and restoring the most recent session.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import type { AgentState } from '@agentskillmania/colts';
 import { saveSession, loadSession, listSessions } from '../session.js';
-
-/**
- * Auto-save delay in milliseconds
- *
- * Waits 500ms after state changes before saving to avoid high-frequency writes.
- */
-const AUTOSAVE_DELAY_MS = 500;
 
 /**
  * useSession hook return value
@@ -52,16 +45,6 @@ export interface UseSessionReturn {
 export function useSession(baseDir?: string): UseSessionReturn {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-      }
-    };
-  }, []);
 
   /**
    * Save AgentState to file
@@ -105,34 +88,4 @@ export function useSession(baseDir?: string): UseSessionReturn {
   }, [baseDir]);
 
   return { sessionId, isSaving, save, restoreLatest, setSessionId };
-}
-
-/**
- * Delayed auto-save
- *
- * Saves state after a delay to avoid high-frequency writes.
- *
- * @param state - Current AgentState
- * @param sessionId - Current session ID
- * @param saveFn - Save function
- * @param timerRef - Timer ref
- */
-export function scheduleAutoSave(
-  state: AgentState | null,
-  sessionId: string | null,
-  saveFn: (state: AgentState) => Promise<void>,
-  timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
-): void {
-  if (!state) return;
-  // Mismatched session ID indicates a new state or unsaved state
-  if (state.id === sessionId) return;
-
-  if (timerRef.current) {
-    clearTimeout(timerRef.current);
-  }
-
-  timerRef.current = setTimeout(() => {
-    saveFn(state);
-    timerRef.current = null;
-  }, AUTOSAVE_DELAY_MS);
 }
