@@ -799,5 +799,38 @@ describe('step()', () => {
 
       expect(events.every((e) => !e.type.startsWith('subagent:'))).toBe(true);
     });
+
+    it('should handle error in stepStream', async () => {
+      // Create a client that throws error during stream
+      const errorClient = {
+        call: vi.fn().mockRejectedValue(new Error('Stream Error')),
+        stream: vi.fn().mockImplementation(async function* () {
+          throw new Error('Stream Error');
+        }),
+      };
+
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: errorClient as unknown as LLMClient });
+      const state = createAgentState(defaultConfig);
+      const execState = createExecutionState();
+      
+      // Set phase to calling-llm to trigger the stream path
+      execState.phase = { type: 'calling-llm' };
+      execState.preparedMessages = [];
+
+      const events: { type: string; error?: Error }[] = [];
+      let finalResult;
+
+      try {
+        for await (const event of runner.advanceStream(state, execState)) {
+          events.push(event as { type: string; error?: Error });
+        }
+      } catch (error) {
+        // Expected
+      }
+
+      // Should have error event or error result
+      const hasErrorEvent = events.some((e) => e.type === 'error');
+      expect(hasErrorEvent).toBe(true);
+    });
   });
 });

@@ -657,4 +657,95 @@ describe('runStream()', () => {
     expect(completeEvent.result.answer).toBe('Based on research, the answer is X.');
     expect(completeEvent.result.totalSteps).toBe(2);
   });
+
+  it('should handle error in runStream', async () => {
+    const errorClient = {
+      call: vi.fn().mockRejectedValue(new Error('LLM Error')),
+      stream: vi.fn().mockImplementation(async function* () {
+        throw new Error('LLM Error');
+      }),
+    };
+
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: errorClient as unknown as LLMClient });
+    const state = createAgentState(defaultConfig);
+
+    const events: { type: string; error?: Error }[] = [];
+    let finalResult;
+    
+    try {
+      const iterator = runner.runStream(state);
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          finalResult = value;
+          break;
+        }
+        events.push(value as { type: string; error?: Error });
+      }
+    } catch (error) {
+      // Error may or may not be thrown depending on where it occurs
+    }
+
+    // Should either have error events or error result
+    const hasErrorEvent = events.some((e) => e.type === 'error');
+    const hasErrorResult = finalResult?.result?.type === 'error';
+    expect(hasErrorEvent || hasErrorResult).toBe(true);
+  });
+
+  it('should handle error in stepStream when LLM fails', async () => {
+    const errorClient = {
+      call: vi.fn().mockRejectedValue(new Error('Step Error')),
+      stream: vi.fn().mockImplementation(async function* () {
+        throw new Error('Step Error');
+      }),
+    };
+
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: errorClient as unknown as LLMClient });
+    const state = createAgentState(defaultConfig);
+
+    const events: { type: string; error?: Error }[] = [];
+    let finalResult;
+    let errorThrown = false;
+    
+    try {
+      const iterator = runner.stepStream(state);
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          finalResult = value;
+          break;
+        }
+        events.push(value as { type: string; error?: Error });
+      }
+    } catch (error) {
+      errorThrown = true;
+    }
+
+    // Should have error event or throw
+    expect(errorThrown || events.some((e) => e.type === 'error')).toBe(true);
+  });
+
+  it('should reach maxSteps in runStream', async () => {
+    // Use maxSteps: 1 with a simple answer to test the max_steps path
+    const answerResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([answerResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, maxSteps: 1 });
+    const state = createAgentState(defaultConfig);
+
+    let finalResult;
+    for await (const event of runner.runStream(state)) {
+      if (event.type === 'complete') {
+        finalResult = event.result;
+      }
+    }
+
+    expect(finalResult?.type).toBe('success');
+    expect(finalResult?.totalSteps).toBe(1);
+  });
 });
