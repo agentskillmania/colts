@@ -33,16 +33,17 @@ import type {
 
 /**
  * Runner event map for EventEmitter
+ *
+ * All execution methods (run/step/advance, stream/non-stream) emit the same events:
+ * - 'event': Stream events during execution (token, phase-change, tool:start, etc.)
+ * - 'complete': Execution completed with final state and result
+ * - 'error': Execution failed with error
  */
 export interface RunnerEventMap {
   /** Stream event during execution (token, phase-change, tool:start, etc.) */
   event: StreamEvent;
-  /** Run execution completed */
-  complete: { state: AgentState; result: RunResult };
-  /** Step execution completed */
-  'step:complete': { state: AgentState; result: StepResult };
-  /** Advance execution completed */
-  'advance:complete': { state: AgentState; result: AdvanceResult; execState: ExecutionState };
+  /** Execution completed - contains state and result (RunResult | StepResult | AdvanceResult) */
+  complete: { state: AgentState; result: unknown };
   /** Execution error */
   error: { error: Error };
 }
@@ -606,7 +607,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   ): Promise<AdvanceResult> {
     try {
       const result = await executeAdvance(this.ctx, state, execState, toolRegistry, options);
-      this.emit('advance:complete', { state, result, execState });
+      this.emit('complete', { state, result });
       return result;
     } catch (error) {
       this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
@@ -664,7 +665,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         yield value;
       }
 
-      this.emit('advance:complete', { state, result: result!, execState });
+      this.emit('complete', { state, result: result! });
       return result!;
     } catch (error) {
       this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
@@ -706,7 +707,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   ): Promise<{ state: AgentState; result: StepResult }> {
     try {
       const result = await executeStep(this.ctx, this.compressor, state, toolRegistry, options);
-      this.emit('step:complete', result);
+      this.emit('complete', result);
       return result;
     } catch (error) {
       this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
@@ -740,7 +741,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         yield value;
       }
 
-      this.emit('step:complete', result!);
+      this.emit('complete', result!);
       return result!;
     } catch (error) {
       this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
