@@ -372,6 +372,16 @@ type SetEntries = React.Dispatch<React.SetStateAction<TimelineEntry[]>>;
 type SetState = React.Dispatch<React.SetStateAction<AgentState | null>>;
 
 /**
+ * 节流渲染间隔（ms）
+ *
+ * LLM token 以 3-5 个/波的节奏到达（间隔 ~50ms），
+ * 但每波内 1-5ms 就触发 3-5 次 setEntries，
+ * React 18 自动批处理会将它们合并成一次渲染。
+ * 用 setTimeout 节流到 ~50ms 一次，确保 Ink 每帧都能渲染。
+ */
+const RENDER_INTERVAL = 50;
+
+/**
  * Run 模式流式执行
  *
  * 使用 runStream 进行完整 ReAct 循环（含工具调用）。
@@ -390,6 +400,21 @@ async function executeRun(
   // 创建初始 assistant 条目
   let assistantId = uid();
   let accumulatedContent = '';
+  // 节流渲染：避免每个 token 都触发 setEntries
+  let renderTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 刷新 assistant 内容到 UI */
+  const flushContent = () => {
+    if (renderTimer) {
+      clearTimeout(renderTimer);
+      renderTimer = null;
+    }
+    const content = accumulatedContent;
+    const id = assistantId;
+    setEntries((prev) =>
+      prev.map((e) => (e.type === 'assistant' && e.id === id ? { ...e, content } : e))
+    );
+  };
 
   setEntries((prev) => [
     ...prev,
@@ -404,22 +429,24 @@ async function executeRun(
       const event = iterResult.value;
 
       switch (event.type) {
-        // token 流式输出
+        // token 流式输出（节流）
         case 'token': {
           if (event.token) {
             accumulatedContent += event.token;
-            const content = accumulatedContent;
-            setEntries((prev) =>
-              prev.map((e) =>
-                e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e
-              )
-            );
+            if (!renderTimer) {
+              renderTimer = setTimeout(() => {
+                renderTimer = null;
+                flushContent();
+              }, RENDER_INTERVAL);
+            }
           }
           break;
         }
 
         // 工具调用开始
         case 'tool:start': {
+          // 先 flush 剩余 token，再切换到 tool 条目
+          flushContent();
           // 停止当前 assistant 流式
           setEntries((prev) =>
             prev.map((e) =>
@@ -631,6 +658,8 @@ async function executeRun(
     if (iterResult.done && iterResult.value) {
       const { state: finalState, result: runResult } = iterResult.value;
       setState(finalState);
+      // flush 残留 token
+      flushContent();
 
       if (runResult.type === 'success') {
         setEntries((prev) =>
@@ -697,6 +726,20 @@ async function executeStep(
 
     const assistantId = uid();
     let accumulatedContent = '';
+    let renderTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /** 刷新 assistant 内容到 UI */
+    const flushContent = () => {
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+        renderTimer = null;
+      }
+      const content = accumulatedContent;
+      const id = assistantId;
+      setEntries((prev) =>
+        prev.map((e) => (e.type === 'assistant' && e.id === id ? { ...e, content } : e))
+      );
+    };
 
     setEntries((prev) => [
       ...prev,
@@ -714,17 +757,18 @@ async function executeStep(
           case 'token': {
             if (event.token) {
               accumulatedContent += event.token;
-              const content = accumulatedContent;
-              setEntries((prev) =>
-                prev.map((e) =>
-                  e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e
-                )
-              );
+              if (!renderTimer) {
+                renderTimer = setTimeout(() => {
+                  renderTimer = null;
+                  flushContent();
+                }, RENDER_INTERVAL);
+              }
             }
             break;
           }
 
           case 'tool:start': {
+            flushContent();
             setEntries((prev) =>
               prev.map((e) =>
                 e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
@@ -885,11 +929,14 @@ async function executeStep(
         runningState = newState;
         setState(newState);
 
+        // flush 残留 token
+        flushContent();
+
         if (stepResult.type === 'done') {
           setEntries((prev) =>
             prev.map((e) =>
               e.type === 'assistant' && e.id === assistantId
-                ? { ...e, content: stepResult.answer, isStreaming: false }
+                ? { ...e, content: accumulatedContent || stepResult.answer, isStreaming: false }
                 : e
             )
           );
@@ -914,6 +961,7 @@ async function executeStep(
       }
     } catch (error) {
       if (signal.aborted) return;
+      flushContent();
       const msg = error instanceof Error ? error.message : String(error);
       setEntries((prev) =>
         prev.map((e) =>
@@ -951,6 +999,20 @@ async function executeAdvance(
 
   let assistantId = uid();
   let accumulatedContent = '';
+  let renderTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 刷新 assistant 内容到 UI */
+  const flushContent = () => {
+    if (renderTimer) {
+      clearTimeout(renderTimer);
+      renderTimer = null;
+    }
+    const content = accumulatedContent;
+    const id = assistantId;
+    setEntries((prev) =>
+      prev.map((e) => (e.type === 'assistant' && e.id === id ? { ...e, content } : e))
+    );
+  };
 
   setEntries((prev) => [
     ...prev,
@@ -968,17 +1030,18 @@ async function executeAdvance(
         case 'token': {
           if (event.token) {
             accumulatedContent += event.token;
-            const content = accumulatedContent;
-            setEntries((prev) =>
-              prev.map((e) =>
-                e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e
-              )
-            );
+            if (!renderTimer) {
+              renderTimer = setTimeout(() => {
+                renderTimer = null;
+                flushContent();
+              }, RENDER_INTERVAL);
+            }
           }
           break;
         }
 
         case 'tool:start': {
+          flushContent();
           setEntries((prev) =>
             prev.map((e) =>
               e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
@@ -1023,6 +1086,7 @@ async function executeAdvance(
         }
 
         case 'phase-change': {
+          flushContent();
           setEntries((prev) => [
             ...prev.map((e) =>
               e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
@@ -1059,6 +1123,7 @@ async function executeAdvance(
         }
 
         case 'error': {
+          flushContent();
           const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
           setEntries((prev) => [
             ...prev.map((e) =>
@@ -1136,6 +1201,8 @@ async function executeAdvance(
     if (iterResult.done && iterResult.value) {
       const { state: newState } = iterResult.value;
       setState(newState);
+      // flush 残留 token
+      flushContent();
       setEntries((prev) =>
         prev.map((e) =>
           e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
@@ -1144,6 +1211,7 @@ async function executeAdvance(
     }
   } catch (error) {
     if (signal.aborted) return;
+    flushContent();
     const msg = error instanceof Error ? error.message : String(error);
     setEntries((prev) =>
       prev.map((e) =>
