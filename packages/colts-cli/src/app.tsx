@@ -68,11 +68,11 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Agent interaction
-  const { messages, mode, isRunning, isPaused, state, sendMessage, setMode, clearMessages } = useAgent(
+  const { messages, mode, isRunning, isPaused, state, sendMessage, setMode, clearMessages, abort } = useAgent(
     runner,
     initialState,
     undefined,
-    addEvent // Event forwarding
+    addEvent // 事件转发
   );
 
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'error'>('idle');
@@ -107,7 +107,12 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
 
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
-      exit();
+      if (isRunning) {
+        // agent 正在运行时，优雅中断而非退出
+        abort();
+      } else {
+        exit();
+      }
     }
     if (input === 'e' && key.ctrl) {
       setEventsVisible((v) => !v);

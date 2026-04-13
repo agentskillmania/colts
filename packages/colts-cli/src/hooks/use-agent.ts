@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { AgentRunner, AgentState, ISkillProvider, StreamEvent } from '@agentskillmania/colts';
-import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage, createExecutionState } from '@agentskillmania/colts';
 
 /**
  * Execution mode
@@ -49,7 +49,17 @@ export interface ChatMessage {
  */
 export interface ParsedCommand {
   /** Command type */
-  type: 'mode-run' | 'mode-step' | 'mode-advance' | 'clear' | 'help' | 'skill' | 'message';
+  type:
+    | 'mode-run'
+    | 'mode-step'
+    | 'mode-advance'
+    | 'show-compact'
+    | 'show-detail'
+    | 'show-verbose'
+    | 'clear'
+    | 'help'
+    | 'skill'
+    | 'message';
   /** Raw input string */
   raw: string;
   /** Skill name (only present when type is 'skill') */
@@ -68,6 +78,9 @@ export function parseCommand(input: string): ParsedCommand {
   if (trimmed === '/run') return { type: 'mode-run', raw: trimmed };
   if (trimmed === '/step') return { type: 'mode-step', raw: trimmed };
   if (trimmed === '/advance') return { type: 'mode-advance', raw: trimmed };
+  if (trimmed === '/show:compact') return { type: 'show-compact', raw: trimmed };
+  if (trimmed === '/show:detail') return { type: 'show-detail', raw: trimmed };
+  if (trimmed === '/show:verbose') return { type: 'show-verbose', raw: trimmed };
   if (trimmed === '/clear') return { type: 'clear', raw: trimmed };
   if (trimmed === '/help') return { type: 'help', raw: trimmed };
   if (trimmed.startsWith('/skill '))
@@ -85,22 +98,24 @@ export type EventCallback = (event: StreamEvent) => void;
  * useAgent hook return value
  */
 export interface UseAgentReturn {
-  /** Current message list */
+  /** 当前消息列表 */
   messages: ChatMessage[];
-  /** Current execution mode */
+  /** 当前执行模式 */
   mode: ExecutionMode;
-  /** Whether the agent is currently running */
+  /** agent 是否正在运行 */
   isRunning: boolean;
-  /** Whether the agent is paused and waiting for user input to continue */
+  /** agent 是否暂停，等待用户输入继续 */
   isPaused: boolean;
-  /** Current AgentState */
+  /** 当前 AgentState */
   state: AgentState | null;
-  /** Send a message or command */
+  /** 发送消息或命令 */
   sendMessage: (input: string) => Promise<void>;
-  /** Set the execution mode */
+  /** 设置执行模式 */
   setMode: (mode: ExecutionMode) => void;
-  /** Clear all messages */
+  /** 清空消息 */
   clearMessages: () => void;
+  /** 中断正在运行的 agent（优雅终止） */
+  abort: () => void;
 }
 
 /**
@@ -140,12 +155,15 @@ export function useAgent(
   const [isPaused, setIsPaused] = useState(false);
   const [state, setState] = useState<AgentState | null>(initialState);
 
-  // Use ref to avoid callback closure issues
+  // 使用 ref 避免回调闭包问题
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
-  // Pause/continue mechanism for step/advance modes
+  // 暂停/继续机制（step/advance 模式）
   const continueFnRef = useRef<(() => void) | null>(null);
+
+  // AbortController 用于优雅中断正在执行的 agent
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   /** Resolve the pause promise, allowing step/advance to continue */
   const resumeExecution = useCallback(() => {
@@ -346,7 +364,7 @@ export function useAgent(
           tools: [],
         });
 
-      // Add user message
+      // 添加用户消息
       const userMsg: ChatMessage = {
         id: Date.now().toString(),
         role: 'user',
@@ -356,9 +374,22 @@ export function useAgent(
       setMessages((prev) => [...prev, userMsg]);
       setIsRunning(true);
 
+      // 创建 AbortController 支持优雅中断
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      const signal = abortController.signal;
+
       try {
         if (mode === 'run') {
-          await executeRunWithStreaming(runner, currentState, input.trim(), setMessages, setState);
+          await executeRunWithStreaming(
+            runner,
+            currentState,
+            input.trim(),
+            setMessages,
+            setState,
+            onEventRef,
+            signal
+          );
         } else if (mode === 'step') {
           await executeStepWithStreaming(
             runner,
@@ -402,32 +433,54 @@ export function useAgent(
       } finally {
         setIsRunning(false);
         setIsPaused(false);
+        abortControllerRef.current = null;
       }
     },
     [runner, state, mode, isPaused, clearMessages, skillProvider, resumeExecution]
   );
 
-  return { messages, mode, isRunning, isPaused, state, sendMessage, setMode, clearMessages };
+  /** 中断正在运行的 agent */
+  const abort = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    // 如果在暂停状态，也要解除暂停让代码继续
+    if (continueFnRef.current) {
+      continueFnRef.current();
+      continueFnRef.current = null;
+    }
+  }, []);
+
+  return { messages, mode, isRunning, isPaused, state, sendMessage, setMode, clearMessages, abort };
 }
 
 /**
  * Execute in run mode (streaming)
  *
- * Uses chatStream for streaming conversation, updating the assistant message in real time.
+ * Uses runStream for full ReAct execution with tool support.
+ * Manually adds user message before starting.
  *
  * @param runner - AgentRunner instance
  * @param currentState - Current AgentState
- * @param userInput - User message content (passed to chatStream)
+ * @param userInput - User message to send
  * @param setMessages - Message state updater
  * @param setState - Agent state updater
+ * @param onEventRef - Event callback ref
+ * @param signal - AbortSignal for cancellation
  */
 async function executeRunWithStreaming(
   runner: AgentRunner,
   currentState: AgentState,
   userInput: string,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
-  setState: React.Dispatch<React.SetStateAction<AgentState | null>>
+  setState: React.Dispatch<React.SetStateAction<AgentState | null>>,
+  onEventRef: React.RefObject<EventCallback | undefined>,
+  signal?: AbortSignal
 ): Promise<void> {
+  // runStream does not add user message automatically
+  const stateWithMsg = addUserMessage(currentState, userInput);
+
   const assistantMsg: ChatMessage = {
     id: (Date.now() + 1).toString(),
     role: 'assistant',
@@ -438,37 +491,102 @@ async function executeRunWithStreaming(
   setMessages((prev) => [...prev, assistantMsg]);
 
   try {
-    // The second parameter of chatStream is the user message, not the assistant content
-    for await (const chunk of runner.chatStream(currentState, userInput)) {
-      if (chunk.type === 'text' && chunk.delta) {
+    let accumulatedContent = '';
+    const gen = runner.runStream(stateWithMsg, { signal });
+    let result = await gen.next();
+
+    while (!result.done) {
+      const event = result.value;
+
+      // Forward event to external handler
+      onEventRef.current?.(event as StreamEvent);
+
+      if (event.type === 'token' && event.token) {
+        accumulatedContent += event.token;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantMsg.id ? { ...m, content: accumulatedContent } : m))
+        );
+      }
+
+      if (event.type === 'tool:start') {
+        setMessages((prev) => [
+          ...prev.map((m) => (m.id === assistantMsg.id ? { ...m, isStreaming: false } : m)),
+          {
+            id: (Date.now() + Math.random()).toString(),
+            role: 'system' as const,
+            content: `Tool call: ${event.action.tool}`,
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+
+      if (event.type === 'tool:end') {
+        const resultText =
+          typeof event.result === 'string'
+            ? event.result.slice(0, 80)
+            : JSON.stringify(event.result).slice(0, 80);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + Math.random()).toString(),
+            role: 'system' as const,
+            content: `Result: ${resultText}`,
+            timestamp: Date.now(),
+          },
+          // Resume streaming assistant message
+          {
+            ...assistantMsg,
+            id: `${assistantMsg.id}-${Date.now()}`,
+            content: '',
+            isStreaming: true,
+          },
+        ]);
+      }
+
+      if (event.type === 'error') {
+        const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
+        setMessages((prev) => [
+          ...prev.map((m) => (m.id === assistantMsg.id ? { ...m, isStreaming: false } : m)),
+          {
+            id: (Date.now() + Math.random()).toString(),
+            role: 'system' as const,
+            content: `Error: ${errMsg}`,
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+
+      result = await gen.next();
+    }
+
+    // Final result from runStream
+    if (result.done && result.value) {
+      const { state: finalState, result: runResult } = result.value;
+      setState(finalState);
+
+      if (runResult.type === 'success') {
+        // Update assistant message with final answer if tokens were accumulated
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsg.id
-              ? {
-                  ...m,
-                  content: chunk.accumulatedContent ?? m.content + chunk.delta!,
-                }
+              ? { ...m, content: accumulatedContent || runResult.answer, isStreaming: false }
               : m
           )
         );
-      }
-      if (chunk.type === 'done') {
-        setState(chunk.state);
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMsg.id ? { ...m, isStreaming: false } : m))
-        );
-      }
-      if (chunk.type === 'error') {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsg.id
-              ? { ...m, content: `Error: ${chunk.error}`, isStreaming: false }
-              : m
-          )
-        );
+      } else if (runResult.type === 'max_steps') {
+        setMessages((prev) => [
+          ...prev.map((m) => (m.id === assistantMsg.id ? { ...m, isStreaming: false } : m)),
+          {
+            id: (Date.now() + Math.random()).toString(),
+            role: 'system' as const,
+            content: `Max steps reached (${runResult.totalSteps})`,
+            timestamp: Date.now(),
+          },
+        ]);
       }
     }
   } catch (error) {
+    if (signal?.aborted) return;
     const errorMsg = error instanceof Error ? error.message : String(error);
     setMessages((prev) =>
       prev.map((m) =>
@@ -626,7 +744,6 @@ async function executeAdvanceWithStreaming(
   pauseFn: () => Promise<void>
 ): Promise<void> {
   // advance requires ExecutionState, create a temporary instance
-  const { createExecutionState } = await import('@agentskillmania/colts');
   const execState = createExecutionState();
 
   // Add user message to state before starting

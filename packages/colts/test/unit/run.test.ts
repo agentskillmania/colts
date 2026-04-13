@@ -754,4 +754,74 @@ describe('runStream()', () => {
     expect(finalResult?.type).toBe('success');
     expect(finalResult?.totalSteps).toBe(1);
   });
+
+  it('should emit compress events in runStream when compression is triggered', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+
+    // Create a mock compressor that implements IContextCompressor
+    const mockCompressor: import('../../src/types.js').IContextCompressor = {
+      shouldCompress: vi.fn().mockReturnValue(true),
+      compress: vi.fn().mockResolvedValue({
+        summary: 'Test summary',
+        anchor: 5,
+      }),
+    };
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      compressor: mockCompressor,
+    });
+
+    const state = createAgentState(defaultConfig);
+
+    const events: string[] = [];
+    runner.on('compress:start', () => events.push('compress:start'));
+    runner.on('compress:end', () => events.push('compress:end'));
+
+    for await (const _ of runner.runStream(state, { maxSteps: 1 })) {
+      // consume stream
+    }
+
+    expect(events).toContain('compress:start');
+    expect(events).toContain('compress:end');
+  });
+
+  it('should emit error event in runStream when error occurs', async () => {
+    const errorClient = {
+      call: vi.fn().mockRejectedValue(new Error('Stream Error')),
+      stream: vi.fn().mockImplementation(async function* () {
+        throw new Error('Stream Error');
+      }),
+    };
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: errorClient as unknown as LLMClient,
+    });
+    const state = createAgentState(defaultConfig);
+
+    const errors: Array<{ phase: string; message: string }> = [];
+    runner.on('error', (e) => {
+      errors.push({ phase: e.phase, message: e.error.message });
+    });
+
+    let errorThrown = false;
+    try {
+      for await (const _ of runner.runStream(state, { maxSteps: 1 })) {
+        // consume
+      }
+    } catch {
+      errorThrown = true;
+    }
+
+    expect(errorThrown || errors.length > 0).toBe(true);
+  });
 });

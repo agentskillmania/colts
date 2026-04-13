@@ -835,5 +835,43 @@ describe('step()', () => {
       const hasErrorEvent = events.some((e) => e.type === 'error');
       expect(hasErrorEvent).toBe(true);
     });
+
+    it('should handle error in stepStream from advance error phase', async () => {
+      // Create a client that returns error in a way that triggers the error phase
+      const errorClient = {
+        call: vi.fn().mockResolvedValue({
+          content: '',
+          toolCalls: [],
+          tokens: { input: 0, output: 0 },
+          stopReason: 'stop',
+        }),
+        stream: vi.fn().mockImplementation(async function* () {
+          // Simulate a stream that errors
+          yield { type: 'text' as const, delta: 'test', accumulatedContent: 'test' };
+          // This should trigger error handling in advance
+          throw new Error('LLM Stream Error');
+        }),
+      };
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: errorClient as unknown as LLMClient,
+      });
+      const state = createAgentState(defaultConfig);
+
+      const events: { type: string }[] = [];
+      let errorOccurred = false;
+
+      try {
+        for await (const event of runner.stepStream(state)) {
+          events.push(event as { type: string });
+        }
+      } catch {
+        errorOccurred = true;
+      }
+
+      // Should either have error event or throw
+      expect(errorOccurred || events.some((e) => e.type === 'error')).toBe(true);
+    });
   });
 });

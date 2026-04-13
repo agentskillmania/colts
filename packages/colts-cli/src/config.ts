@@ -31,9 +31,13 @@ export interface ColtsConfig extends Record<string, unknown> {
   subAgents?: Array<{
     name: string;
     description: string;
-    instructions: string;
-    tools?: string[];
+    config: {
+      name: string;
+      instructions: string;
+      tools?: Array<{ name: string; description: string; parameters?: Record<string, unknown> }>;
+    };
     maxSteps?: number;
+    allowDelegation?: boolean;
   }>;
   persistence?: {
     enabled?: boolean;

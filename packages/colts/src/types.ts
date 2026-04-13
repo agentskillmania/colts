@@ -164,7 +164,7 @@ export interface IToolRegistry {
     name: string;
     description: string;
     parameters: T;
-    execute: (args: unknown) => Promise<unknown>;
+    execute: (args: unknown, options?: { signal?: AbortSignal }) => Promise<unknown>;
   }): void;
   /** Unregister a tool by name */
   unregister(name: string): boolean;

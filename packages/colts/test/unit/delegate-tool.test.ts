@@ -1117,4 +1117,79 @@ describe('createDelegateTool', () => {
       expect(toolNames).not.toContain('delegate'); // 默认不允许
     });
   });
+
+  // ----------------------------------------------------------
+  // Abort Signal Support
+  // ----------------------------------------------------------
+  describe('abort signal support', () => {
+    it('should pass abort signal to sub-agent runner', async () => {
+      const localParentRegistry = new ToolRegistry();
+      const localConfigs = new Map<string, SubAgentConfig>([
+        [
+          'default',
+          {
+            name: 'default',
+            description: 'Default agent',
+            config: { name: 'default', instructions: 'Test agent', tools: [] },
+            maxSteps: 3,
+            allowDelegation: false,
+          },
+        ],
+      ]);
+
+      const client = createMockLLMClient([
+        {
+          content: 'Task result',
+          toolCalls: [],
+          tokens: mockTokens,
+          stopReason: 'stop',
+        },
+      ]);
+
+      const tool = createDelegateTool({
+        parentToolRegistry: localParentRegistry,
+        subAgentConfigs: localConfigs,
+        llmProvider: client,
+      });
+
+      const controller = new AbortController();
+      const result = (await tool.execute(
+        { agent: 'default', task: 'Do something' },
+        { signal: controller.signal }
+      )) as DelegateResult;
+
+      expect(result.answer).toBe('Task result');
+    });
+
+    it('should respect abort signal when aborted before execution', async () => {
+      const localParentRegistry = new ToolRegistry();
+      const localConfigs = new Map<string, SubAgentConfig>([
+        [
+          'default',
+          {
+            name: 'default',
+            description: 'Default agent',
+            config: { name: 'default', instructions: 'Test agent', tools: [] },
+            maxSteps: 3,
+            allowDelegation: false,
+          },
+        ],
+      ]);
+
+      const client = createMockLLMClient([]);
+
+      const tool = createDelegateTool({
+        parentToolRegistry: localParentRegistry,
+        subAgentConfigs: localConfigs,
+        llmProvider: client,
+      });
+
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        tool.execute({ agent: 'default', task: 'Do something' }, { signal: controller.signal })
+      ).rejects.toThrow();
+    });
+  });
 });

@@ -492,5 +492,23 @@ describe('Tool Registry (Step 3)', () => {
       const result = await registry.execute('calculate', { expression: '10 * 5' });
       expect(result).toBe('50');
     });
+
+    it('should support abort signal', async () => {
+      const controller = new AbortController();
+      const signal = controller.signal;
+
+      // Should complete normally when not aborted
+      const result = await calculatorTool.execute({ expression: '1 + 1' }, { signal });
+      expect(result).toBe('2');
+    });
+
+    it('should throw when aborted before execution', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        calculatorTool.execute({ expression: '1 + 1' }, { signal: controller.signal })
+      ).rejects.toThrow();
+    });
   });
 });

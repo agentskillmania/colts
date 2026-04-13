@@ -69,7 +69,7 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
         .optional()
         .describe("Additional instructions appended to the sub-agent's base personality."),
     }),
-    execute: async ({ agent, task, extraInstructions }) => {
+    execute: async ({ agent, task, extraInstructions }, options) => {
       const config = subAgentConfigs.get(agent);
       if (!config) {
         const available = Array.from(subAgentConfigs.keys()).join(', ');
@@ -123,8 +123,16 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
         tools: subAgentTools,
       });
 
-      // Run until completion
-      const { state: finalState, result } = await subRunner.run(stateWithTask);
+      // Check abort signal before running
+      options?.signal?.throwIfAborted();
+
+      // Run until completion with signal support
+      const { state: finalState, result } = await subRunner.run(stateWithTask, {
+        signal: options?.signal,
+      });
+
+      // Check abort signal after running
+      options?.signal?.throwIfAborted();
 
       if (result.type === 'success') {
         return {

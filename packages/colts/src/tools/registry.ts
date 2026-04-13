@@ -18,8 +18,8 @@ export interface Tool<TParams extends z.ZodTypeAny = z.ZodTypeAny> {
   description: string;
   /** Zod schema for parameter validation */
   parameters: TParams;
-  /** Execute function - receives validated parameters */
-  execute: (args: z.infer<TParams>) => Promise<unknown>;
+  /** Execute function - receives validated parameters and optional abort signal */
+  execute: (args: z.infer<TParams>, options?: { signal?: AbortSignal }) => Promise<unknown>;
 }
 
 /**
@@ -140,15 +140,12 @@ export class ToolRegistry {
    *
    * @param name - Tool name
    * @param args - Raw arguments (will be validated)
+   * @param options - Optional execution options including abort signal
    * @returns Tool execution result
    * @throws ToolNotFoundError if tool doesn't exist
    * @throws ToolParameterError if validation fails
    */
-  async execute(
-    name: string,
-    args: unknown,
-    _options?: { signal?: AbortSignal }
-  ): Promise<unknown> {
+  async execute(name: string, args: unknown, options?: { signal?: AbortSignal }): Promise<unknown> {
     const tool = this.get(name);
     if (!tool) {
       throw new ToolNotFoundError(name);
@@ -160,8 +157,8 @@ export class ToolRegistry {
       throw new ToolParameterError(name, parseResult.error);
     }
 
-    // Execute with validated parameters
-    return tool.execute(parseResult.data);
+    // Execute with validated parameters and signal
+    return tool.execute(parseResult.data, options);
   }
 
   /**

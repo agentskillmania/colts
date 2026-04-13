@@ -70,7 +70,15 @@ export const calculatorTool: Tool<typeof calculatorParameters> = {
   description:
     'Calculate the result of a mathematical expression. Supports: +, -, *, /, ** (power), % (modulo), parentheses.',
   parameters: calculatorParameters,
-  execute: async ({ expression }) => {
-    return safeEval(expression);
+  execute: async ({ expression }, _options) => {
+    // Check abort signal before computation
+    _options?.signal?.throwIfAborted();
+
+    const result = safeEval(expression);
+
+    // Check abort signal after computation
+    _options?.signal?.throwIfAborted();
+
+    return result;
   },
 };
