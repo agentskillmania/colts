@@ -43,6 +43,7 @@ export {
   addToolMessage,
   incrementStepCount,
   setLastToolResult,
+  loadSkill,
   createSnapshot,
   restoreSnapshot,
   serializeState,

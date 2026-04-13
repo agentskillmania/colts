@@ -203,9 +203,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private llmProvider: ILLMProvider;
   private toolRegistry: IToolRegistry;
   private compressor?: IContextCompressor;
-  private skillProvider?: ISkillProvider;
+  private _skillProvider?: ISkillProvider;
   private subAgentConfigs?: Map<string, SubAgentConfig>;
   private options: RunnerOptions;
+
+  /** 获取 Skill 提供者（CLI 层可用于 /skill 命令） */
+  get skillProvider(): ISkillProvider | undefined {
+    return this._skillProvider;
+  }
 
   constructor(options: RunnerOptions) {
     super();
@@ -258,14 +263,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     // Initialize skill provider (injection > quick init)
     if (options.skillProvider) {
-      this.skillProvider = options.skillProvider;
+      this._skillProvider = options.skillProvider;
     } else if (options.skillDirectories && options.skillDirectories.length > 0) {
-      this.skillProvider = new FilesystemSkillProvider(options.skillDirectories);
+      this._skillProvider = new FilesystemSkillProvider(options.skillDirectories);
     }
 
     // Auto-register skill tools
-    if (this.skillProvider) {
-      const loadSkillTool = createLoadSkillTool(this.skillProvider);
+    if (this._skillProvider) {
+      const loadSkillTool = createLoadSkillTool(this._skillProvider);
       this.toolRegistry.register(loadSkillTool);
       // Register return_skill for nested skill calling
       this.toolRegistry.register(createReturnSkillTool());
@@ -338,7 +343,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     return {
       llmProvider: this.llmProvider,
       toolRegistry: this.toolRegistry,
-      skillProvider: this.skillProvider,
+      skillProvider: this._skillProvider,
       subAgentConfigs: this.subAgentConfigs,
       options: {
         model: this.options.model,
@@ -529,7 +534,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     return buildMessages(state, {
       systemPrompt: this.options.systemPrompt,
       model: this.options.model,
-      skillProvider: this.skillProvider,
+      skillProvider: this._skillProvider,
       subAgentConfigs: this.subAgentConfigs,
     });
   }
@@ -542,11 +547,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    * Initialize skill state in AgentState if not present
    */
   private initializeSkillState(state: AgentState): void {
-    if (!state.context.skillState && this.skillProvider) {
+    if (!state.context.skillState && this._skillProvider) {
       state.context.skillState = {
         stack: [],
         current: null,
-        availableSkills: this.skillProvider.listSkills().map((s) => ({
+        availableSkills: this._skillProvider.listSkills().map((s) => ({
           name: s.name,
           description: s.description,
         })),

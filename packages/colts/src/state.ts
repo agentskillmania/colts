@@ -148,6 +148,35 @@ export function setLastToolResult(state: AgentState, result: unknown): AgentStat
 }
 
 /**
+ * 主动加载 Skill 到 state
+ *
+ * 模拟 load_skill 工具的 SWITCH_SKILL 信号效果：
+ * 将当前活跃 skill 压栈，设置新 skill 为活跃状态。
+ * buildMessages 会自动将 loadedInstructions 注入到 LLM 的 system prompt 中。
+ *
+ * @param state - 当前 AgentState
+ * @param skillName - Skill 名称
+ * @param instructions - Skill 指令内容（SKILL.md body）
+ * @returns 新 AgentState（skillState 已更新）
+ */
+export function loadSkill(state: AgentState, skillName: string, instructions: string): AgentState {
+  return updateState(state, (draft) => {
+    if (!draft.context.skillState) {
+      draft.context.skillState = { stack: [], current: null };
+    }
+    // 如果已有活跃 skill，压栈（支持嵌套）
+    if (draft.context.skillState.current) {
+      draft.context.skillState.stack.push({
+        skillName: draft.context.skillState.current,
+        loadedAt: Date.now(),
+      });
+    }
+    draft.context.skillState.current = skillName;
+    draft.context.skillState.loadedInstructions = instructions;
+  });
+}
+
+/**
  * Create state snapshot
  *
  * @param state - Current state

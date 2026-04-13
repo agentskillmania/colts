@@ -16,6 +16,7 @@ import {
   addToolMessage,
   incrementStepCount,
   setLastToolResult,
+  loadSkill,
   createSnapshot,
   restoreSnapshot,
   serializeState,
@@ -319,6 +320,37 @@ describe('Step 0: AgentState', () => {
       const restored = deserializeState(json);
 
       expect(restored.config.tools[0].name).toBe('tool1');
+    });
+  });
+
+  describe('loadSkill', () => {
+    it('应在无 skillState 时初始化并设置 current 和 loadedInstructions', () => {
+      const state = createAgentState(baseConfig);
+      const newState = loadSkill(state, 'tell-time', 'Report current time');
+
+      expect(newState.context.skillState).toBeDefined();
+      expect(newState.context.skillState!.current).toBe('tell-time');
+      expect(newState.context.skillState!.loadedInstructions).toBe('Report current time');
+      expect(newState.context.skillState!.stack).toEqual([]);
+    });
+
+    it('应将已有活跃 skill 压栈（支持嵌套）', () => {
+      let state = createAgentState(baseConfig);
+      state = loadSkill(state, 'tell-time', 'Report time');
+      state = loadSkill(state, 'greeting', 'Say hello');
+
+      expect(state.context.skillState!.current).toBe('greeting');
+      expect(state.context.skillState!.loadedInstructions).toBe('Say hello');
+      expect(state.context.skillState!.stack).toHaveLength(1);
+      expect(state.context.skillState!.stack[0].skillName).toBe('tell-time');
+    });
+
+    it('不应修改原始 state（不可变性）', () => {
+      const state = createAgentState(baseConfig);
+      const newState = loadSkill(state, 'test', 'instructions');
+
+      expect(state.context.skillState).toBeUndefined();
+      expect(newState.context.skillState!.current).toBe('test');
     });
   });
 
