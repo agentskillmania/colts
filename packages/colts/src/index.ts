@@ -82,6 +82,7 @@ export {
 export {
   AgentRunner,
   type RunnerOptions,
+  type RunnerEventMap,
   type ChatOptions,
   type ChatResult,
   type ChatStreamChunk,

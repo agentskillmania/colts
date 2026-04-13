@@ -5,6 +5,7 @@
  * Configurable with dependency inversion and quick initialization.
  */
 
+import { EventEmitter } from 'eventemitter3';
 import { LLMClient } from '@agentskillmania/llm-client';
 import type { TokenStats } from '@agentskillmania/llm-client';
 import type { Message, Tool } from '@mariozechner/pi-ai';
@@ -29,6 +30,18 @@ import type {
   RunResult,
   RunStreamEvent,
 } from './execution.js';
+
+/**
+ * Runner event map for EventEmitter
+ */
+export interface RunnerEventMap {
+  /** Stream event during execution */
+  event: StreamEvent;
+  /** Execution completed */
+  complete: { state: AgentState; result: RunResult };
+  /** Execution error */
+  error: { error: Error };
+}
 import type { AdvanceOptions } from './execution.js';
 import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
 import { compressState, maybeCompress } from './runner-compression.js';
@@ -172,7 +185,7 @@ export interface ChatStreamChunk {
  * }
  * ```
  */
-export class AgentRunner {
+export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private llmProvider: ILLMProvider;
   private toolRegistry: IToolRegistry;
   private compressor?: IContextCompressor;
@@ -181,6 +194,7 @@ export class AgentRunner {
   private options: RunnerOptions;
 
   constructor(options: RunnerOptions) {
+    super();
     // Validate LLM configuration (mutually exclusive)
     if (options.llmClient && options.llm) {
       throw new ConfigurationError(
@@ -251,6 +265,49 @@ export class AgentRunner {
       });
       this.toolRegistry.register(delegateTool);
     }
+  }
+
+  /**
+   * Listen to runner events
+   *
+   * @param event - Event name ('event', 'complete', 'error')
+   * @param handler - Event handler function
+   * @returns This runner instance (for chaining)
+   *
+   * @remarks
+   * To unsubscribe, use `runner.off(event, handler)`.
+   *
+   * @example
+   * ```typescript
+   * const handler = (e: StreamEvent) => console.log(e.type, e.token);
+   * runner.on('event', handler);
+   *
+   * // Later, stop listening
+   * runner.off('event', handler);
+   * ```
+   */
+  /**
+   * Listen to runner events.
+   * Use `runner.off(event, handler)` to unsubscribe.
+   *
+   * @example
+   * ```typescript
+   * const handler = (e: StreamEvent) => console.log(e.type);
+   * runner.on('event', handler);
+   * runner.off('event', handler); // Unsubscribe
+   * ```
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string, handler: (...args: any[]) => void): this {
+    return super.on(event as keyof RunnerEventMap, handler);
+  }
+
+  /**
+   * Remove event listener
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  off(event: string, handler: (...args: any[]) => void): this {
+    return super.off(event as keyof RunnerEventMap, handler);
   }
 
   /**
@@ -658,7 +715,20 @@ export class AgentRunner {
     options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
-    return executeRun(this.ctx, this.compressor, state, options, toolRegistry);
+    try {
+      const result = await executeRun(this.ctx, this.compressor, state, options, toolRegistry);
+
+      // Emit error event if result is error type
+      if (result.result.type === 'error') {
+        this.emit('error', { error: result.result.error });
+      }
+
+      this.emit('complete', result);
+      return result;
+    } catch (error) {
+      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      throw error;
+    }
   }
 
   /**
@@ -685,7 +755,32 @@ export class AgentRunner {
     options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
-    return yield* executeRunStream(this.ctx, this.compressor, state, options, toolRegistry);
+    try {
+      const generator = executeRunStream(this.ctx, this.compressor, state, options, toolRegistry);
+      let result: { state: AgentState; result: RunResult } | undefined;
+
+      while (true) {
+        const { done, value } = await generator.next();
+        if (done) {
+          result = value;
+          break;
+        }
+        this.emit('event', value);
+        yield value;
+      }
+
+      if (result) {
+        // Emit error event if result is error type
+        if (result.result.type === 'error') {
+          this.emit('error', { error: result.result.error });
+        }
+        this.emit('complete', result);
+      }
+      return result!;
+    } catch (error) {
+      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      throw error;
+    }
   }
 
   /**

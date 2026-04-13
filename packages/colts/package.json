@@ -44,6 +44,7 @@
   "dependencies": {
     "@agentskillmania/llm-client": "workspace:*",
     "dotenv": "^16.4.0",
+    "eventemitter3": "^5.0.4",
     "yaml": "^2.8.3",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.25.2"

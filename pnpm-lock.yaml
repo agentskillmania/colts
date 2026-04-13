@@ -59,6 +59,9 @@ importers:
       dotenv:
         specifier: ^16.4.0
         version: 16.6.1
+      eventemitter3:
+        specifier: ^5.0.4
+        version: 5.0.4
       yaml:
         specifier: ^2.8.3
         version: 2.8.3
