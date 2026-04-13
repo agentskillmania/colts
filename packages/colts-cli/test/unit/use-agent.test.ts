@@ -79,6 +79,24 @@ describe('parseCommand', () => {
     expect(result.raw).toBe('/show:verbose');
   });
 
+  it('should parse /compact as alias for /show:compact', () => {
+    const result = parseCommand('/compact');
+    expect(result.type).toBe('show-compact');
+    expect(result.raw).toBe('/compact');
+  });
+
+  it('should parse /detail as alias for /show:detail', () => {
+    const result = parseCommand('/detail');
+    expect(result.type).toBe('show-detail');
+    expect(result.raw).toBe('/detail');
+  });
+
+  it('should parse /verbose as alias for /show:verbose', () => {
+    const result = parseCommand('/verbose');
+    expect(result.type).toBe('show-verbose');
+    expect(result.raw).toBe('/verbose');
+  });
+
   it('should not match /show without subcommand', () => {
     const result = parseCommand('/show');
     expect(result.type).toBe('message');

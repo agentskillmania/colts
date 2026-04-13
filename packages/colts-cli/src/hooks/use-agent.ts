@@ -54,9 +54,12 @@ export function parseCommand(input: string): ParsedCommand {
   if (trimmed === '/run') return { type: 'mode-run', raw: trimmed };
   if (trimmed === '/step') return { type: 'mode-step', raw: trimmed };
   if (trimmed === '/advance') return { type: 'mode-advance', raw: trimmed };
-  if (trimmed === '/show:compact') return { type: 'show-compact', raw: trimmed };
-  if (trimmed === '/show:detail') return { type: 'show-detail', raw: trimmed };
-  if (trimmed === '/show:verbose') return { type: 'show-verbose', raw: trimmed };
+  if (trimmed === '/show:compact' || trimmed === '/compact')
+    return { type: 'show-compact', raw: trimmed };
+  if (trimmed === '/show:detail' || trimmed === '/detail')
+    return { type: 'show-detail', raw: trimmed };
+  if (trimmed === '/show:verbose' || trimmed === '/verbose')
+    return { type: 'show-verbose', raw: trimmed };
   if (trimmed === '/clear') return { type: 'clear', raw: trimmed };
   if (trimmed === '/help') return { type: 'help', raw: trimmed };
   if (trimmed.startsWith('/skill '))
@@ -202,7 +205,7 @@ export function useAgent(
 
         case 'help':
           addSystemEntry(
-            'Commands: /run /step /advance | /show:compact /show:detail /show:verbose | /skill <name> /clear /help'
+            'Commands: /run /step /advance | /compact /detail /verbose | /skill <name> /clear /help'
           );
           return;
 
