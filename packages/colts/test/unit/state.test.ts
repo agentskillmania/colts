@@ -343,6 +343,8 @@ describe('Step 0: AgentState', () => {
       expect(state.context.skillState!.loadedInstructions).toBe('Say hello');
       expect(state.context.skillState!.stack).toHaveLength(1);
       expect(state.context.skillState!.stack[0].skillName).toBe('tell-time');
+      // Parent skill instructions should be saved in stack frame
+      expect(state.context.skillState!.stack[0].savedInstructions).toBe('Report time');
     });
 
     it('should not modify original state (immutability)', () => {

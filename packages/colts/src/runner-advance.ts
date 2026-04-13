@@ -11,6 +11,7 @@ import type { SubAgentConfig } from './subagent/types.js';
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.js';
 import { toolCallToAction } from './execution.js';
 import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
+import { isSkillSignal, type SkillSignal } from './skills/types.js';
 import { addAssistantMessage, addToolMessage, incrementStepCount } from './state.js';
 
 /**
@@ -205,7 +206,27 @@ async function advanceToToolResult(
   execState.toolResult = result;
   execState.phase = { type: 'tool-result', result };
 
-  const toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
+  // Format skill signals as LLM-friendly text instead of raw JSON
+  let toolResultContent: string;
+  if (isSkillSignal(result)) {
+    const sig = result as SkillSignal;
+    switch (sig.type) {
+      case 'SWITCH_SKILL':
+        toolResultContent = `Skill '${sig.to}' loaded. You are now in sub-skill mode. Follow its instructions, then call return_skill when done.`;
+        break;
+      case 'RETURN_SKILL':
+        toolResultContent =
+          typeof sig.result === 'string' ? sig.result : JSON.stringify(sig.result);
+        break;
+      case 'SKILL_NOT_FOUND':
+        toolResultContent = `Skill '${sig.requested}' not found. Available: ${sig.available.join(', ')}`;
+        break;
+      default:
+        toolResultContent = JSON.stringify(result);
+    }
+  } else {
+    toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
+  }
   const newState = incrementStepCount(addToolMessage(state, toolResultContent));
 
   return { state: newState, phase: execState.phase, done: false };

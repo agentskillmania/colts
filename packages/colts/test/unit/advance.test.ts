@@ -439,6 +439,111 @@ describe('advance()', () => {
     expect(result.done).toBe(true);
   });
 
+  it('should format SWITCH_SKILL signal as LLM-friendly tool result', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Loading skill',
+      toolCalls: [
+        {
+          id: 'call-skill-1',
+          name: 'load_skill',
+          arguments: { name: 'tell-time' },
+        },
+      ],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      skills: [],
+    });
+
+    // Register a load_skill tool that returns a SWITCH_SKILL signal
+    const registry = runner.getToolRegistry();
+    registry.register({
+      name: 'load_skill',
+      description: 'Load a skill',
+      parameters: z.object({ name: z.string() }),
+      execute: async () => ({
+        type: 'SWITCH_SKILL',
+        to: 'tell-time',
+        instructions: 'Report current time',
+        task: 'Get time',
+      }),
+    });
+
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+
+    // Progress through phases to tool-result
+    let result = await runner.advance(state, execState); // idle -> preparing
+    result = await runner.advance(result.state, execState); // preparing -> calling-llm
+    result = await runner.advance(result.state, execState, registry); // calling-llm -> llm-response
+    result = await runner.advance(result.state, execState); // llm-response -> parsing
+    result = await runner.advance(result.state, execState); // parsing -> parsed
+    result = await runner.advance(result.state, execState, registry); // parsed -> executing-tool
+    result = await runner.advance(result.state, execState, registry); // executing-tool -> tool-result
+
+    // Verify tool result message is LLM-friendly, not raw JSON
+    const lastMsg = result.state.context.messages[result.state.context.messages.length - 1];
+    expect(lastMsg.role).toBe('tool');
+    expect(lastMsg.content).toContain("Skill 'tell-time' loaded");
+    expect(lastMsg.content).not.toContain('SWITCH_SKILL');
+    expect(lastMsg.content).not.toContain('"type"');
+  });
+
+  it('should format RETURN_SKILL signal with actual result text', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Returning',
+      toolCalls: [
+        {
+          id: 'call-return-1',
+          name: 'return_skill',
+          arguments: { result: 'It is 2:30 PM' },
+        },
+      ],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+    });
+
+    const registry = runner.getToolRegistry();
+    registry.register({
+      name: 'return_skill',
+      description: 'Return from skill',
+      parameters: z.object({ result: z.string() }),
+      execute: async () => ({
+        type: 'RETURN_SKILL',
+        result: 'It is 2:30 PM',
+        status: 'success',
+      }),
+    });
+
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+
+    let result = await runner.advance(state, execState);
+    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, execState, registry);
+    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, execState, registry);
+    result = await runner.advance(result.state, execState, registry);
+
+    // Verify tool result message contains the actual result text
+    const lastMsg = result.state.context.messages[result.state.context.messages.length - 1];
+    expect(lastMsg.role).toBe('tool');
+    expect(lastMsg.content).toBe('It is 2:30 PM');
+    expect(lastMsg.content).not.toContain('RETURN_SKILL');
+  });
+
   it('should allow intervention at parsed phase', async () => {
     const mockResponse: LLMResponse = {
       content: 'Let me calculate',

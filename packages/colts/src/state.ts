@@ -169,6 +169,7 @@ export function loadSkill(state: AgentState, skillName: string, instructions: st
       draft.context.skillState.stack.push({
         skillName: draft.context.skillState.current,
         loadedAt: Date.now(),
+        savedInstructions: draft.context.skillState.loadedInstructions,
       });
     }
     draft.context.skillState.current = skillName;

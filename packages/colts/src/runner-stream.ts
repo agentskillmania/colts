@@ -191,6 +191,7 @@ export async function* executeStepStream(
                 skillName: ss.current,
                 loadedAt: Date.now(),
                 taskContext: signal.task,
+                savedInstructions: ss.loadedInstructions,
               });
             }
             ss.current = signal.to;
@@ -220,7 +221,7 @@ export async function* executeStepStream(
             const parent = ss.stack.pop()!;
             parentSkillName = parent.skillName;
             ss.current = parentSkillName;
-            delete ss.loadedInstructions;
+            ss.loadedInstructions = parent.savedInstructions;
           });
 
           // Yield skill event

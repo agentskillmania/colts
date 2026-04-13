@@ -78,6 +78,8 @@ export interface SkillStackFrame {
   loadedAt: number;
   /** Optional task context passed to the skill */
   taskContext?: unknown;
+  /** Saved parent skill instructions, restored on return_skill */
+  savedInstructions?: string;
 }
 
 /**
