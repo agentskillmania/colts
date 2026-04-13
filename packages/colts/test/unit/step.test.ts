@@ -842,7 +842,7 @@ describe('step()', () => {
       const { executeAdvanceStream } = await import('../../src/runner-stream.js');
       const { createExecutionState } = await import('../../src/execution.js');
       const { ToolRegistry } = await import('../../src/tools/registry.js');
-      
+
       const mockClient = {
         call: vi.fn().mockResolvedValue({
           content: 'test',
@@ -860,13 +860,15 @@ describe('step()', () => {
       };
 
       const state = createAgentState(defaultConfig);
-      
+
       // Create custom execState with an invalid phase to trigger default case in executeAdvance
       const execState = createExecutionState();
-      (execState as { phase: { type: string } }).phase = { type: 'invalid-phase' } as ExecutionState['phase'];
+      (execState as { phase: { type: string } }).phase = {
+        type: 'invalid-phase',
+      } as ExecutionState['phase'];
 
       const events: { type: string; error?: Error }[] = [];
-      
+
       try {
         const generator = executeAdvanceStream(ctx, state, execState, undefined, undefined);
         for await (const event of generator) {
@@ -879,7 +881,5 @@ describe('step()', () => {
       // Should have error phase in execState
       expect(execState.phase.type).toBe('error');
     });
-
-
   });
 });
