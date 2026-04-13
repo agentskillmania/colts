@@ -14,7 +14,6 @@ import {
   getModel,
   type Model,
   type Context,
-  type Tool,
   type AssistantMessageEvent,
   type Usage,
 } from '@mariozechner/pi-ai';
@@ -213,9 +212,10 @@ export class PiAiAdapter {
    *
    * @internal
    */
-  private buildContext(messages: CallOptions['messages']): Context {
+  private buildContext(messages: CallOptions['messages'], tools?: CallOptions['tools']): Context {
     return {
       messages: messages as Context['messages'],
+      ...(tools && tools.length > 0 ? { tools: tools as Context['tools'] } : {}),
     };
   }
 
@@ -338,14 +338,13 @@ export class PiAiAdapter {
     onRetry?: (attempt: number, error: Error) => void
   ): Promise<LLMResponse> {
     const model = this.createModel(modelId);
-    const context = this.buildContext(options.messages);
+    const context = this.buildContext(options.messages, options.tools);
     const retryOpts = this.mergeRetryOptions(options.retryOptions);
 
     const operation = async (): Promise<LLMResponse> => {
       const result = await piComplete(model, context, {
         apiKey,
         thinkingEnabled: options.thinkingEnabled,
-        tools: options.tools as Tool[],
         signal: options.signal,
       });
 
@@ -543,7 +542,7 @@ export class PiAiAdapter {
     onRetry?: (attempt: number, error: Error) => void
   ): AsyncIterable<StreamEvent> {
     const model = this.createModel(modelId);
-    const context = this.buildContext(options.messages);
+    const context = this.buildContext(options.messages, options.tools);
     const retryOpts = this.mergeRetryOptions(options.retryOptions);
 
     // Phase 1: Establish connection with p-retry
@@ -561,7 +560,6 @@ export class PiAiAdapter {
           const stream = piStream(model, context, {
             apiKey,
             thinkingEnabled: options.thinkingEnabled,
-            tools: options.tools as Tool[],
             signal: options.signal,
           });
           const iter = stream[Symbol.asyncIterator]();
