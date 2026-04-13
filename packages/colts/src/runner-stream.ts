@@ -20,6 +20,7 @@ import { buildMessagesFromCtx } from './runner-advance.js';
 import { getToolsForLLM } from './runner-message-builder.js';
 import { maybeCompress } from './runner-compression.js';
 import type { IContextCompressor } from './types.js';
+import { isSkillSignal, type SkillSignal } from './skills/types.js';
 
 /**
  * Stream LLM response during calling-llm phase.
@@ -175,6 +176,67 @@ export async function* executeStepStream(
     yield { type: 'phase-change', from: fromPhase, to: phase };
 
     if (phase.type === 'tool-result') {
+      // Handle skill signals for nested skill calling
+      if (isSkillSignal(phase.result)) {
+        const signal = phase.result as SkillSignal;
+        const skillState = currentState.context.skillState;
+
+        if (signal.type === 'SWITCH_SKILL' && skillState) {
+          // Push current skill to stack
+          if (skillState.current) {
+            skillState.stack.push({
+              skillName: skillState.current,
+              loadedAt: Date.now(),
+              taskContext: signal.task,
+            });
+          }
+          // Switch to new skill
+          skillState.current = signal.to;
+          skillState.loadedInstructions = signal.instructions;
+
+          // Yield skill event and continue execution
+          yield { type: 'skill:start', name: signal.to, task: signal.task };
+
+          // Reset phase to idle to continue with new skill
+          execState.phase = { type: 'idle' };
+          continue;
+        }
+
+        if (signal.type === 'RETURN_SKILL' && skillState) {
+          if (skillState.stack.length === 0) {
+            yield {
+              type: 'error',
+              error: new Error('No parent skill to return to'),
+              context: { step: 0 },
+            };
+            return {
+              state: currentState,
+              result: { type: 'error', error: new Error('No parent skill to return to') },
+            };
+          }
+
+          // Pop parent skill from stack
+          const parent = skillState.stack.pop()!;
+          skillState.current = parent.skillName;
+          delete skillState.loadedInstructions;
+
+          // Yield skill event
+          yield { type: 'skill:end', name: parent.skillName, result: signal.result };
+
+          // Reset phase to idle to continue with parent skill
+          execState.phase = { type: 'idle' };
+          continue;
+        }
+
+        if (signal.type === 'SKILL_NOT_FOUND') {
+          const error = new Error(
+            `Skill '${signal.requested}' not found. Available: ${signal.available.join(', ')}`
+          );
+          yield { type: 'error', error, context: { step: 0 } };
+          return { state: currentState, result: { type: 'error', error } };
+        }
+      }
+
       // When delegate tool execution completes, wrap and yield sub-agent events
       if (fromPhase.type === 'executing-tool' && fromPhase.action.tool === 'delegate') {
         const delegateAction = fromPhase.action;

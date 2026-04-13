@@ -39,7 +39,7 @@ import type { RunnerContext } from './runner-advance.js';
 import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './runner-stream.js';
 import type { ISkillProvider } from './skills/types.js';
 import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
-import { createLoadSkillTool } from './skills/load-skill-tool.js';
+import { createLoadSkillTool, createReturnSkillTool } from './skills/index.js';
 import type { SubAgentConfig } from './subagent/types.js';
 import { createDelegateTool } from './subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
@@ -263,10 +263,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       this.skillProvider = new FilesystemSkillProvider(options.skillDirectories);
     }
 
-    // Auto-register load_skill tool
+    // Auto-register skill tools
     if (this.skillProvider) {
       const loadSkillTool = createLoadSkillTool(this.skillProvider);
       this.toolRegistry.register(loadSkillTool);
+      // Register return_skill for nested skill calling
+      this.toolRegistry.register(createReturnSkillTool());
     }
 
     // Initialize sub-agent configs and register delegate tool
@@ -368,6 +370,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    * ```
    */
   async chat(state: AgentState, userInput: string, chatOptions?: ChatOptions): Promise<ChatResult> {
+    // Initialize skill state if needed
+    this.initializeSkillState(state);
+
     // 1. Add user message to state
     let newState = addUserMessage(state, userInput);
 
@@ -531,6 +536,22 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
   private getToolsForLLM(registry?: IToolRegistry): Tool[] | undefined {
     return getToolsForLLM(registry);
+  }
+
+  /**
+   * Initialize skill state in AgentState if not present
+   */
+  private initializeSkillState(state: AgentState): void {
+    if (!state.context.skillState && this.skillProvider) {
+      state.context.skillState = {
+        stack: [],
+        current: null,
+        availableSkills: this.skillProvider.listSkills().map((s) => ({
+          name: s.name,
+          description: s.description,
+        })),
+      };
+    }
   }
 
   /**
@@ -795,6 +816,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
+    // Initialize skill state if needed
+    this.initializeSkillState(state);
+
     this.emit('run:start', { state });
     const registry = toolRegistry ?? this.toolRegistry;
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;

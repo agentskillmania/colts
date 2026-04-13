@@ -57,6 +57,8 @@ export type StreamEvent =
   | { type: 'compressed'; summary: string; removedCount: number }
   | { type: 'skill:loading'; name: string }
   | { type: 'skill:loaded'; name: string; tokenCount: number }
+  | { type: 'skill:start'; name: string; task: string }
+  | { type: 'skill:end'; name: string; result: string }
   | { type: 'subagent:start'; name: string; task: string }
   | { type: 'subagent:end'; name: string; result: DelegateResult };
 
