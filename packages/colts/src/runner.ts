@@ -35,10 +35,14 @@ import type {
  * Runner event map for EventEmitter
  */
 export interface RunnerEventMap {
-  /** Stream event during execution */
+  /** Stream event during execution (token, phase-change, tool:start, etc.) */
   event: StreamEvent;
-  /** Execution completed */
+  /** Run execution completed */
   complete: { state: AgentState; result: RunResult };
+  /** Step execution completed */
+  'step:complete': { state: AgentState; result: StepResult };
+  /** Advance execution completed */
+  'advance:complete': { state: AgentState; result: AdvanceResult; execState: ExecutionState };
   /** Execution error */
   error: { error: Error };
 }
@@ -600,7 +604,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): Promise<AdvanceResult> {
-    return executeAdvance(this.ctx, state, execState, toolRegistry, options);
+    try {
+      const result = await executeAdvance(this.ctx, state, execState, toolRegistry, options);
+      this.emit('advance:complete', { state, result, execState });
+      return result;
+    } catch (error) {
+      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      throw error;
+    }
   }
 
   /**
@@ -639,7 +650,26 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): AsyncGenerator<StreamEvent, AdvanceResult> {
-    return yield* executeAdvanceStream(this.ctx, state, execState, toolRegistry, options);
+    const iterator = executeAdvanceStream(this.ctx, state, execState, toolRegistry, options);
+    let result: AdvanceResult | undefined;
+
+    try {
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          result = value;
+          break;
+        }
+        this.emit('event', value);
+        yield value;
+      }
+
+      this.emit('advance:complete', { state, result: result!, execState });
+      return result!;
+    } catch (error) {
+      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      throw error;
+    }
   }
 
   /**
@@ -674,7 +704,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry,
     options?: { signal?: AbortSignal }
   ): Promise<{ state: AgentState; result: StepResult }> {
-    return executeStep(this.ctx, this.compressor, state, toolRegistry, options);
+    try {
+      const result = await executeStep(this.ctx, this.compressor, state, toolRegistry, options);
+      this.emit('step:complete', result);
+      return result;
+    } catch (error) {
+      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      throw error;
+    }
   }
 
   /**
@@ -689,7 +726,26 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry,
     options?: { signal?: AbortSignal }
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
-    return yield* executeStepStream(this.ctx, this.compressor, state, toolRegistry, options);
+    const iterator = executeStepStream(this.ctx, this.compressor, state, toolRegistry, options);
+    let result: { state: AgentState; result: StepResult } | undefined;
+
+    try {
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          result = value;
+          break;
+        }
+        this.emit('event', value);
+        yield value;
+      }
+
+      this.emit('step:complete', result!);
+      return result!;
+    } catch (error) {
+      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      throw error;
+    }
   }
 
   /**
