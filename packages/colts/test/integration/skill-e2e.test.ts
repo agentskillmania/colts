@@ -157,11 +157,15 @@ describe('E2E: Skill 系统完整流程', () => {
       // Then: load_skill 工具应该被注册
       expect(toolRegistry.has('load_skill')).toBe(true);
 
-      // And: 工具执行结果应该返回 Skill 指令
+      // And: 工具执行结果应该返回 SWITCH_SKILL 信号
       const toolResult = await toolRegistry.execute('load_skill', { name: 'code-review' });
-      expect(toolResult).toContain('Code Review Skill');
-      expect(toolResult).toContain('Security');
-      expect(toolResult).toContain('Performance');
+      expect(toolResult).toMatchObject({
+        type: 'SWITCH_SKILL',
+        to: 'code-review',
+      });
+      expect(toolResult.instructions).toContain('Code Review Skill');
+      expect(toolResult.instructions).toContain('Security');
+      expect(toolResult.instructions).toContain('Performance');
     });
 
     it('应能在流式执行中正确处理 Skill 加载', async () => {
@@ -399,10 +403,14 @@ describe('E2E: Skill 系统完整流程', () => {
       // When: 执行 load_skill 工具
       const result = await toolRegistry.execute('load_skill', { name: 'testing' });
 
-      // Then: 应该返回 Skill 指令
-      expect(result).toContain('Testing Skill');
-      expect(result).toContain('Coverage');
-      expect(result).toContain('Unit Tests');
+      // Then: 应该返回 SWITCH_SKILL 信号
+      expect(result).toMatchObject({
+        type: 'SWITCH_SKILL',
+        to: 'testing',
+      });
+      expect(result.instructions).toContain('Testing Skill');
+      expect(result.instructions).toContain('Coverage');
+      expect(result.instructions).toContain('Unit Tests');
     });
 
     it('加载不存在的 Skill 应返回错误信息', async () => {
@@ -418,10 +426,14 @@ describe('E2E: Skill 系统完整流程', () => {
       // When: 尝试加载不存在的 Skill
       const result = await toolRegistry.execute('load_skill', { name: 'nonexistent' });
 
-      // Then: 应该返回友好的错误信息
-      expect(result).toContain('Error');
-      expect(result).toContain('not found');
-      expect(result).toContain('Available skills');
+      // Then: 应该返回 SKILL_NOT_FOUND 信号
+      expect(result).toMatchObject({
+        type: 'SKILL_NOT_FOUND',
+        requested: 'nonexistent',
+      });
+      expect(result.available).toContain('code-review');
+      expect(result.available).toContain('testing');
+      expect(result.available).toContain('deployment');
     });
 
     it('应能加载多个不同的 Skill', async () => {
@@ -435,25 +447,28 @@ describe('E2E: Skill 系统完整流程', () => {
       const toolRegistry = runner.getToolRegistry();
 
       // When: 加载不同的 Skill
-      const codeReviewInstructions = await toolRegistry.execute('load_skill', {
+      const codeReviewResult = await toolRegistry.execute('load_skill', {
         name: 'code-review',
       });
-      const testingInstructions = await toolRegistry.execute('load_skill', {
+      const testingResult = await toolRegistry.execute('load_skill', {
         name: 'testing',
       });
-      const deploymentInstructions = await toolRegistry.execute('load_skill', {
+      const deploymentResult = await toolRegistry.execute('load_skill', {
         name: 'deployment',
       });
 
-      // Then: 每个 Skill 应该返回正确的指令
-      expect(codeReviewInstructions).toContain('Security');
-      expect(codeReviewInstructions).toContain('Performance');
+      // Then: 每个 Skill 应该返回 SWITCH_SKILL 信号
+      expect(codeReviewResult).toMatchObject({ type: 'SWITCH_SKILL', to: 'code-review' });
+      expect(codeReviewResult.instructions).toContain('Security');
+      expect(codeReviewResult.instructions).toContain('Performance');
 
-      expect(testingInstructions).toContain('Coverage');
-      expect(testingInstructions).toContain('Unit Tests');
+      expect(testingResult).toMatchObject({ type: 'SWITCH_SKILL', to: 'testing' });
+      expect(testingResult.instructions).toContain('Coverage');
+      expect(testingResult.instructions).toContain('Unit Tests');
 
-      expect(deploymentInstructions).toContain('Pre-Deployment');
-      expect(deploymentInstructions).toContain('Rollback');
+      expect(deploymentResult).toMatchObject({ type: 'SWITCH_SKILL', to: 'deployment' });
+      expect(deploymentResult.instructions).toContain('Pre-Deployment');
+      expect(deploymentResult.instructions).toContain('Rollback');
     });
   });
 
