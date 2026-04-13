@@ -30,9 +30,16 @@ describe('useAgent 流式逻辑', () => {
       expect(cmd.skillName).toBe('my-skill');
     });
 
-    it('空 skill 名不匹配', () => {
+    it('/skill 无参数匹配为 skill 类型', () => {
+      const cmd = parseCommand('/skill');
+      expect(cmd.type).toBe('skill');
+      expect(cmd.skillName).toBeUndefined();
+    });
+
+    it('/skill 尾部空格等同于无参数', () => {
       const cmd = parseCommand('/skill ');
-      expect(cmd.type).toBe('message');
+      expect(cmd.type).toBe('skill');
+      expect(cmd.skillName).toBeUndefined();
     });
   });
 

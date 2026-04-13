@@ -11,7 +11,12 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { AgentRunner, AgentState, ISkillProvider } from '@agentskillmania/colts';
-import { createAgentState, addUserMessage, createExecutionState } from '@agentskillmania/colts';
+import {
+  createAgentState,
+  addUserMessage,
+  createExecutionState,
+  loadSkill,
+} from '@agentskillmania/colts';
 import type { TimelineEntry, DetailLevel } from '../types/timeline.js';
 
 /**
@@ -40,6 +45,7 @@ export interface ParsedCommand {
     | 'message';
   raw: string;
   skillName?: string;
+  skillMessage?: string;
 }
 
 /**
@@ -62,8 +68,23 @@ export function parseCommand(input: string): ParsedCommand {
     return { type: 'show-verbose', raw: trimmed };
   if (trimmed === '/clear') return { type: 'clear', raw: trimmed };
   if (trimmed === '/help') return { type: 'help', raw: trimmed };
-  if (trimmed.startsWith('/skill '))
-    return { type: 'skill', raw: trimmed, skillName: trimmed.slice(7).trim() };
+  if (trimmed === '/skill' || trimmed.startsWith('/skill ')) {
+    if (trimmed === '/skill') {
+      return { type: 'skill', raw: trimmed };
+    }
+    // "/skill name message" → skillName = name, skillMessage = message
+    const rest = trimmed.slice(6).trim(); // "name message"
+    const spaceIdx = rest.indexOf(' ');
+    if (spaceIdx === -1) {
+      return { type: 'skill', raw: trimmed, skillName: rest };
+    }
+    return {
+      type: 'skill',
+      raw: trimmed,
+      skillName: rest.slice(0, spaceIdx),
+      skillMessage: rest.slice(spaceIdx + 1).trim() || undefined,
+    };
+  }
 
   return { type: 'message', raw: trimmed };
 }
@@ -211,12 +232,16 @@ export function useAgent(
 
         case 'skill': {
           const skillName = command.skillName;
-          if (!skillName) {
-            addSystemEntry('Usage: /skill <name>');
-            return;
-          }
           if (!skillProvider) {
             addSystemEntry('Skill provider not configured');
+            return;
+          }
+          if (!skillName) {
+            const available = skillProvider
+              .listSkills()
+              .map((s) => `${s.name} - ${s.description}`)
+              .join('\n');
+            addSystemEntry(`Available skills:\n${available || 'none'}`);
             return;
           }
           try {
@@ -230,21 +255,78 @@ export function useAgent(
               return;
             }
             const instructions = await skillProvider.loadInstructions(skillName);
+            if (!runner) {
+              addSystemEntry('Agent not ready, check configuration');
+              return;
+            }
+            // 注入 skill 到 state
+            const currentState =
+              state ??
+              createAgentState({
+                name: 'colts-agent',
+                instructions: 'You are a helpful assistant.',
+                tools: [],
+              });
+            const skillState = loadSkill(currentState, skillName, instructions);
+            setState(skillState);
+            addSystemEntry(`Skill '${skillName}' activated`);
+
+            // 用户消息：有 skillMessage 用它，否则生成默认消息
+            const userMsg = command.skillMessage || `Execute skill: ${skillName}`;
+
+            // 添加用户消息条目
             setEntries((prev) => [
               ...prev,
-              {
-                type: 'system',
-                id: uid(),
-                content: `Skill '${skillName}' loaded (${instructions.length} chars)`,
-                timestamp: Date.now(),
-              },
-              {
-                type: 'system',
-                id: uid(),
-                content: `[Skill: ${skillName}]\n${instructions}`,
-                timestamp: Date.now(),
-              },
+              { type: 'user', id: uid(), content: userMsg, timestamp: Date.now() },
             ]);
+            setIsRunning(true);
+
+            const abortController = new AbortController();
+            abortControllerRef.current = abortController;
+            const signal = abortController.signal;
+
+            try {
+              if (mode === 'run') {
+                await executeRun(runner, skillState, userMsg, setEntries, setState, signal);
+              } else if (mode === 'step') {
+                await executeStep(
+                  runner,
+                  skillState,
+                  userMsg,
+                  setEntries,
+                  setState,
+                  signal,
+                  () =>
+                    new Promise<void>((resolve) => {
+                      continueFnRef.current = resolve;
+                      setIsPaused(true);
+                    })
+                );
+              } else {
+                await executeAdvance(
+                  runner,
+                  skillState,
+                  userMsg,
+                  setEntries,
+                  setState,
+                  signal,
+                  () =>
+                    new Promise<void>((resolve) => {
+                      continueFnRef.current = resolve;
+                      setIsPaused(true);
+                    })
+                );
+              }
+            } catch (error) {
+              if (!signal.aborted) {
+                const msg = error instanceof Error ? error.message : String(error);
+                addErrorEntry(msg);
+              }
+            } finally {
+              setIsRunning(false);
+              setIsPaused(false);
+              abortControllerRef.current = null;
+            }
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             addSystemEntry(`Failed to load skill: ${msg}`);

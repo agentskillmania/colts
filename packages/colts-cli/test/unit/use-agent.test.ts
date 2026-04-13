@@ -106,4 +106,44 @@ describe('parseCommand', () => {
     const result = parseCommand('/show:unknown');
     expect(result.type).toBe('message');
   });
+
+  it('/skill 无参数匹配为 skill 类型', () => {
+    const result = parseCommand('/skill');
+    expect(result.type).toBe('skill');
+    expect(result.skillName).toBeUndefined();
+  });
+
+  it('/skill 尾部空格等同于无参数', () => {
+    const result = parseCommand('/skill ');
+    expect(result.type).toBe('skill');
+    expect(result.skillName).toBeUndefined();
+  });
+
+  it('/skill 带多空格参数正确提取', () => {
+    const result = parseCommand('/skill   hello-world  ');
+    expect(result.type).toBe('skill');
+    expect(result.skillName).toBe('hello-world');
+    expect(result.skillMessage).toBeUndefined();
+  });
+
+  it('/skill name message 正确分离', () => {
+    const result = parseCommand('/skill tell-time 现在几点了');
+    expect(result.type).toBe('skill');
+    expect(result.skillName).toBe('tell-time');
+    expect(result.skillMessage).toBe('现在几点了');
+  });
+
+  it('/skill name 多段 message 完整保留', () => {
+    const result = parseCommand('/skill computer 1+2+3');
+    expect(result.type).toBe('skill');
+    expect(result.skillName).toBe('computer');
+    expect(result.skillMessage).toBe('1+2+3');
+  });
+
+  it('/skill name 长消息带空格', () => {
+    const result = parseCommand('/skill greeting 你好 请用中文问候');
+    expect(result.type).toBe('skill');
+    expect(result.skillName).toBe('greeting');
+    expect(result.skillMessage).toBe('你好 请用中文问候');
+  });
 });

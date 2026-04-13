@@ -70,7 +70,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
     setMode,
     clearEntries,
     abort,
-  } = useAgent(runner, initialState);
+  } = useAgent(runner, initialState, runner.skillProvider);
 
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'error'>('idle');
 
