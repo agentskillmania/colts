@@ -1,23 +1,23 @@
 /**
- * @fileoverview 时间线数据模型 — 统一的 TUI 展示条目类型
+ * @fileoverview Timeline data model — unified TUI display entry types
  *
- * 所有 StreamEvent / RunStreamEvent 都映射为 TimelineEntry，
- * 再由渲染层按 DetailLevel 过滤后输出到单画布。
+ * All StreamEvent / RunStreamEvent are mapped to TimelineEntry,
+ * then filtered by the rendering layer according to DetailLevel before being output to a single canvas.
  */
 
 import type { StepResult, RunResult } from '@agentskillmania/colts';
 
 /**
- * 展示详细程度
+ * Display detail level
  *
- * - compact: 用户消息 + 助手回复 + 工具摘要行
- * - detail: compact + 步骤边界 + 工具参数和完整结果
- * - verbose: detail + phase 变化 + 实时 token 流 + thought
+ * - compact: user message + assistant reply + tool summary line
+ * - detail: compact + step boundaries + tool arguments and full results
+ * - verbose: detail + phase changes + real-time token stream + thought
  */
 export type DetailLevel = 'compact' | 'detail' | 'verbose';
 
 /**
- * 时间线条目 — 由 StreamEvent / RunStreamEvent 转换而来
+ * Timeline entry — converted from StreamEvent / RunStreamEvent
  */
 export type TimelineEntry =
   | { type: 'user'; id: string; content: string; timestamp: number }
@@ -26,17 +26,17 @@ export type TimelineEntry =
       id: string;
       content: string;
       timestamp: number;
-      /** 是否正在流式输出 */
+      /** Whether it is currently streaming output */
       isStreaming?: boolean;
     }
   | {
       type: 'tool';
       id: string;
-      /** 工具名称 */
+      /** Tool name */
       tool: string;
       args?: unknown;
       result?: unknown;
-      /** 工具是否正在执行 */
+      /** Whether the tool is currently executing */
       isRunning?: boolean;
       timestamp: number;
     }
@@ -90,9 +90,9 @@ export type TimelineEntry =
   | { type: 'error'; id: string; message: string; timestamp: number };
 
 /**
- * 各 DetailLevel 下哪些 TimelineEntry 类型需要展示
+ * Which TimelineEntry types should be displayed at each DetailLevel
  *
- * true = 显示，false = 隐藏
+ * true = show, false = hide
  */
 export const VISIBILITY_MAP: Record<TimelineEntry['type'], Record<DetailLevel, boolean>> = {
   user: { compact: true, detail: true, verbose: true },
@@ -111,22 +111,22 @@ export const VISIBILITY_MAP: Record<TimelineEntry['type'], Record<DetailLevel, b
 };
 
 /**
- * 判断条目在指定 DetailLevel 下是否可见
+ * Determine whether an entry is visible at the given DetailLevel
  *
- * @param entry - 时间线条目
- * @param level - 展示级别
- * @returns 是否应该渲染
+ * @param entry - Timeline entry
+ * @param level - Display level
+ * @returns Whether it should be rendered
  */
 export function isVisible(entry: TimelineEntry, level: DetailLevel): boolean {
   return VISIBILITY_MAP[entry.type][level];
 }
 
 /**
- * 过滤时间线条目，只保留在指定 DetailLevel 下可见的条目
+ * Filter timeline entries, keeping only those visible at the given DetailLevel
  *
- * @param entries - 全部时间线条目
- * @param level - 展示级别
- * @returns 过滤后的条目列表
+ * @param entries - All timeline entries
+ * @param level - Display level
+ * @returns Filtered list of entries
  */
 export function filterByDetailLevel(entries: TimelineEntry[], level: DetailLevel): TimelineEntry[] {
   return entries.filter((entry) => isVisible(entry, level));

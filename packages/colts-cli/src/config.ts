@@ -73,10 +73,10 @@ export interface AppConfig {
   subAgents?: ColtsConfig['subAgents'];
 }
 
-/** 默认最大步数 */
+/** Default maximum number of steps */
 const DEFAULT_MAX_STEPS = 20;
 
-/** 默认请求超时（ms） */
+/** Default request timeout (ms) */
 const DEFAULT_REQUEST_TIMEOUT = 1_800_000;
 
 /** Default configuration YAML */

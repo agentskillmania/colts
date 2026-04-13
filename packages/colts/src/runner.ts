@@ -207,7 +207,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private subAgentConfigs?: Map<string, SubAgentConfig>;
   private options: RunnerOptions;
 
-  /** 获取 Skill 提供者（CLI 层可用于 /skill 命令） */
+  /** Get the Skill provider (used by the CLI layer for the /skill command) */
   get skillProvider(): ISkillProvider | undefined {
     return this._skillProvider;
   }

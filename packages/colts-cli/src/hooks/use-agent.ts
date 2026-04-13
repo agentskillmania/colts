@@ -1,12 +1,12 @@
 /**
- * @fileoverview Agent 交互 hook — 管理时间线、执行模式、展示级别
+ * @fileoverview Agent interaction hook — manages timeline, execution mode, and display level
  *
- * 核心职责：
- * - 消息发送与接收（流式）
- * - 执行模式切换（run / step / advance）
- * - 展示级别切换（compact / detail / verbose）
- * - 命令解析
- * - StreamEvent → TimelineEntry 转换
+ * Core responsibilities:
+ * - Message sending and receiving (streaming)
+ * - Execution mode switching (run / step / advance)
+ * - Display level switching (compact / detail / verbose)
+ * - Command parsing
+ * - StreamEvent → TimelineEntry conversion
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -20,16 +20,16 @@ import {
 import type { TimelineEntry, DetailLevel } from '../types/timeline.js';
 
 /**
- * 执行模式
+ * Execution mode
  *
- * - run: 全量执行（runStream），自动循环到完成
- * - step: 单步执行（stepStream），一个 ReAct 周期
- * - advance: 微步执行（advanceStream），一次 phase 推进
+ * - run: full execution (runStream), automatically loops until completion
+ * - step: single-step execution (stepStream), one ReAct cycle
+ * - advance: micro-step execution (advanceStream), one phase advancement
  */
 export type ExecutionMode = 'run' | 'step' | 'advance';
 
 /**
- * 解析后的命令
+ * Parsed command
  */
 export interface ParsedCommand {
   type:
@@ -49,10 +49,10 @@ export interface ParsedCommand {
 }
 
 /**
- * 解析用户输入为命令
+ * Parse user input into a command
  *
- * @param input - 原始输入文本
- * @returns 解析后的命令对象
+ * @param input - Raw input text
+ * @returns Parsed command object
  */
 export function parseCommand(input: string): ParsedCommand {
   const trimmed = input.trim();
@@ -90,47 +90,47 @@ export function parseCommand(input: string): ParsedCommand {
 }
 
 /**
- * useAgent hook 返回值
+ * Return value of the useAgent hook
  */
 export interface UseAgentReturn {
-  /** 时间线条目列表 */
+  /** List of timeline entries */
   entries: TimelineEntry[];
-  /** 当前执行模式 */
+  /** Current execution mode */
   mode: ExecutionMode;
-  /** 展示级别 */
+  /** Display level */
   detailLevel: DetailLevel;
-  /** agent 是否正在运行 */
+  /** Whether the agent is currently running */
   isRunning: boolean;
-  /** agent 是否暂停，等待用户输入继续 */
+  /** Whether the agent is paused, waiting for user input to continue */
   isPaused: boolean;
-  /** 当前 AgentState */
+  /** Current AgentState */
   state: AgentState | null;
-  /** 发送消息或命令 */
+  /** Send a message or command */
   sendMessage: (input: string) => Promise<void>;
-  /** 设置执行模式 */
+  /** Set the execution mode */
   setMode: (mode: ExecutionMode) => void;
-  /** 设置展示级别 */
+  /** Set the display level */
   setDetailLevel: (level: DetailLevel) => void;
-  /** 清空条目 */
+  /** Clear all entries */
   clearEntries: () => void;
-  /** 中断正在运行的 agent（优雅终止） */
+  /** Abort the running agent (graceful termination) */
   abort: () => void;
 }
 
-/** 生成唯一 ID */
+/** Generate a unique ID */
 function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 /**
- * Agent 交互 hook
+ * Agent interaction hook
  *
- * 管理 AgentRunner 的对话流程。支持三种执行模式和三种展示级别。
+ * Manages the conversation flow of AgentRunner. Supports three execution modes and three display levels.
  *
- * @param runner - AgentRunner 实例（可以为 null）
- * @param initialState - 初始 AgentState（可以为 null，自动创建）
- * @param skillProvider - Skill 提供者（可选，用于 /skill 命令）
- * @returns Agent 交互状态和操作方法
+ * @param runner - AgentRunner instance (can be null)
+ * @param initialState - Initial AgentState (can be null, auto-created)
+ * @param skillProvider - Skill provider (optional, used for the /skill command)
+ * @returns Agent interaction state and operation methods
  */
 export function useAgent(
   runner: AgentRunner | null,
@@ -144,12 +144,12 @@ export function useAgent(
   const [isPaused, setIsPaused] = useState(false);
   const [state, setState] = useState<AgentState | null>(initialState);
 
-  // 暂停/继续机制（step/advance 模式）
+  // Pause/resume mechanism (step/advance mode)
   const continueFnRef = useRef<(() => void) | null>(null);
-  // AbortController 用于优雅中断
+  // AbortController for graceful interruption
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  /** 解除暂停，让 step/advance 继续 */
+  /** Resume from pause to let step/advance continue */
   const resumeExecution = useCallback(() => {
     if (continueFnRef.current) {
       continueFnRef.current();
@@ -157,38 +157,38 @@ export function useAgent(
     }
   }, []);
 
-  /** 清空所有条目 */
+  /** Clear all entries */
   const clearEntries = useCallback(() => {
     setEntries([]);
   }, []);
 
-  /** 添加系统条目 */
+  /** Add a system entry */
   const addSystemEntry = useCallback((content: string) => {
     setEntries((prev) => [...prev, { type: 'system', id: uid(), content, timestamp: Date.now() }]);
   }, []);
 
-  /** 添加错误条目 */
+  /** Add an error entry */
   const addErrorEntry = useCallback((message: string) => {
     setEntries((prev) => [...prev, { type: 'error', id: uid(), message, timestamp: Date.now() }]);
   }, []);
 
   /**
-   * 发送消息或执行命令
+   * Send a message or execute a command
    *
-   * @param input - 用户输入
+   * @param input - User input
    */
   const sendMessage = useCallback(
     async (input: string) => {
       const command = parseCommand(input);
 
-      // 暂停状态下，空输入 = 继续
+      // When paused, empty input = continue
       if (isPaused && command.type === 'message' && !input.trim()) {
         setIsPaused(false);
         resumeExecution();
         return;
       }
 
-      // 处理命令
+      // Process commands
       switch (command.type) {
         case 'mode-run':
           setMode('run');
@@ -259,7 +259,7 @@ export function useAgent(
               addSystemEntry('Agent not ready, check configuration');
               return;
             }
-            // 注入 skill 到 state
+            // Inject skill into state
             const currentState =
               state ??
               createAgentState({
@@ -267,14 +267,14 @@ export function useAgent(
                 instructions: 'You are a helpful assistant.',
                 tools: [],
               });
-            const skillState = loadSkill(currentState, skillName, instructions);
-            setState(skillState);
+            const skillInjectedState = loadSkill(currentState, skillName, instructions);
+            setState(skillInjectedState);
             addSystemEntry(`Skill '${skillName}' activated`);
 
-            // 用户消息：有 skillMessage 用它，否则生成默认消息
+            // User message: use skillMessage if available, otherwise generate a default message
             const userMsg = command.skillMessage || `Execute skill: ${skillName}`;
 
-            // 添加用户消息条目
+            // Add user message entry
             setEntries((prev) => [
               ...prev,
               { type: 'user', id: uid(), content: userMsg, timestamp: Date.now() },
@@ -287,11 +287,11 @@ export function useAgent(
 
             try {
               if (mode === 'run') {
-                await executeRun(runner, skillState, userMsg, setEntries, setState, signal);
+                await executeRun(runner, skillInjectedState, userMsg, setEntries, setState, signal);
               } else if (mode === 'step') {
                 await executeStep(
                   runner,
-                  skillState,
+                  skillInjectedState,
                   userMsg,
                   setEntries,
                   setState,
@@ -305,7 +305,7 @@ export function useAgent(
               } else {
                 await executeAdvance(
                   runner,
-                  skillState,
+                  skillInjectedState,
                   userMsg,
                   setEntries,
                   setState,
@@ -343,7 +343,7 @@ export function useAgent(
         return;
       }
 
-      // 确保有有效的 state（无则自动创建）
+      // Ensure a valid state exists (auto-create if none)
       const currentState =
         state ??
         createAgentState({
@@ -352,14 +352,14 @@ export function useAgent(
           tools: [],
         });
 
-      // 添加用户消息条目
+      // Add user message entry
       setEntries((prev) => [
         ...prev,
         { type: 'user', id: uid(), content: input.trim(), timestamp: Date.now() },
       ]);
       setIsRunning(true);
 
-      // 创建 AbortController
+      // Create AbortController
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
       const signal = abortController.signal;
@@ -418,13 +418,13 @@ export function useAgent(
     ]
   );
 
-  /** 中断正在运行的 agent */
+  /** Abort the running agent */
   const abort = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    // 如果在暂停状态，也要解除暂停
+    // If paused, also resume
     if (continueFnRef.current) {
       continueFnRef.current();
       continueFnRef.current = null;
@@ -447,27 +447,27 @@ export function useAgent(
 }
 
 // ──────────────────────────────────────────────────────────────
-// 以下为流式执行函数，统一产出 TimelineEntry
+// Streaming execution functions below, uniformly producing TimelineEntry
 // ──────────────────────────────────────────────────────────────
 
 type SetEntries = React.Dispatch<React.SetStateAction<TimelineEntry[]>>;
 type SetState = React.Dispatch<React.SetStateAction<AgentState | null>>;
 
 /**
- * 节流渲染间隔（ms）
+ * Throttled render interval (ms)
  *
- * LLM token 以 3-5 个/波的节奏到达（间隔 ~50ms），
- * 但每波内 1-5ms 就触发 3-5 次 setEntries，
- * React 18 自动批处理会将它们合并成一次渲染。
- * 用 setTimeout 节流到 ~50ms 一次，确保 Ink 每帧都能渲染。
+ * LLM tokens arrive in bursts of 3-5 at a rate of ~50ms intervals,
+ * but within each burst setEntries is triggered 3-5 times in 1-5ms.
+ * React 18 automatic batching merges them into a single render.
+ * Using setTimeout to throttle to ~50ms ensures Ink renders every frame.
  */
 const RENDER_INTERVAL = 50;
 
 /**
- * Run 模式流式执行
+ * Run mode streaming execution
  *
- * 使用 runStream 进行完整 ReAct 循环（含工具调用）。
- * 手动 addUserMessage 后启动流。
+ * Uses runStream for a full ReAct loop (including tool calls).
+ * Stream starts after manually adding the user message.
  */
 async function executeRun(
   runner: AgentRunner,
@@ -479,13 +479,13 @@ async function executeRun(
 ): Promise<void> {
   const stateWithMsg = addUserMessage(currentState, userInput);
 
-  // 创建初始 assistant 条目
+  // Create initial assistant entry
   let assistantId = uid();
   let accumulatedContent = '';
-  // 节流渲染：避免每个 token 都触发 setEntries
+  // Throttle rendering: avoid triggering setEntries for every token
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** 刷新 assistant 内容到 UI */
+  /** Flush assistant content to the UI */
   const flushContent = () => {
     if (renderTimer) {
       clearTimeout(renderTimer);
@@ -511,7 +511,7 @@ async function executeRun(
       const event = iterResult.value;
 
       switch (event.type) {
-        // token 流式输出（节流）
+        // Token streaming output (throttled)
         case 'token': {
           if (event.token) {
             accumulatedContent += event.token;
@@ -525,17 +525,17 @@ async function executeRun(
           break;
         }
 
-        // 工具调用开始
+        // Tool call started
         case 'tool:start': {
-          // 先 flush 剩余 token，再切换到 tool 条目
+          // Flush remaining tokens first, then switch to tool entry
           flushContent();
-          // 停止当前 assistant 流式
+          // Stop current assistant streaming
           setEntries((prev) =>
             prev.map((e) =>
               e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
             )
           );
-          // 添加 tool 条目
+          // Add tool entry
           const toolId = uid();
           setEntries((prev) => [
             ...prev,
@@ -551,11 +551,11 @@ async function executeRun(
           break;
         }
 
-        // 工具调用结束
+        // Tool call ended
         case 'tool:end': {
-          // 更新最近的 running tool 条目，添加新 assistant 条目用于下一轮
+          // Update the most recent running tool entry, add a new assistant entry for the next round
           setEntries((prev) => {
-            // 从后往前找最近的 isRunning tool
+            // Find the most recent isRunning tool from the end backwards
             let idx = -1;
             for (let i = prev.length - 1; i >= 0; i--) {
               const entry = prev[i];
@@ -575,7 +575,7 @@ async function executeRun(
             }
             return prev;
           });
-          // 新 assistant 条目（下一轮 LLM 输出）
+          // New assistant entry (for the next round of LLM output)
           assistantId = uid();
           accumulatedContent = '';
           setEntries((prev) => [
@@ -591,7 +591,7 @@ async function executeRun(
           break;
         }
 
-        // 步骤边界
+        // Step boundary
         case 'step:start': {
           setEntries((prev) => [
             ...prev,
@@ -614,7 +614,7 @@ async function executeRun(
           break;
         }
 
-        // 上下文压缩
+        // Context compression
         case 'compressing': {
           setEntries((prev) => [
             ...prev,
@@ -638,7 +638,7 @@ async function executeRun(
           break;
         }
 
-        // Phase 变化
+        // Phase change
         case 'phase-change': {
           setEntries((prev) => [
             ...prev,
@@ -653,7 +653,7 @@ async function executeRun(
           break;
         }
 
-        // Skill 加载
+        // Skill loading
         case 'skill:loading': {
           setEntries((prev) => [
             ...prev,
@@ -714,7 +714,7 @@ async function executeRun(
           break;
         }
 
-        // 错误
+        // Error
         case 'error': {
           const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
           setEntries((prev) => [
@@ -726,7 +726,7 @@ async function executeRun(
           break;
         }
 
-        // complete 事件 — 流结束
+        // complete event — stream ended
         case 'complete': {
           // handled after the loop
           break;
@@ -736,11 +736,11 @@ async function executeRun(
       iterResult = await gen.next();
     }
 
-    // 最终结果
+    // Final result
     if (iterResult.done && iterResult.value) {
       const { state: finalState, result: runResult } = iterResult.value;
       setState(finalState);
-      // flush 残留 token
+      // Flush residual tokens
       flushContent();
 
       if (runResult.type === 'success') {
@@ -782,9 +782,9 @@ async function executeRun(
 }
 
 /**
- * Step 模式流式执行
+ * Step mode streaming execution
  *
- * 使用 stepStream 执行一个 ReAct 周期。完成后暂停等待用户按 Enter 继续。
+ * Uses stepStream to execute one ReAct cycle. Pauses after completion, waiting for the user to press Enter to continue.
  */
 async function executeStep(
   runner: AgentRunner,
@@ -798,7 +798,7 @@ async function executeStep(
   let runningState = currentState;
   let continueLoop = true;
 
-  // 首次添加用户消息到 state
+  // Add user message to state for the first time
   if (userInput) {
     runningState = addUserMessage(runningState, userInput);
   }
@@ -810,7 +810,7 @@ async function executeStep(
     let accumulatedContent = '';
     let renderTimer: ReturnType<typeof setTimeout> | null = null;
 
-    /** 刷新 assistant 内容到 UI */
+    /** Flush assistant content to the UI */
     const flushContent = () => {
       if (renderTimer) {
         clearTimeout(renderTimer);
@@ -1005,13 +1005,13 @@ async function executeStep(
         iterResult = await gen.next();
       }
 
-      // Step 完成
+      // Step completed
       if (iterResult.done && iterResult.value) {
         const { state: newState, result: stepResult } = iterResult.value;
         runningState = newState;
         setState(newState);
 
-        // flush 残留 token
+        // Flush residual tokens
         flushContent();
 
         if (stepResult.type === 'done') {
@@ -1026,7 +1026,7 @@ async function executeStep(
           return;
         }
 
-        // Step 完成但需要更多步骤 — 暂停等待
+        // Step completed but more steps needed — pause and wait
         setEntries((prev) => [
           ...prev.map((e) =>
             e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
@@ -1059,9 +1059,9 @@ async function executeStep(
 }
 
 /**
- * Advance 模式流式执行
+ * Advance mode streaming execution
  *
- * 使用 advanceStream 执行一次 phase 推进。每次 phase 变化后暂停等待。
+ * Uses advanceStream to execute one phase advancement. Pauses after each phase change, waiting to continue.
  */
 async function executeAdvance(
   runner: AgentRunner,
@@ -1083,7 +1083,7 @@ async function executeAdvance(
   let accumulatedContent = '';
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** 刷新 assistant 内容到 UI */
+  /** Flush assistant content to the UI */
   const flushContent = () => {
     if (renderTimer) {
       clearTimeout(renderTimer);
@@ -1182,11 +1182,11 @@ async function executeAdvance(
             },
           ]);
 
-          // phase 变化后暂停
+          // Pause after phase change
           await pauseFn();
 
-          // 恢复后如果需要继续输出 token，创建新 assistant 条目
-          // （仅当新 phase 是 calling-llm 或 streaming 时需要）
+          // After resuming, if tokens need to continue outputting, create a new assistant entry
+          // (only needed when the new phase is calling-llm or streaming)
           if (event.to.type === 'calling-llm') {
             assistantId = uid();
             accumulatedContent = '';
@@ -1279,11 +1279,11 @@ async function executeAdvance(
       iterResult = await gen.next();
     }
 
-    // 最终结果
+    // Final result
     if (iterResult.done && iterResult.value) {
       const { state: newState } = iterResult.value;
       setState(newState);
-      // flush 残留 token
+      // Flush residual tokens
       flushContent();
       setEntries((prev) =>
         prev.map((e) =>
