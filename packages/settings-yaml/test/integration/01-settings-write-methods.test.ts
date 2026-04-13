@@ -32,10 +32,10 @@ describe('User Story: CLI Configuration Management', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  // 场景1：设置并持久化单个值
+  // Scenario 1: Set and persist a single value
   describe('Scenario 1: Set and persist a single value', () => {
     it('should persist a single value via set + save and survive reload', async () => {
-      // Given: 使用默认配置初始化 Settings
+      // Given: Initialize Settings with default config
       const configPath = path.join(tempDir, 'config.yaml');
       const defaultYaml = `
 llm:
@@ -46,11 +46,11 @@ llm:
       const settings = new Settings(configPath);
       await settings.initialize({ defaultYaml });
 
-      // When: 使用 set() 修改值，然后用 save() 持久化
+      // When: Update value with set(), then persist with save()
       settings.set('llm.apiKey', 'sk-new-key-123');
       await settings.save();
 
-      // Then: 创建新实例从同一文件加载，验证新值已持久化
+      // Then: Create new instance from same file, verify value persisted
       const reloaded = new Settings(configPath);
       await reloaded.initialize({ defaultYaml });
       const config = reloaded.getValues();
@@ -60,10 +60,10 @@ llm:
     });
   });
 
-  // 场景2：设置嵌套值
+  // Scenario 2: Set nested values
   describe('Scenario 2: Set nested values', () => {
     it('should update a nested value without affecting siblings', async () => {
-      // Given: 初始化带有嵌套配置的 Settings
+      // Given: Initialize Settings with nested config
       const configPath = path.join(tempDir, 'config.yaml');
       const defaultYaml = `
 llm:
@@ -74,16 +74,16 @@ llm:
       const settings = new Settings(configPath);
       await settings.initialize({ defaultYaml });
 
-      // When: 更新嵌套路径的某个值
+      // When: Update a nested path value
       settings.set('llm.apiKey', 'sk-updated');
 
-      // Then: 其他同级值不变
+      // Then: Sibling values remain unchanged
       const config = settings.getValues();
       expect(config.llm.apiKey).toBe('sk-updated');
       expect(config.llm.provider).toBe('openai');
       expect(config.llm.model).toBe('gpt-3.5');
 
-      // And: save 后重新加载，所有值都正确
+      // And: After save and reload, all values are correct
       await settings.save();
       const reloaded = new Settings(configPath);
       await reloaded.initialize({ defaultYaml });
@@ -94,25 +94,25 @@ llm:
     });
   });
 
-  // 场景3：set() 创建中间对象
+  // Scenario 3: set() creates intermediate objects
   describe('Scenario 3: Set creates intermediate objects', () => {
     it('should create intermediate objects when setting a deep path', async () => {
-      // Given: 使用简单配置初始化
+      // Given: Initialize with simple config
       const configPath = path.join(tempDir, 'config.yaml');
       const defaultYaml = `name: myapp`;
       const settings = new Settings(configPath);
       await settings.initialize({ defaultYaml });
 
-      // When: 设置一个深层嵌套路径（中间对象不存在）
+      // When: Set a deep nested path (intermediate objects don't exist)
       settings.set('deep.nested.key', 'value');
 
-      // Then: 中间对象被自动创建
+      // Then: Intermediate objects are auto-created
       const config = settings.getValues();
       expect((config as Record<string, unknown>).deep).toEqual({
         nested: { key: 'value' },
       });
 
-      // And: save 后重新加载，值仍然正确
+      // And: After save and reload, value is still correct
       await settings.save();
       const reloaded = new Settings(configPath);
       await reloaded.initialize({ defaultYaml });
@@ -123,10 +123,10 @@ llm:
     });
   });
 
-  // 场景4：has() 检查键是否存在
+  // Scenario 4: has() checks key existence
   describe('Scenario 4: has() checks existence', () => {
     it('should return true for existing keys and false for non-existent keys', async () => {
-      // Given: 初始化带有配置的 Settings
+      // Given: Initialize Settings with config
       const configPath = path.join(tempDir, 'config.yaml');
       const defaultYaml = `
 llm:
@@ -138,24 +138,24 @@ debug: true
       const settings = new Settings(configPath);
       await settings.initialize({ defaultYaml });
 
-      // Then: 顶层键存在时返回 true
+      // Then: Returns true for top-level existing keys
       expect(settings.has('debug')).toBe(true);
       expect(settings.has('llm')).toBe(true);
 
-      // And: 嵌套键存在时返回 true
+      // And: Returns true for nested existing keys
       expect(settings.has('llm.provider')).toBe(true);
       expect(settings.has('llm.apiKey')).toBe(true);
       expect(settings.has('llm.model')).toBe(true);
 
-      // And: 不存在的键返回 false
+      // And: Returns false for non-existent keys
       expect(settings.has('nonexistent')).toBe(false);
       expect(settings.has('llm.nonexistent')).toBe(false);
       expect(settings.has('llm.provider.deep')).toBe(false);
 
-      // When: 通过 set() 添加新键
+      // When: Add new key via set()
       settings.set('llm.temperature', 0.7);
 
-      // Then: has() 对新键返回 true
+      // Then: has() returns true for the new key
       expect(settings.has('llm.temperature')).toBe(true);
     });
 
@@ -163,15 +163,15 @@ debug: true
       const configPath = path.join(tempDir, 'config.yaml');
       const settings = new Settings(configPath);
 
-      // 未初始化时调用 has() 应该抛出错误
+      // Calling has() before initialize() should throw error
       expect(() => settings.has('any.key')).toThrow('Settings not initialized');
     });
   });
 
-  // 场景5：toObject() 返回可变副本
+  // Scenario 5: toObject() returns mutable copy
   describe('Scenario 5: toObject() returns mutable copy', () => {
     it('should return a mutable deep copy that does not affect internal state', async () => {
-      // Given: 初始化 Settings
+      // Given: Initialize Settings
       const configPath = path.join(tempDir, 'config.yaml');
       const defaultYaml = `
 server:
@@ -181,33 +181,33 @@ server:
       const settings = new Settings(configPath);
       await settings.initialize({ defaultYaml });
 
-      // When: 调用 toObject() 获取副本
+      // When: Call toObject() to get a copy
       const copy = settings.toObject();
 
-      // Then: 副本值与 getValues() 一致
+      // Then: Copy values match getValues()
       const values = settings.getValues();
       expect(copy.server.port).toBe(values.server.port);
       expect(copy.server.host).toBe(values.server.host);
 
-      // When: 修改返回的对象
+      // When: Modify returned object
       (copy as Record<string, unknown>).modified = true;
       (copy.server as Record<string, unknown>).port = 9999;
 
-      // Then: getValues() 不受影响
+      // Then: getValues() is unaffected
       const valuesAfter = settings.getValues();
       expect(valuesAfter.server.port).toBe(3000);
       expect((valuesAfter as Record<string, unknown>).modified).toBeUndefined();
 
-      // And: toObject() 返回的对象不是冻结的
+      // And: Object returned by toObject() is not frozen
       const anotherCopy = settings.toObject();
       expect(Object.isFrozen(anotherCopy)).toBe(false);
     });
   });
 
-  // 场景6：多次 set() 后单次 save()
+  // Scenario 6: Multiple set() calls then single save()
   describe('Scenario 6: Multiple set() calls then single save()', () => {
     it('should batch multiple set() calls and persist all with one save()', async () => {
-      // Given: 使用默认配置初始化
+      // Given: Initialize with default config
       const configPath = path.join(tempDir, 'config.yaml');
       const defaultYaml = `
 llm:
@@ -220,21 +220,21 @@ server:
       const settings = new Settings(configPath);
       await settings.initialize({ defaultYaml });
 
-      // When: 多次 set() 修改不同值
+      // When: Multiple set() calls modify different values
       settings.set('llm.apiKey', 'sk-batch-1');
       settings.set('llm.model', 'gpt-4o');
       settings.set('server.port', 8080);
 
-      // Then: 内存中的值都已更新
+      // Then: In-memory values are all updated
       const inMemory = settings.getValues();
       expect(inMemory.llm.apiKey).toBe('sk-batch-1');
       expect(inMemory.llm.model).toBe('gpt-4o');
       expect(inMemory.server.port).toBe(8080);
 
-      // When: 单次 save() 持久化
+      // When: Single save() persists all changes
       await settings.save();
 
-      // Then: 从新实例重新加载，所有值都已持久化
+      // Then: Reload from new instance, all values persisted
       const reloaded = new Settings(configPath);
       await reloaded.initialize({ defaultYaml });
       const reloadedConfig = reloaded.getValues();
@@ -244,34 +244,34 @@ server:
     });
   });
 
-  // 场景7：save() 创建父目录
+  // Scenario 7: save() creates parent directories
   describe('Scenario 7: Save creates parent directories', () => {
     it('should create non-existent parent directories when saving', async () => {
-      // Given: 路径包含不存在的父目录
+      // Given: Path contains non-existent parent directories
       const configPath = path.join(tempDir, 'deep', 'nested', 'dir', 'config.yaml');
       const defaultYaml = `name: test`;
       const settings = new Settings(configPath);
       await settings.initialize({ defaultYaml });
 
-      // When: set() 修改值，save() 保存
+      // When: set() modifies value, save() persists
       settings.set('version', '2.0.0');
       await settings.save();
 
-      // Then: 文件在正确路径被创建
+      // Then: File is created at the correct path
       const content = await fs.readFile(configPath, 'utf-8');
       expect(content).toContain('version: 2.0.0');
 
-      // And: 文件可以被新实例正确加载
+      // And: File can be correctly loaded by new instance
       const reloaded = new Settings(configPath);
       await reloaded.initialize({ defaultYaml });
       expect(reloaded.getValues().version).toBe('2.0.0');
     });
   });
 
-  // 场景8：操作之间值保持冻结
+  // Scenario 8: Values remain frozen between operations
   describe('Scenario 8: Values remain frozen between operations', () => {
     it('should return frozen objects from getValues() after each operation', async () => {
-      // Given: 初始化 Settings
+      // Given: Initialize Settings
       const configPath = path.join(tempDir, 'config.yaml');
       const defaultYaml = `
 llm:
@@ -281,17 +281,17 @@ llm:
       const settings = new Settings(configPath);
       await settings.initialize({ defaultYaml });
 
-      // Then: set() 后 getValues() 返回冻结对象
+      // Then: getValues() returns frozen object after set()
       settings.set('llm.model', 'gpt-4');
       const afterSet = settings.getValues();
       expect(Object.isFrozen(afterSet)).toBe(true);
 
-      // And: save() 后 getValues() 返回冻结对象
+      // And: getValues() returns frozen object after save()
       await settings.save();
       const afterSave = settings.getValues();
       expect(Object.isFrozen(afterSave)).toBe(true);
 
-      // And: toObject() 后 getValues() 仍然返回冻结对象
+      // And: getValues() still returns frozen object after toObject()
       settings.toObject();
       const afterToObject = settings.getValues();
       expect(Object.isFrozen(afterToObject)).toBe(true);
