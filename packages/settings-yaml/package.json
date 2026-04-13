@@ -1,6 +1,6 @@
 {
   "name": "@agentskillmania/settings-yaml",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "A robust configuration management library for loading, merging, and managing YAML-based settings with deep merge support, default value fallback, and runtime override capabilities.",
   "author": {
