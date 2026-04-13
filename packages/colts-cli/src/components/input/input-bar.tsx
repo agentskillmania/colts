@@ -39,7 +39,6 @@ export function InputBar({ onSubmit, mode, isRunning, isPaused }: InputBarProps)
   const [inputKey, setInputKey] = useState(0);
 
   const handleSubmit = (value: string) => {
-    // When paused, empty input means continue
     if (isPaused && !value.trim()) {
       onSubmit('');
       setInputKey((k) => k + 1);
@@ -47,7 +46,6 @@ export function InputBar({ onSubmit, mode, isRunning, isPaused }: InputBarProps)
     }
     if (value.trim() && !isRunning) {
       onSubmit(value.trim());
-      // Remount TextInput to clear content
       setInputKey((k) => k + 1);
     }
   };
@@ -60,12 +58,10 @@ export function InputBar({ onSubmit, mode, isRunning, isPaused }: InputBarProps)
       <Text color={theme.info}>{'>'} </Text>
       {isRunning && !isPaused ? (
         <Spinner label="Agent is thinking..." />
-      ) : isPaused ? (
-        <Text color={theme.warning}>Press Enter to continue...</Text>
       ) : (
         <TextInput
           key={inputKey}
-          placeholder="Type your message..."
+          placeholder={isPaused ? 'Press Enter to continue...' : 'Type your message...'}
           onSubmit={handleSubmit}
         />
       )}
