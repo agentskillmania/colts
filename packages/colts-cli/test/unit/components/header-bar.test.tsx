@@ -1,5 +1,5 @@
 /**
- * @fileoverview HeaderBar 组件单元测试
+ * @fileoverview HeaderBar component unit tests
  */
 
 import React from 'react';
@@ -8,34 +8,34 @@ import { render } from 'ink-testing-library';
 import { HeaderBar } from '../../../src/components/layout/header-bar.js';
 
 describe('HeaderBar', () => {
-  it('应该显示版本和模型名', () => {
+  it('should display version and model name', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4o" status="idle" />);
     const frame = lastFrame();
     expect(frame).toContain('colts-cli v0.1.0');
     expect(frame).toContain('gpt-4o');
   });
 
-  it('空闲时应该显示 Ready', () => {
+  it('should display Ready when idle', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="idle" />);
     expect(lastFrame()).toContain('READY');
   });
 
-  it('运行中应该显示 Running', () => {
+  it('should display Running while running', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="running" />);
     expect(lastFrame()).toContain('Running');
   });
 
-  it('出错时应该显示 Error', () => {
+  it('should display Error when errored', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="error" />);
     expect(lastFrame()).toContain('ERROR');
   });
 
-  it('空闲时应该显示 exit 提示', () => {
+  it('should show exit hint when idle', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="idle" />);
     expect(lastFrame()).toContain('exit');
   });
 
-  it('运行中应该显示 interrupt 提示', () => {
+  it('should show interrupt hint while running', () => {
     const { lastFrame } = render(<HeaderBar model="gpt-4" status="running" />);
     expect(lastFrame()).toContain('interrupt');
   });

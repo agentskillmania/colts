@@ -1,5 +1,5 @@
 /**
- * @fileoverview TimelineEntry 组件单元测试 — 覆盖所有 13 种条目类型渲染
+ * @fileoverview TimelineEntry component unit tests — covering all 13 entry type renderings
  */
 
 import React from 'react';
@@ -8,37 +8,37 @@ import { render } from 'ink-testing-library';
 import { TimelineEntry } from '../../../src/components/timeline/timeline-entry.js';
 import type { TimelineEntry as TimelineEntryType } from '../../../src/types/timeline.js';
 
-/** 工厂：创建 user 条目 */
+/** Factory: create a user entry */
 function makeUser(overrides?: Partial<Extract<TimelineEntryType, { type: 'user' }>>): TimelineEntryType {
   return { type: 'user', id: 'u1', content: 'Hello', timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 assistant 条目 */
+/** Factory: create an assistant entry */
 function makeAssistant(overrides?: Partial<Extract<TimelineEntryType, { type: 'assistant' }>>): TimelineEntryType {
   return { type: 'assistant', id: 'a1', content: 'Hi there', timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 tool 条目 */
+/** Factory: create a tool entry */
 function makeTool(overrides?: Partial<Extract<TimelineEntryType, { type: 'tool' }>>): TimelineEntryType {
   return { type: 'tool', id: 't1', tool: 'read_file', timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 phase 条目 */
+/** Factory: create a phase entry */
 function makePhase(overrides?: Partial<Extract<TimelineEntryType, { type: 'phase' }>>): TimelineEntryType {
   return { type: 'phase', id: 'p1', from: 'idle', to: 'preparing', timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 thought 条目 */
+/** Factory: create a thought entry */
 function makeThought(overrides?: Partial<Extract<TimelineEntryType, { type: 'thought' }>>): TimelineEntryType {
   return { type: 'thought', id: 'th1', content: 'need to check', timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 step-start 条目 */
+/** Factory: create a step-start entry */
 function makeStepStart(overrides?: Partial<Extract<TimelineEntryType, { type: 'step-start' }>>): TimelineEntryType {
   return { type: 'step-start', id: 'ss1', step: 0, timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 step-end 条目 */
+/** Factory: create a step-end entry */
 function makeStepEnd(
   resultType: 'done' | 'continue' | 'error' = 'done',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'step-end' }>>
@@ -52,7 +52,7 @@ function makeStepEnd(
   return { type: 'step-end', id: 'se1', step: 0, result, timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 run-complete 条目 */
+/** Factory: create a run-complete entry */
 function makeRunComplete(
   resultType: 'success' | 'max_steps' | 'error' = 'success',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'run-complete' }>>
@@ -66,7 +66,7 @@ function makeRunComplete(
   return { type: 'run-complete', id: 'rc1', result, timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 compress 条目 */
+/** Factory: create a compress entry */
 function makeCompress(
   status: 'compressing' | 'compressed' = 'compressing',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'compress' }>>
@@ -74,7 +74,7 @@ function makeCompress(
   return { type: 'compress', id: 'c1', status, timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 skill 条目 */
+/** Factory: create a skill entry */
 function makeSkill(
   status: 'loading' | 'loaded' = 'loading',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'skill' }>>
@@ -82,7 +82,7 @@ function makeSkill(
   return { type: 'skill', id: 'sk1', name: 'my-skill', status, timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 subagent 条目 */
+/** Factory: create a subagent entry */
 function makeSubagent(
   status: 'start' | 'end' = 'start',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'subagent' }>>
@@ -90,12 +90,12 @@ function makeSubagent(
   return { type: 'subagent', id: 'sa1', name: 'researcher', status, timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 system 条目 */
+/** Factory: create a system entry */
 function makeSystem(overrides?: Partial<Extract<TimelineEntryType, { type: 'system' }>>): TimelineEntryType {
   return { type: 'system', id: 'sy1', content: 'Switched to RUN mode', timestamp: 1000, ...overrides };
 }
 
-/** 工厂：创建 error 条目 */
+/** Factory: create an error entry */
 function makeError(overrides?: Partial<Extract<TimelineEntryType, { type: 'error' }>>): TimelineEntryType {
   return { type: 'error', id: 'e1', message: 'something broke', timestamp: 1000, ...overrides };
 }
@@ -105,7 +105,7 @@ function makeError(overrides?: Partial<Extract<TimelineEntryType, { type: 'error
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — user', () => {
-  it('渲染用户消息内容', () => {
+  it('renders user message content', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeUser({ content: 'Read main.ts' })} />);
     const frame = lastFrame();
     expect(frame).toContain('You:');
@@ -118,20 +118,20 @@ describe('TimelineEntry — user', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — assistant', () => {
-  it('渲染助手回复内容（非流式）', () => {
+  it('renders assistant reply content (non-streaming)', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeAssistant({ content: 'Hello!', isStreaming: false })} />);
     expect(lastFrame()).toContain('Hello!');
     expect(lastFrame()).toContain('Agent:');
-    // 非流式不应有光标
+    // non-streaming should not have a cursor
     expect(lastFrame()).not.toContain('▌');
   });
 
-  it('流式输出时显示光标', () => {
+  it('shows cursor during streaming output', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeAssistant({ content: 'Hello', isStreaming: true })} />);
     expect(lastFrame()).toContain('▌');
   });
 
-  it('空内容也能渲染', () => {
+  it('renders empty content', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeAssistant({ content: '' })} />);
     expect(lastFrame()).toContain('Agent:');
   });
@@ -142,14 +142,14 @@ describe('TimelineEntry — assistant', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — tool', () => {
-  it('运行中显示工具名和省略号', () => {
+  it('shows tool name and ellipsis while running', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: true })} />);
     const frame = lastFrame();
     expect(frame).toContain('read_file');
     expect(frame).toContain('...');
   });
 
-  it('完成时显示工具名和结果', () => {
+  it('shows tool name and result when completed', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false, result: 'file content here' })} />
     );
@@ -159,7 +159,7 @@ describe('TimelineEntry — tool', () => {
     expect(frame).toContain('file content here');
   });
 
-  it('有参数时显示参数', () => {
+  it('shows args when present', () => {
     const { lastFrame } = render(
       <TimelineEntry
         entry={makeTool({
@@ -173,16 +173,16 @@ describe('TimelineEntry — tool', () => {
     expect(lastFrame()).toContain('path: main.ts');
   });
 
-  it('参数为 undefined 时不显示参数区域', () => {
+  it('does not show arg area when args are undefined', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false, result: 'done' })} />
     );
-    // args 未传，不应包含参数行
+    // args not passed, should not contain arg line
     expect(lastFrame()).toContain('read_file');
     expect(lastFrame()).toContain('→ done');
   });
 
-  it('result 为 undefined 时结果行为空', () => {
+  it('result line is empty when result is undefined', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false })} />
     );
@@ -190,7 +190,7 @@ describe('TimelineEntry — tool', () => {
     expect(lastFrame()).toContain('→');
   });
 
-  it('长结果被截断', () => {
+  it('truncates long results', () => {
     const longResult = 'a'.repeat(200);
     const { lastFrame } = render(
       <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false, result: longResult })} />
@@ -198,7 +198,7 @@ describe('TimelineEntry — tool', () => {
     expect(lastFrame()).toContain('...');
   });
 
-  it('对象参数格式化正确', () => {
+  it('formats object args correctly', () => {
     const { lastFrame } = render(
       <TimelineEntry
         entry={makeTool({
@@ -213,7 +213,7 @@ describe('TimelineEntry — tool', () => {
     expect(lastFrame()).toContain('limit: 10');
   });
 
-  it('非对象参数（字符串）也能处理', () => {
+  it('handles non-object args (string)', () => {
     const { lastFrame } = render(
       <TimelineEntry
         entry={makeTool({
@@ -227,7 +227,7 @@ describe('TimelineEntry — tool', () => {
     expect(lastFrame()).toContain('raw-string-arg');
   });
 
-  it('对象 result 使用 JSON.stringify', () => {
+  it('uses JSON.stringify for object results', () => {
     const { lastFrame } = render(
       <TimelineEntry
         entry={makeTool({
@@ -246,7 +246,7 @@ describe('TimelineEntry — tool', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — phase', () => {
-  it('显示 phase 转换', () => {
+  it('shows phase transition', () => {
     const { lastFrame } = render(<TimelineEntry entry={makePhase({ from: 'idle', to: 'calling-llm' })} />);
     expect(lastFrame()).toContain('idle');
     expect(lastFrame()).toContain('calling-llm');
@@ -259,7 +259,7 @@ describe('TimelineEntry — phase', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — thought', () => {
-  it('显示思考内容', () => {
+  it('shows thought content', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeThought({ content: 'need to check file' })} />);
     expect(lastFrame()).toContain('thought:');
     expect(lastFrame()).toContain('need to check file');
@@ -271,7 +271,7 @@ describe('TimelineEntry — thought', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — step-start', () => {
-  it('显示步骤编号', () => {
+  it('shows step number', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeStepStart({ step: 3 })} />);
     expect(lastFrame()).toContain('Step');
     expect(lastFrame()).toContain('3');
@@ -283,18 +283,18 @@ describe('TimelineEntry — step-start', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — step-end', () => {
-  it('done 结果显示 final 标签', () => {
+  it('shows final label for done result', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeStepEnd('done', { step: 1 })} />);
     expect(lastFrame()).toContain('Step 1');
     expect(lastFrame()).toContain('done (final)');
   });
 
-  it('continue 结果显示 continue 标签', () => {
+  it('shows continue label for continue result', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeStepEnd('continue', { step: 2 })} />);
     expect(lastFrame()).toContain('done (continue)');
   });
 
-  it('error 结果显示 continue 标签（非 done 分支）', () => {
+  it('shows continue label for error result (non-done branch)', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeStepEnd('error', { step: 0 })} />);
     expect(lastFrame()).toContain('done (continue)');
   });
@@ -305,19 +305,19 @@ describe('TimelineEntry — step-end', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — run-complete', () => {
-  it('success 显示步骤数', () => {
+  it('shows step count for success', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeRunComplete('success')} />);
     expect(lastFrame()).toContain('Completed');
     expect(lastFrame()).toContain('3 steps');
   });
 
-  it('max_steps 显示警告', () => {
+  it('shows warning for max_steps', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeRunComplete('max_steps')} />);
     expect(lastFrame()).toContain('Max steps reached');
     expect(lastFrame()).toContain('10');
   });
 
-  it('error 显示错误信息', () => {
+  it('shows error message for error', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeRunComplete('error')} />);
     expect(lastFrame()).toContain('Run error');
     expect(lastFrame()).toContain('crash');
@@ -329,12 +329,12 @@ describe('TimelineEntry — run-complete', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — compress', () => {
-  it('compressing 状态显示压缩中', () => {
+  it('shows compressing status', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeCompress('compressing')} />);
     expect(lastFrame()).toContain('Compressing');
   });
 
-  it('compressed 状态显示移除数量', () => {
+  it('shows removed count for compressed status', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeCompress('compressed', { removedCount: 5 })} />);
     expect(lastFrame()).toContain('Compressed');
     expect(lastFrame()).toContain('5 messages removed');
@@ -346,13 +346,13 @@ describe('TimelineEntry — compress', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — skill', () => {
-  it('loading 状态显示加载中', () => {
+  it('shows loading status', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeSkill('loading', { name: 'code-review' })} />);
     expect(lastFrame()).toContain('Loading skill');
     expect(lastFrame()).toContain('code-review');
   });
 
-  it('loaded 状态显示加载完成和字符数', () => {
+  it('shows loaded status and char count', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeSkill('loaded', { name: 'code-review', tokenCount: 1234 })} />);
     expect(lastFrame()).toContain('Skill loaded');
     expect(lastFrame()).toContain('code-review');
@@ -365,7 +365,7 @@ describe('TimelineEntry — skill', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — subagent', () => {
-  it('start 状态显示任务描述', () => {
+  it('shows task description for start status', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeSubagent('start', { name: 'researcher', task: 'search web' })} />
     );
@@ -374,7 +374,7 @@ describe('TimelineEntry — subagent', () => {
     expect(lastFrame()).toContain('search web');
   });
 
-  it('end 状态显示完成', () => {
+  it('shows done for end status', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeSubagent('end', { name: 'researcher' })} />);
     expect(lastFrame()).toContain('researcher');
     expect(lastFrame()).toContain('Done');
@@ -386,7 +386,7 @@ describe('TimelineEntry — subagent', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — system', () => {
-  it('显示系统消息内容', () => {
+  it('shows system message content', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeSystem({ content: 'Switched to RUN mode' })} />);
     expect(lastFrame()).toContain('Switched to RUN mode');
   });
@@ -397,18 +397,18 @@ describe('TimelineEntry — system', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — error', () => {
-  it('显示错误消息', () => {
+  it('shows error message', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeError({ message: 'API timeout' })} />);
     expect(lastFrame()).toContain('API timeout');
   });
 });
 
 // ──────────────────────────────────────────────────────────────
-// 边界 & 截断
+// Edge cases & truncation
 // ──────────────────────────────────────────────────────────────
 
-describe('TimelineEntry — 工具参数截断', () => {
-  it('长参数值被截断到 60 字符', () => {
+describe('TimelineEntry — tool arg truncation', () => {
+  it('truncates long arg values to 60 chars', () => {
     const longValue = 'x'.repeat(100);
     const { lastFrame } = render(
       <TimelineEntry
@@ -420,11 +420,11 @@ describe('TimelineEntry — 工具参数截断', () => {
         })}
       />
     );
-    // 截断后应包含 ...
+    // should contain ... after truncation
     expect(lastFrame()).toContain('...');
   });
 
-  it('长结果被截断到 80 字符', () => {
+  it('truncates long results to 80 chars', () => {
     const longResult = 'y'.repeat(200);
     const { lastFrame } = render(
       <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false, result: longResult })} />
