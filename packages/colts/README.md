@@ -130,6 +130,31 @@ You are a code review expert...
 
 The `load_skill` tool is automatically registered when a skill provider is configured.
 
+### Nested Skill Calling
+
+Skills can call other skills and return results back to the parent skill:
+
+1. **Top-level skill** uses `load_skill` to switch to a sub-skill
+2. **Sub-skill** executes its task, then uses `return_skill` to return results
+3. **Parent skill** receives the result and continues execution
+
+The Runner automatically manages the skill stack in `state.context.skillState`:
+
+```typescript
+// After load_skill, state.context.skillState looks like:
+{
+  current: 'code-review',
+  stack: [
+    { skillName: 'top-level', loadedAt: 1234567890 }
+  ],
+  loadedInstructions: '...'
+}
+```
+
+This enables composable workflows such as:
+- `planner` → `load_skill('researcher')` → `return_skill(...)` → planner continues
+- `coding` → `load_skill('testing')` → `return_skill(...)` → coding continues
+
 ## Subagent System
 
 Delegate tasks to specialized sub-agents with independent state and tool sets.
