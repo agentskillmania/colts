@@ -1010,12 +1010,12 @@ describe('createDelegateTool', () => {
 
       await tool.execute({ agent: 'restricted', task: 'Do something' });
 
-      // 验证传给 LLM 的 tools 不包含 delegate
+      // Verify tools passed to LLM do not contain delegate
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
       expect(firstCall.tools).toBeDefined();
       const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
-      expect(toolNames).toContain('search'); // 有 search
-      expect(toolNames).not.toContain('delegate'); // 但没有 delegate
+      expect(toolNames).toContain('search'); // has search
+      expect(toolNames).not.toContain('delegate'); // but no delegate
     });
 
     it('sub-agent can have delegate tool when allowDelegation=true', async () => {
@@ -1061,11 +1061,11 @@ describe('createDelegateTool', () => {
 
       await tool.execute({ agent: 'delegator', task: 'Do something' });
 
-      // 验证传给 LLM 的 tools 包含 delegate
+      // Verify tools passed to LLM contain delegate
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
       expect(firstCall.tools).toBeDefined();
       const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
-      expect(toolNames).toContain('delegate'); // 有 delegate
+      expect(toolNames).toContain('delegate'); // has delegate
     });
 
     it('should disallow delegation by default when allowDelegation is not set', async () => {
@@ -1110,11 +1110,11 @@ describe('createDelegateTool', () => {
 
       await tool.execute({ agent: 'default', task: 'Do something' });
 
-      // 验证传给 LLM 的 tools 不包含 delegate
+      // Verify tools passed to LLM do not contain delegate
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
       expect(firstCall.tools).toBeDefined();
       const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
-      expect(toolNames).not.toContain('delegate'); // 默认不允许
+      expect(toolNames).not.toContain('delegate'); // disallowed by default
     });
   });
 
