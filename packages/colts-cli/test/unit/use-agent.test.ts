@@ -60,4 +60,32 @@ describe('parseCommand', () => {
     const result = parseCommand('/ski name');
     expect(result.type).toBe('message');
   });
+
+  it('should parse /show:compact command', () => {
+    const result = parseCommand('/show:compact');
+    expect(result.type).toBe('show-compact');
+    expect(result.raw).toBe('/show:compact');
+  });
+
+  it('should parse /show:detail command', () => {
+    const result = parseCommand('/show:detail');
+    expect(result.type).toBe('show-detail');
+    expect(result.raw).toBe('/show:detail');
+  });
+
+  it('should parse /show:verbose command', () => {
+    const result = parseCommand('/show:verbose');
+    expect(result.type).toBe('show-verbose');
+    expect(result.raw).toBe('/show:verbose');
+  });
+
+  it('should not match /show without subcommand', () => {
+    const result = parseCommand('/show');
+    expect(result.type).toBe('message');
+  });
+
+  it('should not match /show:unknown', () => {
+    const result = parseCommand('/show:unknown');
+    expect(result.type).toBe('message');
+  });
 });

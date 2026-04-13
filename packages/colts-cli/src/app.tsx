@@ -1,5 +1,5 @@
 /**
- * @fileoverview Root component — routes to main UI or configuration setup
+ * @fileoverview 根组件 — 路由到主界面或配置引导
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -7,13 +7,10 @@ import { Box, Text, useApp, useInput } from 'ink';
 import { ThemeProvider } from '@inkjs/ui';
 import { coltsTheme } from './theme/index.js';
 import { HeaderBar } from './components/layout/header-bar.js';
-import { SplitPane } from './components/layout/split-pane.js';
 import { InputBar } from './components/input/input-bar.js';
-import { ChatPanel } from './components/chat/chat-panel.js';
+import { TimelinePanel } from './components/timeline/index.js';
 import { WelcomeScreen } from './components/screens/welcome-screen.js';
-import { EventsPanel } from './components/events/events-panel.js';
 import { useAgent } from './hooks/use-agent.js';
-import { useEvents } from './hooks/use-events.js';
 import { useSession } from './hooks/use-session.js';
 import type { ExecutionMode } from './components/input/mode-badge.js';
 import type { AppConfig } from './config.js';
@@ -24,19 +21,18 @@ import { theme } from './utils/theme.js';
  * App props
  */
 interface AppProps {
-  /** Application configuration */
+  /** 应用配置 */
   config: AppConfig;
-  /** AgentRunner instance (may be null if configuration is invalid) */
+  /** AgentRunner 实例（配置无效时可能为 null） */
   runner: AgentRunner | null;
-  /** Initial AgentState (may be null) */
+  /** 初始 AgentState（可能为 null） */
   initialState?: AgentState | null;
 }
 
 /**
- * Root component
+ * 根组件
  *
- * Routes to MainTUI or configuration setup prompt based on config validity.
- * Wraps the entire app with ThemeProvider for consistent @inkjs/ui component styling.
+ * 根据配置有效性路由到主界面或配置引导。
  */
 export function App({ config, runner, initialState }: AppProps) {
   return (
@@ -51,33 +47,34 @@ export function App({ config, runner, initialState }: AppProps) {
 }
 
 /**
- * Main UI
+ * 主界面
  *
- * Contains HeaderBar + SplitPane (Chat + Events) + InputBar.
- * Uses useAgent for conversation flow and useEvents for the events panel.
+ * 单画布布局：HeaderBar + TimelinePanel + InputBar。
  */
 function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: AgentRunner; initialState: AgentState | null }) {
-  const [eventsVisible, setEventsVisible] = useState(true);
   const { exit } = useApp();
 
-  // Events panel
-  const { events, addEvent, clearEvents } = useEvents();
-
-  // Session persistence
+  // Session 持久化
   const { sessionId, save, restoreLatest, setSessionId } = useSession();
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Agent interaction
-  const { messages, mode, isRunning, isPaused, state, sendMessage, setMode, clearMessages, abort } = useAgent(
-    runner,
-    initialState,
-    undefined,
-    addEvent // 事件转发
-  );
+  // Agent 交互
+  const {
+    entries,
+    mode,
+    detailLevel,
+    isRunning,
+    isPaused,
+    state,
+    sendMessage,
+    setMode,
+    clearEntries,
+    abort,
+  } = useAgent(runner, initialState);
 
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'error'>('idle');
 
-  // Restore most recent session on startup
+  // 启动时恢复最近的 session
   useEffect(() => {
     if (initialState) {
       setSessionId(initialState.id);
@@ -90,10 +87,9 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
     });
   }, []);
 
-  // Auto-save on state changes
+  // state 变化时自动保存
   useEffect(() => {
     if (!state || !isRunning) {
-      // Only save when not running (state changes frequently during execution)
       if (state && state.id !== sessionId) {
         save(state);
       }
@@ -105,26 +101,23 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
     };
   }, [state, isRunning, sessionId, save]);
 
+  // Ctrl+C: 运行中 → 中断，否则退出
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       if (isRunning) {
-        // agent 正在运行时，优雅中断而非退出
         abort();
       } else {
         exit();
       }
     }
-    if (input === 'e' && key.ctrl) {
-      setEventsVisible((v) => !v);
-    }
   });
 
   const handleSubmit = useCallback(
     async (value: string) => {
-      // Allow empty input when paused (user presses Enter to continue)
+      // 暂停时空输入 = 继续
       if (!value.trim() && !isPaused) return;
 
-      // Parse mode switch commands
+      // 模式切换命令在 handleSubmit 中拦截（保持与 InputBar 的联动）
       const { parseCommand } = await import('./hooks/use-agent.js');
       const cmd = parseCommand(value);
 
@@ -135,8 +128,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
       }
 
       if (cmd.type === 'clear') {
-        clearMessages();
-        clearEvents();
+        clearEntries();
         return;
       }
 
@@ -146,32 +138,27 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
       } catch {
         setRunStatus('error');
       } finally {
-        // Check for error messages (last message is an error system message)
         setRunStatus((prev) => {
           if (prev === 'error') return 'error';
           return 'idle';
         });
       }
     },
-    [sendMessage, setMode, clearMessages, clearEvents]
+    [sendMessage, setMode, clearEntries, isPaused]
   );
 
   const model = config.llm?.model ?? 'unknown';
-  const hasMessages = messages.length > 0;
+  const hasEntries = entries.length > 0;
 
   return (
     <Box flexDirection="column" height="100%">
-      <HeaderBar model={model} status={isRunning ? 'running' : runStatus} eventsVisible={eventsVisible} />
-      <Box flexGrow={1}>
-        <SplitPane
-          leftTitle="Chat"
-          rightTitle="Events"
-          rightVisible={eventsVisible}
-          left={hasMessages ? <ChatPanel messages={messages} /> : (
-            <WelcomeScreen agentName={config.agent?.name} model={model} />
-          )}
-          right={<EventsPanel events={events} />}
-        />
+      <HeaderBar model={model} status={isRunning ? 'running' : runStatus} />
+      <Box flexGrow={1} flexDirection="column">
+        {hasEntries ? (
+          <TimelinePanel entries={entries} detailLevel={detailLevel} />
+        ) : (
+          <WelcomeScreen agentName={config.agent?.name} model={model} />
+        )}
       </Box>
       <InputBar onSubmit={handleSubmit} mode={mode} isRunning={isRunning} isPaused={isPaused} />
     </Box>
@@ -179,10 +166,9 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
 }
 
 /**
- * Configuration setup prompt
+ * 配置引导
  *
- * Displayed when configuration is invalid, prompting the user to edit the config file or use the wizard.
- * Step 10 will implement a full SetupWizard to replace this component.
+ * 配置无效时显示，提示用户编辑配置文件。
  */
 function ConfigPrompt({ configPath }: { configPath?: string }) {
   const { exit } = useApp();

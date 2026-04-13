@@ -13,6 +13,7 @@ import { AgentRunner } from '@agentskillmania/colts';
 vi.mock('@agentskillmania/colts', () => ({
   AgentRunner: vi.fn().mockImplementation(() => ({
     chatStream: vi.fn(),
+    runStream: vi.fn(),
     stepStream: vi.fn(),
     advanceStream: vi.fn(),
   })),
@@ -21,6 +22,12 @@ vi.mock('@agentskillmania/colts', () => ({
     config: { name: 'test-agent', instructions: 'Test', tools: [] },
     context: { messages: [], stepCount: 0 },
   }),
+  addUserMessage: vi.fn().mockReturnValue({
+    id: 'test-state-1',
+    config: { name: 'test-agent', instructions: 'Test', tools: [] },
+    context: { messages: [], stepCount: 0 },
+  }),
+  createExecutionState: vi.fn().mockReturnValue({ phase: { type: 'idle' } }),
 }));
 
 describe('App', () => {

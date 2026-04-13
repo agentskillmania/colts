@@ -1,53 +1,18 @@
 /**
- * @fileoverview Unit tests for useAgent streaming logic
+ * @fileoverview useAgent 流式逻辑单元测试
  *
- * Directly test parseCommand + simulated streaming logic, verifying message state update correctness.
+ * 测试 parseCommand + 模拟流式逻辑，验证 TimelineEntry 状态更新正确性。
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type {
-  AgentRunner,
-  AgentState,
-  StreamEvent,
-  StepResult,
-  RunResult,
-} from '@agentskillmania/colts';
+import type { AgentState, StreamEvent } from '@agentskillmania/colts';
 import { parseCommand } from '../../src/hooks/use-agent.js';
-import type { ChatMessage } from '../../src/hooks/use-agent.js';
+import type { TimelineEntry } from '../../src/types/timeline.js';
+import { filterByDetailLevel } from '../../src/types/timeline.js';
 
-/**
- * Mock chunks returned by chatStream
- */
-function createMockChatStream() {
-  const chunks = [
-    {
-      type: 'text' as const,
-      delta: 'Hello',
-      accumulatedContent: 'Hello',
-      state: null as unknown as AgentState,
-    },
-    {
-      type: 'text' as const,
-      delta: ' world',
-      accumulatedContent: 'Hello world',
-      state: null as unknown as AgentState,
-    },
-    {
-      type: 'done' as const,
-      state: {
-        id: 'result-state',
-        config: { name: 'test', instructions: 't', tools: [] },
-        context: { messages: [], stepCount: 1 },
-      } as AgentState,
-      tokens: { input: 10, output: 5 },
-    },
-  ];
-  return chunks;
-}
-
-describe('useAgent streaming logic', () => {
+describe('useAgent 流式逻辑', () => {
   describe('parseCommand', () => {
-    it('should parse all command types', () => {
+    it('应该解析所有命令类型', () => {
       expect(parseCommand('/run').type).toBe('mode-run');
       expect(parseCommand('/step').type).toBe('mode-step');
       expect(parseCommand('/advance').type).toBe('mode-advance');
@@ -55,105 +20,107 @@ describe('useAgent streaming logic', () => {
       expect(parseCommand('/help').type).toBe('help');
       expect(parseCommand('/skill test').type).toBe('skill');
       expect(parseCommand('hello').type).toBe('message');
+      expect(parseCommand('/show:compact').type).toBe('show-compact');
+      expect(parseCommand('/show:detail').type).toBe('show-detail');
+      expect(parseCommand('/show:verbose').type).toBe('show-verbose');
     });
 
-    it('should extract /skill argument', () => {
+    it('应该提取 /skill 参数', () => {
       const cmd = parseCommand('/skill my-skill');
       expect(cmd.skillName).toBe('my-skill');
     });
 
-    it('should not match empty skill name', () => {
-      // /skill followed by space but no name -> trim results in "/skill", does not match startsWith('/skill ')
+    it('空 skill 名不匹配', () => {
       const cmd = parseCommand('/skill ');
       expect(cmd.type).toBe('message');
     });
   });
 
-  describe('Message state update simulation', () => {
-    it('should simulate chatStream message accumulation', () => {
-      const chunks = createMockChatStream();
-      const assistantMsg: ChatMessage = {
-        id: 'test-id',
-        role: 'assistant',
-        content: '',
-        timestamp: Date.now(),
-        isStreaming: true,
-      };
-
-      let messages = [assistantMsg];
-
-      for (const chunk of chunks) {
-        if (chunk.type === 'text' && chunk.delta) {
-          messages = messages.map((m) =>
-            m.id === assistantMsg.id
-              ? { ...m, content: chunk.accumulatedContent ?? m.content + chunk.delta }
-              : m
-          );
-        }
-        if (chunk.type === 'done') {
-          messages = messages.map((m) =>
-            m.id === assistantMsg.id ? { ...m, isStreaming: false } : m
-          );
-        }
-      }
-
-      expect(messages[0].content).toBe('Hello world');
-      expect(messages[0].isStreaming).toBe(false);
-    });
-
-    it('should simulate chatStream error handling', () => {
-      const chunks = [
-        { type: 'error' as const, error: 'API rate limit', state: null as unknown as AgentState },
+  describe('TimelineEntry 状态更新模拟', () => {
+    it('模拟 token 累积到 assistant 条目', () => {
+      const assistantId = 'asst-1';
+      let entries: TimelineEntry[] = [
+        {
+          type: 'assistant',
+          id: assistantId,
+          content: '',
+          timestamp: Date.now(),
+          isStreaming: true,
+        },
       ];
 
-      const assistantMsg: ChatMessage = {
-        id: 'test-id',
-        role: 'assistant',
-        content: '',
-        timestamp: Date.now(),
-        isStreaming: true,
-      };
-
-      let messages = [assistantMsg];
-
-      for (const chunk of chunks) {
-        if (chunk.type === 'error') {
-          messages = messages.map((m) =>
-            m.id === assistantMsg.id
-              ? { ...m, content: `Error: ${chunk.error}`, isStreaming: false }
-              : m
-          );
-        }
+      // 模拟 token 事件
+      const tokens = ['Hello', ' world'];
+      let accumulated = '';
+      for (const token of tokens) {
+        accumulated += token;
+        entries = entries.map((e) =>
+          e.type === 'assistant' && e.id === assistantId ? { ...e, content: accumulated } : e
+        );
       }
 
-      expect(messages[0].content).toBe('Error: API rate limit');
-      expect(messages[0].isStreaming).toBe(false);
+      expect(entries[0].type).toBe('assistant');
+      const asstEntry = entries[0] as Extract<TimelineEntry, { type: 'assistant' }>;
+      expect(asstEntry.content).toBe('Hello world');
+      expect(asstEntry.isStreaming).toBe(true);
     });
 
-    it('should simulate stepStream token accumulation', () => {
+    it('模拟 tool:start + tool:end 条目', () => {
+      let entries: TimelineEntry[] = [];
+
+      // tool:start
+      const toolId = 'tool-1';
+      entries = [
+        ...entries,
+        { type: 'tool', id: toolId, tool: 'read_file', isRunning: true, timestamp: Date.now() },
+      ];
+
+      // tool:end — 更新最近的 running tool
+      const idx = entries.findLastIndex
+        ? entries.findLastIndex((e) => e.type === 'tool' && e.isRunning)
+        : (() => {
+            for (let i = entries.length - 1; i >= 0; i--) {
+              const e = entries[i];
+              if (e.type === 'tool' && e.isRunning) return i;
+            }
+            return -1;
+          })();
+      if (idx >= 0) {
+        entries = entries.map((e, i) =>
+          i === idx ? { ...e, result: 'file content', isRunning: false } : e
+        );
+      }
+
+      expect(entries).toHaveLength(1);
+      const toolEntry = entries[0] as Extract<TimelineEntry, { type: 'tool' }>;
+      expect(toolEntry.tool).toBe('read_file');
+      expect(toolEntry.result).toBe('file content');
+      expect(toolEntry.isRunning).toBe(false);
+    });
+
+    it('模拟 stepStream token 累积', () => {
       const events: StreamEvent[] = [
         { type: 'token', token: 'Step ' },
         { type: 'token', token: 'result' },
-        { type: 'tool:start', action: { tool: 'read_file', parameters: { path: '/test' } } },
+        {
+          type: 'tool:start',
+          action: { id: 'a1', tool: 'read_file', arguments: { path: '/test' } },
+        },
       ];
 
       let accumulated = '';
-      let toolCalls: string[] = [];
+      const tools: string[] = [];
 
       for (const event of events) {
-        if (event.type === 'token' && event.token) {
-          accumulated += event.token;
-        }
-        if (event.type === 'tool:start') {
-          toolCalls.push(event.action.tool);
-        }
+        if (event.type === 'token' && event.token) accumulated += event.token;
+        if (event.type === 'tool:start') tools.push(event.action.tool);
       }
 
       expect(accumulated).toBe('Step result');
-      expect(toolCalls).toEqual(['read_file']);
+      expect(tools).toEqual(['read_file']);
     });
 
-    it('should simulate advanceStream phase changes', () => {
+    it('模拟 advanceStream phase 变化', () => {
       const events: StreamEvent[] = [
         { type: 'phase-change', from: { type: 'idle' }, to: { type: 'calling-llm' } },
         { type: 'token', token: 'thinking...' },
@@ -164,12 +131,8 @@ describe('useAgent streaming logic', () => {
       let tokens = '';
 
       for (const event of events) {
-        if (event.type === 'phase-change') {
-          phases.push(`${event.from.type}->${event.to.type}`);
-        }
-        if (event.type === 'token' && event.token) {
-          tokens += event.token;
-        }
+        if (event.type === 'phase-change') phases.push(`${event.from.type}->${event.to.type}`);
+        if (event.type === 'token' && event.token) tokens += event.token;
       }
 
       expect(phases).toEqual(['idle->calling-llm', 'calling-llm->executing-tool']);
@@ -177,63 +140,56 @@ describe('useAgent streaming logic', () => {
     });
   });
 
-  describe('User message + assistant message combination', () => {
-    it('should simulate a complete conversation flow', () => {
-      // 1. User message
-      const userMsg: ChatMessage = {
-        id: 'user-1',
-        role: 'user',
-        content: 'What is 2+2?',
-        timestamp: Date.now(),
-      };
-
-      // 2. Assistant starts streaming
-      const assistantMsg: ChatMessage = {
-        id: 'asst-1',
-        role: 'assistant',
-        content: '',
-        timestamp: Date.now(),
-        isStreaming: true,
-      };
-
-      let messages = [userMsg, assistantMsg];
-
-      // 3. Simulate streaming updates
-      const chunks = [
+  describe('完整对话流模拟', () => {
+    it('用户消息 + 助手流式 + 完成', () => {
+      const assistantId = 'asst-1';
+      let entries: TimelineEntry[] = [
+        { type: 'user', id: 'user-1', content: 'What is 2+2?', timestamp: Date.now() },
         {
-          type: 'text' as const,
-          delta: '2+2',
-          accumulatedContent: '2+2',
-          state: null as unknown as AgentState,
+          type: 'assistant',
+          id: assistantId,
+          content: '',
+          timestamp: Date.now(),
+          isStreaming: true,
         },
-        {
-          type: 'text' as const,
-          delta: ' equals 4',
-          accumulatedContent: '2+2 equals 4',
-          state: null as unknown as AgentState,
-        },
-        { type: 'done' as const, state: {} as AgentState },
       ];
 
-      for (const chunk of chunks) {
-        if (chunk.type === 'text') {
-          messages = messages.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: chunk.accumulatedContent! } : m
-          );
-        }
-        if (chunk.type === 'done') {
-          messages = messages.map((m) =>
-            m.id === assistantMsg.id ? { ...m, isStreaming: false } : m
-          );
-        }
+      // 模拟流式 token
+      const tokens = ['2+2', ' equals 4'];
+      let accumulated = '';
+      for (const token of tokens) {
+        accumulated += token;
+        entries = entries.map((e) =>
+          e.type === 'assistant' && e.id === assistantId ? { ...e, content: accumulated } : e
+        );
       }
 
-      expect(messages).toHaveLength(2);
-      expect(messages[0].role).toBe('user');
-      expect(messages[0].content).toBe('What is 2+2?');
-      expect(messages[1].role).toBe('assistant');
-      expect(messages[1].content).toBe('2+2 equals 4');
-      expect(messages[1].isStreaming).toBe(false);
+      // 模拟完成
+      entries = entries.map((e) =>
+        e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+      );
+
+      expect(entries).toHaveLength(2);
+      const user = entries[0] as Extract<TimelineEntry, { type: 'user' }>;
+      const asst = entries[1] as Extract<TimelineEntry, { type: 'assistant' }>;
+      expect(user.content).toBe('What is 2+2?');
+      expect(asst.content).toBe('2+2 equals 4');
+      expect(asst.isStreaming).toBe(false);
+    });
+
+    it('DetailLevel 过滤正确性', () => {
+      const entries: TimelineEntry[] = [
+        { type: 'user', id: '1', content: 'hi', timestamp: Date.now() },
+        { type: 'phase', id: '2', from: 'idle', to: 'calling-llm', timestamp: Date.now() },
+        { type: 'assistant', id: '3', content: 'hello', timestamp: Date.now() },
+        { type: 'thought', id: '4', content: 'thinking', timestamp: Date.now() },
+      ];
+
+      const compact = filterByDetailLevel(entries, 'compact');
+      expect(compact.map((e) => e.type)).toEqual(['user', 'assistant']);
+
+      const verbose = filterByDetailLevel(entries, 'verbose');
+      expect(verbose.map((e) => e.type)).toEqual(['user', 'phase', 'assistant', 'thought']);
     });
   });
 });

@@ -20,8 +20,6 @@ interface HeaderBarProps {
   model: string;
   /** Run status */
   status: RunStatus;
-  /** Whether the right panel is visible */
-  eventsVisible: boolean;
 }
 
 /** Status icon mapping */
@@ -39,7 +37,7 @@ const STATUS_CONFIG: Record<RunStatus, { color: 'gray' | 'yellow' | 'red'; label
  *
  * @param props - Component props
  */
-export function HeaderBar({ model, status, eventsVisible }: HeaderBarProps) {
+export function HeaderBar({ model, status }: HeaderBarProps) {
   const statusConfig = STATUS_CONFIG[status];
 
   return (
@@ -59,7 +57,7 @@ export function HeaderBar({ model, status, eventsVisible }: HeaderBarProps) {
       </Box>
       <Box>
         <Text color={theme.dim}>
-          Ctrl+E: {eventsVisible ? 'hide' : 'show'} events{' │ '}Ctrl+C: exit
+          Ctrl+C: {status === 'running' ? 'interrupt' : 'exit'}
         </Text>
       </Box>
     </Box>

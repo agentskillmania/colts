@@ -28,9 +28,16 @@ export type ExecutionMode = 'run' | 'step' | 'advance';
  */
 export interface ParsedCommand {
   type:
-    | 'mode-run' | 'mode-step' | 'mode-advance'
-    | 'show-compact' | 'show-detail' | 'show-verbose'
-    | 'clear' | 'help' | 'skill' | 'message';
+    | 'mode-run'
+    | 'mode-step'
+    | 'mode-advance'
+    | 'show-compact'
+    | 'show-detail'
+    | 'show-verbose'
+    | 'clear'
+    | 'help'
+    | 'skill'
+    | 'message';
   raw: string;
   skillName?: string;
 }
@@ -104,7 +111,7 @@ function uid(): string {
 export function useAgent(
   runner: AgentRunner | null,
   initialState: AgentState | null,
-  skillProvider?: ISkillProvider,
+  skillProvider?: ISkillProvider
 ): UseAgentReturn {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [mode, setMode] = useState<ExecutionMode>('run');
@@ -212,15 +219,28 @@ export function useAgent(
           try {
             const manifest = skillProvider.getManifest(skillName);
             if (!manifest) {
-              const available = skillProvider.listSkills().map((s) => s.name).join(', ');
+              const available = skillProvider
+                .listSkills()
+                .map((s) => s.name)
+                .join(', ');
               addSystemEntry(`Skill '${skillName}' not found. Available: ${available || 'none'}`);
               return;
             }
             const instructions = await skillProvider.loadInstructions(skillName);
             setEntries((prev) => [
               ...prev,
-              { type: 'system', id: uid(), content: `Skill '${skillName}' loaded (${instructions.length} chars)`, timestamp: Date.now() },
-              { type: 'system', id: uid(), content: `[Skill: ${skillName}]\n${instructions}`, timestamp: Date.now() },
+              {
+                type: 'system',
+                id: uid(),
+                content: `Skill '${skillName}' loaded (${instructions.length} chars)`,
+                timestamp: Date.now(),
+              },
+              {
+                type: 'system',
+                id: uid(),
+                content: `[Skill: ${skillName}]\n${instructions}`,
+                timestamp: Date.now(),
+              },
             ]);
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
@@ -300,7 +320,17 @@ export function useAgent(
         abortControllerRef.current = null;
       }
     },
-    [runner, state, mode, isPaused, clearEntries, addSystemEntry, addErrorEntry, skillProvider, resumeExecution]
+    [
+      runner,
+      state,
+      mode,
+      isPaused,
+      clearEntries,
+      addSystemEntry,
+      addErrorEntry,
+      skillProvider,
+      resumeExecution,
+    ]
   );
 
   /** 中断正在运行的 agent */
@@ -377,7 +407,9 @@ async function executeRun(
             accumulatedContent += event.token;
             const content = accumulatedContent;
             setEntries((prev) =>
-              prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e))
+              prev.map((e) =>
+                e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e
+              )
             );
           }
           break;
@@ -387,13 +419,22 @@ async function executeRun(
         case 'tool:start': {
           // 停止当前 assistant 流式
           setEntries((prev) =>
-            prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e))
+            prev.map((e) =>
+              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+            )
           );
           // 添加 tool 条目
           const toolId = uid();
           setEntries((prev) => [
             ...prev,
-            { type: 'tool', id: toolId, tool: event.action.tool, args: event.action.arguments, isRunning: true, timestamp: Date.now() },
+            {
+              type: 'tool',
+              id: toolId,
+              tool: event.action.tool,
+              args: event.action.arguments,
+              isRunning: true,
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -406,11 +447,18 @@ async function executeRun(
             let idx = -1;
             for (let i = prev.length - 1; i >= 0; i--) {
               const entry = prev[i];
-              if (entry.type === 'tool' && entry.isRunning) { idx = i; break; }
+              if (entry.type === 'tool' && entry.isRunning) {
+                idx = i;
+                break;
+              }
             }
             if (idx >= 0) {
               const updated = [...prev];
-              updated[idx] = { ...updated[idx], result: event.result, isRunning: false } as TimelineEntry;
+              updated[idx] = {
+                ...updated[idx],
+                result: event.result,
+                isRunning: false,
+              } as TimelineEntry;
               return updated;
             }
             return prev;
@@ -420,7 +468,13 @@ async function executeRun(
           accumulatedContent = '';
           setEntries((prev) => [
             ...prev,
-            { type: 'assistant', id: assistantId, content: '', timestamp: Date.now(), isStreaming: true },
+            {
+              type: 'assistant',
+              id: assistantId,
+              content: '',
+              timestamp: Date.now(),
+              isStreaming: true,
+            },
           ]);
           break;
         }
@@ -437,7 +491,13 @@ async function executeRun(
         case 'step:end': {
           setEntries((prev) => [
             ...prev,
-            { type: 'step-end', id: uid(), step: event.step, result: event.result, timestamp: Date.now() },
+            {
+              type: 'step-end',
+              id: uid(),
+              step: event.step,
+              result: event.result,
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -454,7 +514,14 @@ async function executeRun(
         case 'compressed': {
           setEntries((prev) => [
             ...prev,
-            { type: 'compress', id: uid(), status: 'compressed', summary: event.summary, removedCount: event.removedCount, timestamp: Date.now() },
+            {
+              type: 'compress',
+              id: uid(),
+              status: 'compressed',
+              summary: event.summary,
+              removedCount: event.removedCount,
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -463,7 +530,13 @@ async function executeRun(
         case 'phase-change': {
           setEntries((prev) => [
             ...prev,
-            { type: 'phase', id: uid(), from: event.from.type, to: event.to.type, timestamp: Date.now() },
+            {
+              type: 'phase',
+              id: uid(),
+              from: event.from.type,
+              to: event.to.type,
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -472,7 +545,13 @@ async function executeRun(
         case 'skill:loading': {
           setEntries((prev) => [
             ...prev,
-            { type: 'skill', id: uid(), name: event.name, status: 'loading', timestamp: Date.now() },
+            {
+              type: 'skill',
+              id: uid(),
+              name: event.name,
+              status: 'loading',
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -480,7 +559,14 @@ async function executeRun(
         case 'skill:loaded': {
           setEntries((prev) => [
             ...prev,
-            { type: 'skill', id: uid(), name: event.name, status: 'loaded', tokenCount: event.tokenCount, timestamp: Date.now() },
+            {
+              type: 'skill',
+              id: uid(),
+              name: event.name,
+              status: 'loaded',
+              tokenCount: event.tokenCount,
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -489,7 +575,14 @@ async function executeRun(
         case 'subagent:start': {
           setEntries((prev) => [
             ...prev,
-            { type: 'subagent', id: uid(), name: event.name, task: event.task, status: 'start', timestamp: Date.now() },
+            {
+              type: 'subagent',
+              id: uid(),
+              name: event.name,
+              task: event.task,
+              status: 'start',
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -497,7 +590,14 @@ async function executeRun(
         case 'subagent:end': {
           setEntries((prev) => [
             ...prev,
-            { type: 'subagent', id: uid(), name: event.name, result: event.result, status: 'end', timestamp: Date.now() },
+            {
+              type: 'subagent',
+              id: uid(),
+              name: event.name,
+              result: event.result,
+              status: 'end',
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -506,7 +606,9 @@ async function executeRun(
         case 'error': {
           const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
           setEntries((prev) => [
-            ...prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e)),
+            ...prev.map((e) =>
+              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+            ),
             { type: 'error', id: uid(), message: errMsg, timestamp: Date.now() },
           ]);
           break;
@@ -537,13 +639,17 @@ async function executeRun(
         );
       } else if (runResult.type === 'max_steps') {
         setEntries((prev) => [
-          ...prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e)),
+          ...prev.map((e) =>
+            e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+          ),
           { type: 'run-complete', id: uid(), result: runResult, timestamp: Date.now() },
         ]);
       } else {
         // error result
         setEntries((prev) => [
-          ...prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e)),
+          ...prev.map((e) =>
+            e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+          ),
           { type: 'run-complete', id: uid(), result: runResult, timestamp: Date.now() },
         ]);
       }
@@ -553,7 +659,9 @@ async function executeRun(
     const msg = error instanceof Error ? error.message : String(error);
     setEntries((prev) =>
       prev.map((e) =>
-        e.type === 'assistant' && e.id === assistantId ? { ...e, content: `Error: ${msg}`, isStreaming: false } : e
+        e.type === 'assistant' && e.id === assistantId
+          ? { ...e, content: `Error: ${msg}`, isStreaming: false }
+          : e
       )
     );
   }
@@ -574,7 +682,6 @@ async function executeStep(
   pauseFn: () => Promise<void>
 ): Promise<void> {
   let runningState = currentState;
-  let stepCount = 0;
   let continueLoop = true;
 
   // 首次添加用户消息到 state
@@ -585,7 +692,7 @@ async function executeStep(
   while (continueLoop) {
     if (signal.aborted) return;
 
-    let assistantId = uid();
+    const assistantId = uid();
     let accumulatedContent = '';
 
     setEntries((prev) => [
@@ -606,7 +713,9 @@ async function executeStep(
               accumulatedContent += event.token;
               const content = accumulatedContent;
               setEntries((prev) =>
-                prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e))
+                prev.map((e) =>
+                  e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e
+                )
               );
             }
             break;
@@ -614,11 +723,20 @@ async function executeStep(
 
           case 'tool:start': {
             setEntries((prev) =>
-              prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e))
+              prev.map((e) =>
+                e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+              )
             );
             setEntries((prev) => [
               ...prev,
-              { type: 'tool', id: uid(), tool: event.action.tool, args: event.action.arguments, isRunning: true, timestamp: Date.now() },
+              {
+                type: 'tool',
+                id: uid(),
+                tool: event.action.tool,
+                args: event.action.arguments,
+                isRunning: true,
+                timestamp: Date.now(),
+              },
             ]);
             break;
           }
@@ -628,11 +746,18 @@ async function executeStep(
               let idx = -1;
               for (let i = prev.length - 1; i >= 0; i--) {
                 const e = prev[i];
-                if (e.type === 'tool' && e.isRunning) { idx = i; break; }
+                if (e.type === 'tool' && e.isRunning) {
+                  idx = i;
+                  break;
+                }
               }
               if (idx >= 0) {
                 const updated = [...prev];
-                updated[idx] = { ...updated[idx], result: event.result, isRunning: false } as TimelineEntry;
+                updated[idx] = {
+                  ...updated[idx],
+                  result: event.result,
+                  isRunning: false,
+                } as TimelineEntry;
                 return updated;
               }
               return prev;
@@ -643,7 +768,13 @@ async function executeStep(
           case 'phase-change': {
             setEntries((prev) => [
               ...prev,
-              { type: 'phase', id: uid(), from: event.from.type, to: event.to.type, timestamp: Date.now() },
+              {
+                type: 'phase',
+                id: uid(),
+                from: event.from.type,
+                to: event.to.type,
+                timestamp: Date.now(),
+              },
             ]);
             break;
           }
@@ -651,7 +782,9 @@ async function executeStep(
           case 'error': {
             const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
             setEntries((prev) => [
-              ...prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e)),
+              ...prev.map((e) =>
+                e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+              ),
               { type: 'error', id: uid(), message: errMsg, timestamp: Date.now() },
             ]);
             break;
@@ -668,7 +801,14 @@ async function executeStep(
           case 'compressed': {
             setEntries((prev) => [
               ...prev,
-              { type: 'compress', id: uid(), status: 'compressed', summary: event.summary, removedCount: event.removedCount, timestamp: Date.now() },
+              {
+                type: 'compress',
+                id: uid(),
+                status: 'compressed',
+                summary: event.summary,
+                removedCount: event.removedCount,
+                timestamp: Date.now(),
+              },
             ]);
             break;
           }
@@ -676,7 +816,13 @@ async function executeStep(
           case 'skill:loading': {
             setEntries((prev) => [
               ...prev,
-              { type: 'skill', id: uid(), name: event.name, status: 'loading', timestamp: Date.now() },
+              {
+                type: 'skill',
+                id: uid(),
+                name: event.name,
+                status: 'loading',
+                timestamp: Date.now(),
+              },
             ]);
             break;
           }
@@ -684,7 +830,14 @@ async function executeStep(
           case 'skill:loaded': {
             setEntries((prev) => [
               ...prev,
-              { type: 'skill', id: uid(), name: event.name, status: 'loaded', tokenCount: event.tokenCount, timestamp: Date.now() },
+              {
+                type: 'skill',
+                id: uid(),
+                name: event.name,
+                status: 'loaded',
+                tokenCount: event.tokenCount,
+                timestamp: Date.now(),
+              },
             ]);
             break;
           }
@@ -692,7 +845,14 @@ async function executeStep(
           case 'subagent:start': {
             setEntries((prev) => [
               ...prev,
-              { type: 'subagent', id: uid(), name: event.name, task: event.task, status: 'start', timestamp: Date.now() },
+              {
+                type: 'subagent',
+                id: uid(),
+                name: event.name,
+                task: event.task,
+                status: 'start',
+                timestamp: Date.now(),
+              },
             ]);
             break;
           }
@@ -700,7 +860,14 @@ async function executeStep(
           case 'subagent:end': {
             setEntries((prev) => [
               ...prev,
-              { type: 'subagent', id: uid(), name: event.name, result: event.result, status: 'end', timestamp: Date.now() },
+              {
+                type: 'subagent',
+                id: uid(),
+                name: event.name,
+                result: event.result,
+                status: 'end',
+                timestamp: Date.now(),
+              },
             ]);
             break;
           }
@@ -729,11 +896,17 @@ async function executeStep(
 
         // Step 完成但需要更多步骤 — 暂停等待
         setEntries((prev) => [
-          ...prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e)),
-          { type: 'system', id: uid(), content: 'Step complete. Press Enter to continue.', timestamp: Date.now() },
+          ...prev.map((e) =>
+            e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+          ),
+          {
+            type: 'system',
+            id: uid(),
+            content: 'Step complete. Press Enter to continue.',
+            timestamp: Date.now(),
+          },
         ]);
 
-        stepCount++;
         await pauseFn();
       }
     } catch (error) {
@@ -741,7 +914,9 @@ async function executeStep(
       const msg = error instanceof Error ? error.message : String(error);
       setEntries((prev) =>
         prev.map((e) =>
-          e.type === 'assistant' && e.id === assistantId ? { ...e, content: `Error: ${msg}`, isStreaming: false } : e
+          e.type === 'assistant' && e.id === assistantId
+            ? { ...e, content: `Error: ${msg}`, isStreaming: false }
+            : e
         )
       );
       continueLoop = false;
@@ -792,7 +967,9 @@ async function executeAdvance(
             accumulatedContent += event.token;
             const content = accumulatedContent;
             setEntries((prev) =>
-              prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e))
+              prev.map((e) =>
+                e.type === 'assistant' && e.id === assistantId ? { ...e, content } : e
+              )
             );
           }
           break;
@@ -800,11 +977,20 @@ async function executeAdvance(
 
         case 'tool:start': {
           setEntries((prev) =>
-            prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e))
+            prev.map((e) =>
+              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+            )
           );
           setEntries((prev) => [
             ...prev,
-            { type: 'tool', id: uid(), tool: event.action.tool, args: event.action.arguments, isRunning: true, timestamp: Date.now() },
+            {
+              type: 'tool',
+              id: uid(),
+              tool: event.action.tool,
+              args: event.action.arguments,
+              isRunning: true,
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -814,11 +1000,18 @@ async function executeAdvance(
             let idx = -1;
             for (let i = prev.length - 1; i >= 0; i--) {
               const e = prev[i];
-                if (e.type === 'tool' && e.isRunning) { idx = i; break; }
+              if (e.type === 'tool' && e.isRunning) {
+                idx = i;
+                break;
+              }
             }
             if (idx >= 0) {
               const updated = [...prev];
-              updated[idx] = { ...updated[idx], result: event.result, isRunning: false } as TimelineEntry;
+              updated[idx] = {
+                ...updated[idx],
+                result: event.result,
+                isRunning: false,
+              } as TimelineEntry;
               return updated;
             }
             return prev;
@@ -828,8 +1021,16 @@ async function executeAdvance(
 
         case 'phase-change': {
           setEntries((prev) => [
-            ...prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e)),
-            { type: 'phase', id: uid(), from: event.from.type, to: event.to.type, timestamp: Date.now() },
+            ...prev.map((e) =>
+              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+            ),
+            {
+              type: 'phase',
+              id: uid(),
+              from: event.from.type,
+              to: event.to.type,
+              timestamp: Date.now(),
+            },
           ]);
 
           // phase 变化后暂停
@@ -842,7 +1043,13 @@ async function executeAdvance(
             accumulatedContent = '';
             setEntries((prev) => [
               ...prev,
-              { type: 'assistant', id: assistantId, content: '', timestamp: Date.now(), isStreaming: true },
+              {
+                type: 'assistant',
+                id: assistantId,
+                content: '',
+                timestamp: Date.now(),
+                isStreaming: true,
+              },
             ]);
           }
           break;
@@ -851,7 +1058,9 @@ async function executeAdvance(
         case 'error': {
           const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
           setEntries((prev) => [
-            ...prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e)),
+            ...prev.map((e) =>
+              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+            ),
             { type: 'error', id: uid(), message: errMsg, timestamp: Date.now() },
           ]);
           break;
@@ -860,7 +1069,13 @@ async function executeAdvance(
         case 'skill:loading': {
           setEntries((prev) => [
             ...prev,
-            { type: 'skill', id: uid(), name: event.name, status: 'loading', timestamp: Date.now() },
+            {
+              type: 'skill',
+              id: uid(),
+              name: event.name,
+              status: 'loading',
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -868,7 +1083,14 @@ async function executeAdvance(
         case 'skill:loaded': {
           setEntries((prev) => [
             ...prev,
-            { type: 'skill', id: uid(), name: event.name, status: 'loaded', tokenCount: event.tokenCount, timestamp: Date.now() },
+            {
+              type: 'skill',
+              id: uid(),
+              name: event.name,
+              status: 'loaded',
+              tokenCount: event.tokenCount,
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -876,7 +1098,14 @@ async function executeAdvance(
         case 'subagent:start': {
           setEntries((prev) => [
             ...prev,
-            { type: 'subagent', id: uid(), name: event.name, task: event.task, status: 'start', timestamp: Date.now() },
+            {
+              type: 'subagent',
+              id: uid(),
+              name: event.name,
+              task: event.task,
+              status: 'start',
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -884,7 +1113,14 @@ async function executeAdvance(
         case 'subagent:end': {
           setEntries((prev) => [
             ...prev,
-            { type: 'subagent', id: uid(), name: event.name, result: event.result, status: 'end', timestamp: Date.now() },
+            {
+              type: 'subagent',
+              id: uid(),
+              name: event.name,
+              result: event.result,
+              status: 'end',
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
@@ -898,7 +1134,9 @@ async function executeAdvance(
       const { state: newState } = iterResult.value;
       setState(newState);
       setEntries((prev) =>
-        prev.map((e) => (e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e))
+        prev.map((e) =>
+          e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+        )
       );
     }
   } catch (error) {
@@ -906,7 +1144,9 @@ async function executeAdvance(
     const msg = error instanceof Error ? error.message : String(error);
     setEntries((prev) =>
       prev.map((e) =>
-        e.type === 'assistant' && e.id === assistantId ? { ...e, content: `Error: ${msg}`, isStreaming: false } : e
+        e.type === 'assistant' && e.id === assistantId
+          ? { ...e, content: `Error: ${msg}`, isStreaming: false }
+          : e
       )
     );
   }
