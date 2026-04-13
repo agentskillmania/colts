@@ -183,7 +183,7 @@ export async function* executeStepStream(
         const skillState = currentState.context.skillState;
 
         if (signal.type === 'SWITCH_SKILL' && skillState) {
-          // 用 updateState 保证 Immer 冻结对象也能安全修改
+          // Use updateState to safely modify even when Immer has frozen the object
           currentState = updateState(currentState, (draft) => {
             const ss = draft.context.skillState!;
             if (ss.current) {
@@ -208,12 +208,12 @@ export async function* executeStepStream(
         if (signal.type === 'RETURN_SKILL' && skillState) {
           const stackLen = skillState.stack.length;
           if (stackLen === 0) {
-            // 顶层 skill 无父 skill 可退，静默忽略
+            // Top-level skill has no parent to return to; silently ignore
             execState.phase = { type: 'idle' };
             continue;
           }
 
-          // 用 updateState 保证 Immer 冻结对象也能安全修改
+          // Use updateState to safely modify even when Immer has frozen the object
           let parentSkillName: string;
           currentState = updateState(currentState, (draft) => {
             const ss = draft.context.skillState!;
