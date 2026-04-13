@@ -1,260 +1,291 @@
 /**
- * @fileoverview Runner EventEmitter 单元测试
+ * @fileoverview AgentRunner EventEmitter Tests
  *
- * 测试 AgentRunner 的事件发射功能：
- * - 'event' 事件在 runStream 中触发
- * - 'complete' 事件在 run 和 runStream 完成时触发
- * - 'error' 事件在执行出错时触发
- * - on/off 方法可以添加和移除监听器
+ * Tests hierarchical event emission for reactive UI integration.
  */
-
 import { describe, it, expect, vi } from 'vitest';
 import { AgentRunner } from '../../src/runner.js';
 import { createAgentState } from '../../src/state.js';
-import type { LLMResponse } from '@agentskillmania/llm-client';
-import type { AgentConfig } from '../../src/types.js';
+import type { AgentState, LLMResponse, ILLMProvider } from '../../src/types.js';
+import type { StepResult } from '../../src/execution.js';
+import { createExecutionState } from '../../src/execution.js';
 
-const mockTokens = { input: 10, output: 5 };
-
-const defaultConfig: AgentConfig = {
-  name: 'test-agent',
-  instructions: 'You are a test agent.',
-  tools: [],
+const defaultConfig = {
+  systemPrompt: 'You are a helpful assistant.',
+  maxSteps: 5,
 };
 
-/**
- * 创建 mock LLM Client
- */
-function createMockLLMClient(responses: LLMResponse[]) {
+const mockTokens = { input: 10, output: 5, cachedInput: 0 };
+
+function createMockLLMClient(responses: LLMResponse[]): ILLMProvider {
   let index = 0;
   return {
-    call: vi.fn().mockImplementation(() => {
+    call: vi.fn(async () => {
       if (index >= responses.length) {
-        return Promise.resolve({
+        return {
           content: 'Default response',
           toolCalls: [],
           tokens: mockTokens,
           stopReason: 'stop',
-        });
+        };
       }
-      return Promise.resolve(responses[index++]);
+      return responses[index++];
     }),
-    stream: vi.fn().mockImplementation(async function* () {
-      if (index >= responses.length) return;
+    stream: vi.fn(async function* () {
+      if (index >= responses.length) {
+        yield { type: 'text' as const, delta: 'Default', accumulatedContent: 'Default' };
+        yield { type: 'done' as const, roundTotalTokens: mockTokens };
+        return;
+      }
       const response = responses[index++];
-      yield { type: 'text', delta: response.content, accumulatedContent: response.content };
-      yield {
-        type: 'done',
-        accumulatedContent: response.content,
-        roundTotalTokens: response.tokens,
-      };
+      const chars = response.content.split('');
+      let accumulated = '';
+      for (const char of chars) {
+        accumulated += char;
+        yield { type: 'text' as const, delta: char, accumulatedContent: accumulated };
+      }
+      yield { type: 'done' as const, roundTotalTokens: response.tokens };
     }),
-  } as any;
+  };
 }
 
 describe('AgentRunner EventEmitter', () => {
-  it('should emit complete event after run finishes', async () => {
-    const client = createMockLLMClient([
-      {
-        content: 'Hello!',
+  describe('flat event naming', () => {
+    it('should emit run:start and run:end during run()', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Final answer',
         toolCalls: [],
         tokens: mockTokens,
         stopReason: 'stop',
-      },
-    ]);
+      };
 
-    const runner = new AgentRunner({
-      model: 'gpt-4',
-      llmClient: client,
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      const events: string[] = [];
+      runner.on('run:start', () => events.push('run:start'));
+      runner.on('run:end', () => events.push('run:end'));
+
+      await runner.run(state);
+
+      expect(events).toContain('run:start');
+      expect(events).toContain('run:end');
     });
 
-    const completeHandler = vi.fn();
-    runner.on('complete', completeHandler);
-
-    const state = createAgentState(defaultConfig);
-    const result = await runner.run(state);
-
-    expect(completeHandler).toHaveBeenCalledOnce();
-    expect(completeHandler).toHaveBeenCalledWith({
-      state: expect.any(Object),
-      result: expect.objectContaining({
-        type: 'success',
-        answer: 'Hello!',
-      }),
-    });
-    expect(result.result.type).toBe('success');
-  });
-
-  it('should emit error event when run returns error result', async () => {
-    const client = {
-      call: vi.fn().mockRejectedValue(new Error('API Error')),
-      stream: vi.fn(),
-    };
-
-    const runner = new AgentRunner({
-      model: 'gpt-4',
-      llmClient: client,
-    });
-
-    const errorHandler = vi.fn();
-    runner.on('error', errorHandler);
-
-    const state = createAgentState(defaultConfig);
-    const result = await runner.run(state);
-
-    // Should return error result (not throw)
-    expect(result.result.type).toBe('error');
-    expect(errorHandler).toHaveBeenCalledOnce();
-    expect(errorHandler).toHaveBeenCalledWith({
-      error: expect.objectContaining({
-        message: 'API Error',
-      }),
-    });
-  });
-
-  it('should emit events during runStream', async () => {
-    const client = createMockLLMClient([
-      {
-        content: 'Hello World',
+    it('should emit step:start and step:end during step()', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Step answer',
         toolCalls: [],
         tokens: mockTokens,
         stopReason: 'stop',
-      },
-    ]);
+      };
 
-    const runner = new AgentRunner({
-      model: 'gpt-4',
-      llmClient: client,
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      const events: string[] = [];
+      runner.on('step:start', () => events.push('step:start'));
+      runner.on('step:end', () => events.push('step:end'));
+
+      await runner.step(state);
+
+      expect(events).toContain('step:start');
+      expect(events).toContain('step:end');
     });
 
-    const eventHandler = vi.fn();
-    runner.on('event', eventHandler);
-
-    const state = createAgentState(defaultConfig);
-    const events: any[] = [];
-
-    for await (const event of runner.runStream(state)) {
-      events.push(event);
-    }
-
-    // Should have emitted events
-    expect(eventHandler).toHaveBeenCalled();
-    // Event handler should have received the same events
-    expect(eventHandler.mock.calls.length).toBeGreaterThan(0);
-  });
-
-  it('should emit complete event after runStream finishes', async () => {
-    const client = createMockLLMClient([
-      {
-        content: 'Done!',
+    it('should emit advance:phase during step()', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Step answer',
         toolCalls: [],
         tokens: mockTokens,
         stopReason: 'stop',
-      },
-    ]);
+      };
 
-    const runner = new AgentRunner({
-      model: 'gpt-4',
-      llmClient: client,
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      const phases: Array<{ from: string; to: string }> = [];
+      runner.on('advance:phase', (e) => {
+        phases.push({ from: e.from.type, to: e.to.type });
+      });
+
+      await runner.step(state);
+
+      expect(phases.length).toBeGreaterThan(0);
     });
 
-    const completeHandler = vi.fn();
-    runner.on('complete', completeHandler);
-
-    const state = createAgentState(defaultConfig);
-
-    for await (const _ of runner.runStream(state)) {
-      // Consume stream
-    }
-
-    expect(completeHandler).toHaveBeenCalledOnce();
-    expect(completeHandler).toHaveBeenCalledWith({
-      state: expect.any(Object),
-      result: expect.objectContaining({
-        type: 'success',
-      }),
-    });
-  });
-
-  it('should allow removing event listener with off', async () => {
-    const client = createMockLLMClient([
-      {
-        content: 'Hello!',
+    it('should emit hierarchical events during run()', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Final answer',
         toolCalls: [],
         tokens: mockTokens,
         stopReason: 'stop',
-      },
-    ]);
+      };
 
-    const runner = new AgentRunner({
-      model: 'gpt-4',
-      llmClient: client,
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      const events: string[] = [];
+      runner.on('run:start', () => events.push('run:start'));
+      runner.on('step:start', () => events.push('step:start'));
+      runner.on('advance:phase', () => events.push('advance:phase'));
+      runner.on('step:end', () => events.push('step:end'));
+      runner.on('run:end', () => events.push('run:end'));
+
+      await runner.run(state);
+
+      expect(events).toContain('run:start');
+      expect(events).toContain('step:start');
+      expect(events).toContain('advance:phase');
+      expect(events).toContain('step:end');
+      expect(events).toContain('run:end');
     });
 
-    const handler = vi.fn();
-    runner.on('complete', handler);
-
-    // Remove listener
-    runner.off('complete', handler);
-
-    const state = createAgentState(defaultConfig);
-    await runner.run(state);
-
-    // Handler should not have been called
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it('should support multiple event listeners', async () => {
-    const client = createMockLLMClient([
-      {
-        content: 'Hello!',
+    it('should emit run:end with correct result', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Success answer',
         toolCalls: [],
         tokens: mockTokens,
         stopReason: 'stop',
-      },
-    ]);
+      };
 
-    const runner = new AgentRunner({
-      model: 'gpt-4',
-      llmClient: client,
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      let endResult: { state: AgentState; result: { type: string; answer?: string } } | null = null;
+      runner.on('run:end', (e) => {
+        endResult = e as unknown as typeof endResult;
+      });
+
+      await runner.run(state);
+
+      expect(endResult).not.toBeNull();
+      expect(endResult!.result.type).toBe('success');
+      expect(endResult!.result.answer).toBe('Success answer');
     });
 
-    const handler1 = vi.fn();
-    const handler2 = vi.fn();
-
-    runner.on('complete', handler1);
-    runner.on('complete', handler2);
-
-    const state = createAgentState(defaultConfig);
-    await runner.run(state);
-
-    expect(handler1).toHaveBeenCalledOnce();
-    expect(handler2).toHaveBeenCalledOnce();
-  });
-
-  it('should work with chat() method', async () => {
-    const client = createMockLLMClient([
-      {
-        content: 'Chat response',
+    it('should emit step:end with correct result', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Step done',
         toolCalls: [],
         tokens: mockTokens,
         stopReason: 'stop',
-      },
-    ]);
+      };
 
-    const runner = new AgentRunner({
-      model: 'gpt-4',
-      llmClient: client,
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      let endResult: { state: AgentState; stepNumber: number; result: StepResult } | null = null;
+      runner.on('step:end', (e) => {
+        endResult = e;
+      });
+
+      await runner.step(state);
+
+      expect(endResult).not.toBeNull();
+      expect(endResult!.result.type).toBe('done');
+      expect(endResult!.stepNumber).toBe(0);
     });
 
-    const eventHandler = vi.fn();
-    runner.on('event', eventHandler);
+    it('should emit error event on LLM exception', async () => {
+      const client: ILLMProvider = {
+        call: vi.fn(async () => {
+          throw new Error('LLM Error');
+        }),
+        stream: vi.fn(async function* () {
+          throw new Error('LLM Error');
+        }),
+      };
 
-    const state = createAgentState(defaultConfig);
-    await runner.chat(state, 'Hello');
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
 
-    // Chat method doesn't emit events in current implementation
-    // This test documents current behavior
-    expect(eventHandler).not.toHaveBeenCalled();
+      let errorEvent: { state: AgentState; error: Error; phase: string } | null = null;
+      runner.on('error', (e) => {
+        errorEvent = e;
+      });
+
+      try {
+        await runner.run(state);
+      } catch {
+        // expected
+      }
+
+      expect(errorEvent).not.toBeNull();
+      expect(errorEvent!.error.message).toBe('LLM Error');
+    });
+
+    it('should support multiple concurrent listeners', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Test',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      const events1: string[] = [];
+      const events2: string[] = [];
+
+      runner.on('run:start', () => events1.push('run:start'));
+      runner.on('run:start', () => events2.push('run:start'));
+
+      await runner.run(state);
+
+      expect(events1).toContain('run:start');
+      expect(events2).toContain('run:start');
+    });
+
+    it('should emit step events across multiple steps in run()', async () => {
+      const responses: LLMResponse[] = [
+        {
+          content: '<tool>{"tool": "mock_tool", "arguments": {"value": "test"}}</tool>',
+          toolCalls: [],
+          tokens: mockTokens,
+          stopReason: 'stop',
+        },
+        {
+          content: 'Final answer',
+          toolCalls: [],
+          tokens: mockTokens,
+          stopReason: 'stop',
+        },
+      ];
+
+      const client = createMockLLMClient(responses);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        tools: [
+          {
+            name: 'mock_tool',
+            description: 'A mock tool',
+            parameters: { type: 'object', properties: { value: { type: 'string' } } },
+            execute: async ({ value }: { value: string }) => `Result: ${value}`,
+          },
+        ],
+      });
+      const state = createAgentState(defaultConfig);
+
+      const stepStarts: number[] = [];
+      const stepEnds: number[] = [];
+
+      runner.on('step:start', (e) => stepStarts.push(e.stepNumber));
+      runner.on('step:end', (e) => stepEnds.push(e.stepNumber));
+
+      await runner.run(state);
+
+      expect(stepStarts.length).toBeGreaterThanOrEqual(1);
+      expect(stepEnds.length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

@@ -64,10 +64,6 @@ export function formatEvent(event: StreamEvent): string {
     // Sub-agent events
     case 'subagent:start':
       return `[${event.name}] Starting: ${event.task}`;
-    case 'subagent:token':
-      return `[${event.name}] ${event.token}`;
-    case 'subagent:step:end':
-      return `[${event.name}] Step ${event.step} complete`;
     case 'subagent:end':
       return `[${event.name}] Done`;
     default:

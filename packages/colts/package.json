@@ -34,6 +34,7 @@
     "directory": "packages/colts"
   },
   "devDependencies": {
+    "@types/eventemitter3": "^2.0.4",
     "@types/node": "^20.0.0",
     "@types/yaml": "^1.9.7",
     "@vitest/coverage-v8": "^2.0.0",

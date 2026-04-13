@@ -5,7 +5,6 @@
  * Configurable with dependency inversion and quick initialization.
  */
 
-import { EventEmitter } from 'eventemitter3';
 import { LLMClient } from '@agentskillmania/llm-client';
 import type { TokenStats } from '@agentskillmania/llm-client';
 import type { Message, Tool } from '@mariozechner/pi-ai';
@@ -29,36 +28,46 @@ import type {
   StreamEvent,
   RunResult,
   RunStreamEvent,
+  Phase,
 } from './execution.js';
-
-/**
- * Runner event map for EventEmitter
- *
- * All execution methods (run/step/advance, stream/non-stream) emit the same events:
- * - 'event': Stream events during execution (token, phase-change, tool:start, etc.)
- * - 'complete': Execution completed with final state and result
- * - 'error': Execution failed with error
- */
-export interface RunnerEventMap {
-  /** Stream event during execution (token, phase-change, tool:start, etc.) */
-  event: StreamEvent;
-  /** Execution completed - contains state and result (RunResult | StepResult | AdvanceResult) */
-  complete: { state: AgentState; result: unknown };
-  /** Execution error */
-  error: { error: Error };
-}
 import type { AdvanceOptions } from './execution.js';
+import { createExecutionState, isTerminalPhase } from './execution.js';
 import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
 import { compressState, maybeCompress } from './runner-compression.js';
 import { executeAdvance } from './runner-advance.js';
 import type { RunnerContext } from './runner-advance.js';
 import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './runner-stream.js';
-import { executeStep, executeRun, executeRunStream } from './runner-run.js';
 import type { ISkillProvider } from './skills/types.js';
 import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
 import { createLoadSkillTool } from './skills/load-skill-tool.js';
 import type { SubAgentConfig } from './subagent/types.js';
 import { createDelegateTool } from './subagent/delegate-tool.js';
+import { EventEmitter } from 'eventemitter3';
+
+/**
+ * Runner event map - flat naming, no nesting
+ */
+export interface RunnerEventMap {
+  // Execution lifecycle
+  'run:start': { state: AgentState };
+  'run:end': { state: AgentState; result: RunResult };
+
+  'step:start': { state: AgentState; stepNumber: number };
+  'step:end': { state: AgentState; stepNumber: number; result: StepResult };
+
+  'advance:phase': { from: Phase; to: Phase; state: AgentState };
+
+  // Error events
+  error: { state: AgentState; error: Error; phase: 'run' | 'step' | 'advance' };
+
+  // Execution details
+  'llm:tokens': { tokens: string[] };
+  'tool:call': { tool: string; arguments: unknown };
+  'tool:result': { tool: string; result: unknown };
+  'skill:load': { name: string };
+  'compress:start': { state: AgentState };
+  'compress:end': { state: AgentState; summary: string; removedCount: number };
+}
 
 /**
  * Configuration options for AgentRunner
@@ -270,49 +279,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       });
       this.toolRegistry.register(delegateTool);
     }
-  }
-
-  /**
-   * Listen to runner events
-   *
-   * @param event - Event name ('event', 'complete', 'error')
-   * @param handler - Event handler function
-   * @returns This runner instance (for chaining)
-   *
-   * @remarks
-   * To unsubscribe, use `runner.off(event, handler)`.
-   *
-   * @example
-   * ```typescript
-   * const handler = (e: StreamEvent) => console.log(e.type, e.token);
-   * runner.on('event', handler);
-   *
-   * // Later, stop listening
-   * runner.off('event', handler);
-   * ```
-   */
-  /**
-   * Listen to runner events.
-   * Use `runner.off(event, handler)` to unsubscribe.
-   *
-   * @example
-   * ```typescript
-   * const handler = (e: StreamEvent) => console.log(e.type);
-   * runner.on('event', handler);
-   * runner.off('event', handler); // Unsubscribe
-   * ```
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  on(event: string, handler: (...args: any[]) => void): this {
-    return super.on(event as keyof RunnerEventMap, handler);
-  }
-
-  /**
-   * Remove event listener
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  off(event: string, handler: (...args: any[]) => void): this {
-    return super.off(event as keyof RunnerEventMap, handler);
   }
 
   /**
@@ -605,12 +571,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): Promise<AdvanceResult> {
+    const from = execState.phase;
     try {
       const result = await executeAdvance(this.ctx, state, execState, toolRegistry, options);
-      this.emit('complete', { state, result });
+      this.emit('advance:phase', { from, to: result.phase, state: result.state });
       return result;
     } catch (error) {
-      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.emit('error', { state, error: err, phase: 'advance' });
       throw error;
     }
   }
@@ -651,24 +619,23 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): AsyncGenerator<StreamEvent, AdvanceResult> {
-    const iterator = executeAdvanceStream(this.ctx, state, execState, toolRegistry, options);
-    let result: AdvanceResult | undefined;
-
     try {
+      const generator = executeAdvanceStream(this.ctx, state, execState, toolRegistry, options);
+
       while (true) {
-        const { done, value } = await iterator.next();
+        const { done, value } = await generator.next();
         if (done) {
-          result = value;
-          break;
+          return value as AdvanceResult;
         }
-        this.emit('event', value);
+        // Emit phase changes from stream events
+        if (value.type === 'phase-change') {
+          this.emit('advance:phase', { from: value.from, to: value.to, state });
+        }
         yield value;
       }
-
-      this.emit('complete', { state, result: result! });
-      return result!;
     } catch (error) {
-      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.emit('error', { state, error: err, phase: 'advance' });
       throw error;
     }
   }
@@ -703,14 +670,61 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   async step(
     state: AgentState,
     toolRegistry?: IToolRegistry,
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal },
+    stepNumber?: number
   ): Promise<{ state: AgentState; result: StepResult }> {
+    const registry = toolRegistry ?? this.toolRegistry;
+    const execState = createExecutionState();
+    const stepIdx = stepNumber ?? 0;
+
+    this.emit('step:start', { state, stepNumber: stepIdx });
+
+    // Loop advance() until a natural stopping point
+    let currentState = state;
+
     try {
-      const result = await executeStep(this.ctx, this.compressor, state, toolRegistry, options);
-      this.emit('complete', result);
-      return result;
+      while (!isTerminalPhase(execState.phase)) {
+        options?.signal?.throwIfAborted();
+
+        const from = execState.phase;
+        const {
+          state: newState,
+          phase,
+          done,
+        } = await executeAdvance(this.ctx, currentState, execState, registry, options);
+
+        currentState = await maybeCompress(this.compressor, newState);
+
+        // Emit phase transition
+        this.emit('advance:phase', { from, to: phase, state: currentState });
+
+        // Terminal: completed (direct answer)
+        if (done && phase.type === 'completed') {
+          const result: StepResult = { type: 'done', answer: phase.answer };
+          this.emit('step:end', { state: currentState, stepNumber: stepIdx, result });
+          return { state: currentState, result };
+        }
+
+        // Terminal: error (LLM call failed)
+        if (done && phase.type === 'error') {
+          const result: StepResult = { type: 'error', error: phase.error };
+          this.emit('step:end', { state: currentState, stepNumber: stepIdx, result });
+          return { state: currentState, result };
+        }
+
+        // Non-terminal stopping point: tool-result
+        if (phase.type === 'tool-result') {
+          const result: StepResult = { type: 'continue', toolResult: phase.result };
+          this.emit('step:end', { state: currentState, stepNumber: stepIdx, result });
+          return { state: currentState, result };
+        }
+      }
+
+      // Should not reach here
+      throw new Error('Unexpected: step loop exited without reaching terminal phase');
     } catch (error) {
-      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.emit('error', { state: currentState, error: err, phase: 'step' });
       throw error;
     }
   }
@@ -725,26 +739,35 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   async *stepStream(
     state: AgentState,
     toolRegistry?: IToolRegistry,
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal },
+    stepNumber?: number
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
-    const iterator = executeStepStream(this.ctx, this.compressor, state, toolRegistry, options);
-    let result: { state: AgentState; result: StepResult } | undefined;
-
+    const stepIdx = stepNumber ?? 0;
+    this.emit('step:start', { state, stepNumber: stepIdx });
     try {
+      const generator = executeStepStream(this.ctx, this.compressor, state, toolRegistry, options);
+
       while (true) {
-        const { done, value } = await iterator.next();
+        const { done, value } = await generator.next();
         if (done) {
-          result = value;
-          break;
+          const result = value as { state: AgentState; result: StepResult };
+          this.emit('step:end', {
+            state: result.state,
+            stepNumber: stepIdx,
+            result: result.result,
+          });
+          return result;
         }
-        this.emit('event', value);
+        // Forward stream events (including phase-change, token, tool events)
+        // and emit phase changes as advance:phase events
+        if (value.type === 'phase-change') {
+          this.emit('advance:phase', { from: value.from, to: value.to, state });
+        }
         yield value;
       }
-
-      this.emit('complete', result!);
-      return result!;
     } catch (error) {
-      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.emit('error', { state, error: err, phase: 'step' });
       throw error;
     }
   }
@@ -772,18 +795,62 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
-    try {
-      const result = await executeRun(this.ctx, this.compressor, state, options, toolRegistry);
+    this.emit('run:start', { state });
+    const registry = toolRegistry ?? this.toolRegistry;
+    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
+    let currentState = state;
+    let totalSteps = 0;
 
-      // Emit error event if result is error type
-      if (result.result.type === 'error') {
-        this.emit('error', { error: result.result.error });
+    try {
+      while (totalSteps < maxSteps) {
+        options?.signal?.throwIfAborted();
+
+        // Call step() to get full event propagation (advance → step → run)
+        const { state: newState, result } = await this.step(
+          currentState,
+          registry,
+          options,
+          totalSteps
+        );
+        currentState = newState;
+        totalSteps++;
+
+        if (result.type === 'done') {
+          const runResult: RunResult = { type: 'success', answer: result.answer, totalSteps };
+          this.emit('run:end', { state: currentState, result: runResult });
+          return { state: currentState, result: runResult };
+        }
+
+        if (result.type === 'error') {
+          const runResult: RunResult = { type: 'error', error: result.error, totalSteps };
+          this.emit('error', { state: currentState, error: result.error, phase: 'step' });
+          this.emit('run:end', { state: currentState, result: runResult });
+          return { state: currentState, result: runResult };
+        }
+
+        // Auto-compress between steps
+        if (this.compressor && this.compressor.shouldCompress(currentState)) {
+          this.emit('compress:start', { state: currentState });
+          const prevAnchor = currentState.context.compression?.anchor ?? 0;
+          currentState = await maybeCompress(this.compressor, currentState);
+          const newAnchor = currentState.context.compression?.anchor ?? 0;
+          if (currentState.context.compression) {
+            this.emit('compress:end', {
+              state: currentState,
+              summary: currentState.context.compression.summary,
+              removedCount: newAnchor - prevAnchor,
+            });
+          }
+        }
       }
 
-      this.emit('complete', result);
-      return result;
+      // maxSteps exhausted
+      const runResult: RunResult = { type: 'max_steps', totalSteps };
+      this.emit('run:end', { state: currentState, result: runResult });
+      return { state: currentState, result: runResult };
     } catch (error) {
-      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.emit('error', { state: currentState, error: err, phase: 'run' });
       throw error;
     }
   }
@@ -812,30 +879,109 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
+    this.emit('run:start', { state });
+    const registry = toolRegistry ?? this.toolRegistry;
+    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
+    let currentState = state;
+    let totalSteps = 0;
+
     try {
-      const generator = executeRunStream(this.ctx, this.compressor, state, options, toolRegistry);
-      let result: { state: AgentState; result: RunResult } | undefined;
+      while (totalSteps < maxSteps) {
+        options?.signal?.throwIfAborted();
 
-      while (true) {
-        const { done, value } = await generator.next();
-        if (done) {
-          result = value;
-          break;
+        // Step start
+        this.emit('step:start', { state: currentState, stepNumber: totalSteps });
+        yield { type: 'step:start', step: totalSteps, state: currentState };
+
+        // Use stepStream to get real-time tokens and phase events
+        const iterator = executeStepStream(
+          this.ctx,
+          this.compressor,
+          currentState,
+          registry,
+          options
+        );
+        let stepResult: { state: AgentState; result: StepResult };
+
+        while (true) {
+          const { done, value } = await iterator.next();
+          if (done) {
+            stepResult = value;
+            break;
+          }
+          // Forward phase changes as advance:phase events
+          if (value.type === 'phase-change') {
+            this.emit('advance:phase', { from: value.from, to: value.to, state: currentState });
+          }
+          yield value as RunStreamEvent;
         }
-        this.emit('event', value);
-        yield value;
+
+        currentState = stepResult.state;
+        this.emit('step:end', {
+          state: currentState,
+          stepNumber: totalSteps,
+          result: stepResult.result,
+        });
+        yield { type: 'step:end', step: totalSteps, result: stepResult.result };
+        totalSteps++;
+
+        // Auto-compress between steps
+        if (this.compressor && this.compressor.shouldCompress(currentState)) {
+          this.emit('compress:start', { state: currentState });
+          yield { type: 'compressing' };
+          const prevAnchor = stepResult.state.context.compression?.anchor ?? 0;
+          currentState = await maybeCompress(this.compressor, currentState);
+          const newAnchor = currentState.context.compression?.anchor ?? 0;
+          if (currentState.context.compression) {
+            this.emit('compress:end', {
+              state: currentState,
+              summary: currentState.context.compression.summary,
+              removedCount: newAnchor - prevAnchor,
+            });
+            yield {
+              type: 'compressed',
+              summary: currentState.context.compression.summary,
+              removedCount: newAnchor - prevAnchor,
+            };
+          }
+        }
+
+        if (stepResult.result.type === 'done') {
+          const runResult: RunResult = {
+            type: 'success',
+            answer: stepResult.result.answer,
+            totalSteps,
+          };
+          this.emit('run:end', { state: currentState, result: runResult });
+          yield { type: 'complete', result: runResult };
+          return { state: currentState, result: runResult };
+        }
+
+        if (stepResult.result.type === 'error') {
+          const runResult: RunResult = {
+            type: 'error',
+            error: stepResult.result.error,
+            totalSteps,
+          };
+          this.emit('error', {
+            state: currentState,
+            error: stepResult.result.error,
+            phase: 'step',
+          });
+          this.emit('run:end', { state: currentState, result: runResult });
+          yield { type: 'complete', result: runResult };
+          return { state: currentState, result: runResult };
+        }
       }
 
-      if (result) {
-        // Emit error event if result is error type
-        if (result.result.type === 'error') {
-          this.emit('error', { error: result.result.error });
-        }
-        this.emit('complete', result);
-      }
-      return result!;
+      // maxSteps exhausted
+      const runResult: RunResult = { type: 'max_steps', totalSteps };
+      this.emit('run:end', { state: currentState, result: runResult });
+      yield { type: 'complete', result: runResult };
+      return { state: currentState, result: runResult };
     } catch (error) {
-      this.emit('error', { error: error instanceof Error ? error : new Error(String(error)) });
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.emit('error', { state: currentState, error: err, phase: 'run' });
       throw error;
     }
   }
@@ -859,13 +1005,5 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       throw new Error('No compressor configured. Pass compressor in RunnerOptions.');
     }
     return compressState(this.compressor, state);
-  }
-
-  /**
-   * Check if compression is needed and apply it
-   * @private
-   */
-  private async maybeCompress(state: AgentState): Promise<AgentState> {
-    return maybeCompress(this.compressor, state);
   }
 }

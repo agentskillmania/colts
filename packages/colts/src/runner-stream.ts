@@ -223,3 +223,87 @@ export async function* executeStepStream(
   // Should not reach here: all terminal phases are handled inside the loop body
   throw new Error('Unexpected: stepStream loop exited without reaching terminal phase');
 }
+
+import type { RunResult, RunStreamEvent } from './execution.js';
+
+/**
+ * Stream run until completion (macro-step streaming)
+ */
+export async function* executeRunStream(
+  ctx: RunnerContext,
+  compressor: IContextCompressor | undefined,
+  state: AgentState,
+  options?: { maxSteps?: number; signal?: AbortSignal },
+  toolRegistry?: IToolRegistry
+): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
+  const registry = toolRegistry ?? ctx.toolRegistry;
+  // maxSteps hierarchy: run parameter > RunnerOptions > default 10
+  const maxSteps = options?.maxSteps ?? ctx.options.maxSteps ?? 10;
+  let currentState = state;
+  let totalSteps = 0;
+
+  while (totalSteps < maxSteps) {
+    options?.signal?.throwIfAborted();
+    yield { type: 'step:start', step: totalSteps, state: currentState };
+
+    // Use stepStream to get real-time tokens and phase events
+    const iterator = executeStepStream(ctx, compressor, currentState, registry, options);
+    let stepResult: { state: AgentState; result: StepResult };
+
+    while (true) {
+      const { done, value } = await iterator.next();
+      if (done) {
+        stepResult = value;
+        break;
+      }
+      // Forward all events from stepStream (token, phase-change, tool:start/end)
+      yield value as RunStreamEvent;
+    }
+
+    currentState = stepResult.state;
+    totalSteps++;
+
+    yield { type: 'step:end', step: totalSteps - 1, result: stepResult.result };
+
+    // Auto-compress between steps (yield events so UI can observe)
+    if (compressor && compressor.shouldCompress(currentState)) {
+      yield { type: 'compressing' };
+      const compressedState = await maybeCompress(compressor, currentState);
+      if (compressedState.context.compression) {
+        const prevAnchor = stepResult.state.context.compression?.anchor ?? 0;
+        const newAnchor = compressedState.context.compression.anchor;
+        yield {
+          type: 'compressed',
+          summary: compressedState.context.compression.summary,
+          removedCount: newAnchor - prevAnchor,
+        };
+        currentState = compressedState;
+      }
+    }
+
+    if (stepResult.result.type === 'done') {
+      const runResult: RunResult = {
+        type: 'success',
+        answer: stepResult.result.answer,
+        totalSteps,
+      };
+      yield { type: 'complete', result: runResult };
+      return { state: currentState, result: runResult };
+    }
+
+    if (stepResult.result.type === 'error') {
+      const runResult: RunResult = {
+        type: 'error',
+        error: stepResult.result.error,
+        totalSteps,
+      };
+      yield { type: 'complete', result: runResult };
+      return { state: currentState, result: runResult };
+    }
+  }
+
+  // maxSteps exhausted
+  const runResult: RunResult = { type: 'max_steps', totalSteps };
+  yield { type: 'complete', result: runResult };
+  return { state: currentState, result: runResult };
+}
