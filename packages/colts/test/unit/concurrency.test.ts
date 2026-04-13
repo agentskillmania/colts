@@ -1,7 +1,7 @@
 /**
- * @fileoverview Step 14: 并发隔离测试
+ * @fileoverview Step 14: Concurrency isolation test
  *
- * 验证 Runner 无状态设计保证多个 AgentState 并发执行互不干扰。
+ * Verifies that Runner's stateless design ensures multiple AgentStates can execute concurrently without interference.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -21,7 +21,7 @@ function createMockLLMClient(responses: LLMResponse[]): LLMClient {
       if (callIndex >= responses.length) {
         throw new Error(`No more mock responses (index ${callIndex})`);
       }
-      // 模拟异步延迟，让并发测试更真实
+      // Simulate async delay for more realistic concurrency testing
       return new Promise((resolve) =>
         setTimeout(() => resolve(responses[callIndex++]), Math.random() * 10)
       );
@@ -43,8 +43,8 @@ const defaultConfig: AgentConfig = {
   tools: [],
 };
 
-describe('Step 14: 并发隔离', () => {
-  it('两个 Agent 同时运行不冲突', async () => {
+describe('Step 14: Concurrency isolation', () => {
+  it('two Agents running simultaneously do not conflict', async () => {
     const client1 = createMockLLMClient([
       { content: 'Agent 1 answer', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
     ]);
@@ -58,7 +58,7 @@ describe('Step 14: 并发隔离', () => {
     const state1 = createAgentState({ ...defaultConfig, name: 'agent-1' });
     const state2 = createAgentState({ ...defaultConfig, name: 'agent-2' });
 
-    // 并发运行
+    // Run concurrently
     const [result1, result2] = await Promise.all([runner1.run(state1), runner2.run(state2)]);
 
     expect(result1.result.type).toBe('success');
@@ -71,19 +71,19 @@ describe('Step 14: 并发隔离', () => {
     }
   });
 
-  it('各自的 messages 独立', async () => {
+  it('each has independent messages', async () => {
     const client = createMockLLMClient([
       { content: 'Hello back', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
       { content: 'Hello back', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
     ]);
 
-    // 同一个 Runner 跑两个 AgentState
+    // Same Runner running two AgentStates
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
 
     const state1 = createAgentState({ ...defaultConfig, name: 'agent-1' });
     const state2 = createAgentState({ ...defaultConfig, name: 'agent-2' });
 
-    // 给 state1 加一条历史消息
+    // Add a historical message to state1
     const state1WithHistory = {
       ...state1,
       context: {
@@ -97,17 +97,17 @@ describe('Step 14: 并发隔离', () => {
       runner.run(state2),
     ]);
 
-    // state1 有历史消息 + 新消息
+    // state1 has historical messages + new messages
     expect(result1.state.context.messages.length).toBeGreaterThan(
       result2.state.context.messages.length
     );
-    // state2 没有被 state1 的消息污染
+    // state2 is not polluted by state1's messages
     expect(result2.state.context.messages.every((m) => m.content !== 'Previous message')).toBe(
       true
     );
   });
 
-  it('各自的 stepCount 独立', async () => {
+  it('each has independent stepCount', async () => {
     const toolCallResponse = {
       content: 'Calculating',
       toolCalls: [{ id: 'call-1', name: 'calc', arguments: { expression: '1+1' } }],
@@ -115,7 +115,7 @@ describe('Step 14: 并发隔离', () => {
       stopReason: 'tool_calls',
     };
 
-    // 每个 runner 用独立的 client，避免共享 callIndex 导致竞态
+    // Each runner uses an independent client to avoid race conditions from shared callIndex
     const client1 = createMockLLMClient(Array(4).fill(toolCallResponse) as LLMResponse[]);
     const client2 = createMockLLMClient(Array(4).fill(toolCallResponse) as LLMResponse[]);
 
@@ -140,16 +140,16 @@ describe('Step 14: 并发隔离', () => {
       runner2.run(state2, { maxSteps: 3 }, registry),
     ]);
 
-    // 各自的 stepCount 符合各自的 maxSteps
+    // Each stepCount matches its respective maxSteps
     expect(result1.state.context.stepCount).toBe(2);
     expect(result2.state.context.stepCount).toBe(3);
 
-    // 原状态不变
+    // Original states unchanged
     expect(state1.context.stepCount).toBe(0);
     expect(state2.context.stepCount).toBe(0);
   });
 
-  it('一个报错不影响另一个', async () => {
+  it('one error does not affect the other', async () => {
     const errorClient = {
       call: vi.fn().mockRejectedValue(new Error('API exploded')),
       stream: vi.fn(),
@@ -165,24 +165,24 @@ describe('Step 14: 并发隔离', () => {
     const state1 = createAgentState({ ...defaultConfig, name: 'failing-agent' });
     const state2 = createAgentState({ ...defaultConfig, name: 'succeeding-agent' });
 
-    // 并发运行，runner1 会失败
+    // Run concurrently, runner1 will fail
     const [result1, result2] = await Promise.all([runner1.run(state1), runner2.run(state2)]);
 
-    // runner1 错误被捕获，返回 error 结果
+    // runner1 error is caught, returns error result
     expect(result1.result.type).toBe('error');
     if (result1.result.type === 'error') {
       expect(result1.result.error.message).toContain('API exploded');
     }
 
-    // runner2 不受影响，正常完成
+    // runner2 is unaffected and completes normally
     expect(result2.result.type).toBe('success');
     if (result2.result.type === 'success') {
       expect(result2.result.answer).toBe('I am fine');
     }
   });
 
-  it('同一个 Runner 并发运行多个 AgentState', async () => {
-    // 一个 Runner 跑 3 个不同的 AgentState
+  it('same Runner concurrently runs multiple AgentStates', async () => {
+    // One Runner runs 3 different AgentStates
     const client = createMockLLMClient([
       { content: 'Answer A', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
       { content: 'Answer B', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
@@ -202,12 +202,12 @@ describe('Step 14: 并发隔离', () => {
       return r.result.type === 'success' ? r.result.answer : '';
     });
 
-    // 每个都拿到了各自的回答
+    // Each got its own answer
     expect(answers).toContain('Answer A');
     expect(answers).toContain('Answer B');
     expect(answers).toContain('Answer C');
 
-    // 原状态全部不变
+    // All original states unchanged
     states.forEach((s) => {
       expect(s.context.stepCount).toBe(0);
       expect(s.context.messages).toHaveLength(0);

@@ -1,7 +1,7 @@
 /**
- * @fileoverview load_skill 工具单元测试（Step 8）
+ * @fileoverview load_skill tool unit tests (Step 8)
  *
- * 测试 createLoadSkillTool 的正常场景、异常场景和边界场景。
+ * Tests createLoadSkillTool for normal, abnormal, and boundary scenarios.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { createLoadSkillTool } from '../../src/skills/load-skill-tool.js';
@@ -9,10 +9,10 @@ import { ToolRegistry } from '../../src/tools/registry.js';
 import type { ISkillProvider, SkillManifest } from '../../src/skills/types.js';
 
 /**
- * 创建 mock ISkillProvider
+ * Create mock ISkillProvider
  *
- * @param skills - Skill 列表
- * @param instructions - name -> 指令内容的映射
+ * @param skills - Skill list
+ * @param instructions - name -> instruction content mapping
  */
 function createMockProvider(
   skills: SkillManifest[] = [],
@@ -37,7 +37,7 @@ function createMockProvider(
 
 describe('Step 8: load_skill Tool', () => {
   describe('createLoadSkillTool', () => {
-    it('应返回正确的工具名称和描述', () => {
+    it('should return correct tool name and description', () => {
       const provider = createMockProvider();
       const tool = createLoadSkillTool(provider);
 
@@ -46,7 +46,7 @@ describe('Step 8: load_skill Tool', () => {
       expect(typeof tool.description).toBe('string');
     });
 
-    it('应返回 Zod 参数 schema', () => {
+    it('should return Zod parameter schema', () => {
       const provider = createMockProvider();
       const tool = createLoadSkillTool(provider);
 
@@ -55,8 +55,8 @@ describe('Step 8: load_skill Tool', () => {
     });
   });
 
-  describe('加载已存在的 Skill 指令', () => {
-    it('应返回 SWITCH_SKILL 信号', async () => {
+  describe('Loading existing Skill instructions', () => {
+    it('should return SWITCH_SKILL signal', async () => {
       const manifest: SkillManifest = {
         name: 'code-review',
         description: 'Code review skill',
@@ -77,7 +77,7 @@ describe('Step 8: load_skill Tool', () => {
       });
     });
 
-    it('应传递 task 参数', async () => {
+    it('should pass task parameter', async () => {
       const manifest: SkillManifest = {
         name: 'code-review',
         description: 'Code review skill',
@@ -97,7 +97,7 @@ describe('Step 8: load_skill Tool', () => {
       });
     });
 
-    it('应通过 skillProvider.getManifest 查找 Skill', async () => {
+    it('should look up Skill via skillProvider.getManifest', async () => {
       const manifest: SkillManifest = {
         name: 'deploy',
         description: 'Deploy skill',
@@ -111,7 +111,7 @@ describe('Step 8: load_skill Tool', () => {
       expect(provider.getManifest).toHaveBeenCalledWith('deploy');
     });
 
-    it('应通过 skillProvider.loadInstructions 加载指令', async () => {
+    it('should load instructions via skillProvider.loadInstructions', async () => {
       const manifest: SkillManifest = {
         name: 'test',
         description: 'Test skill',
@@ -126,8 +126,8 @@ describe('Step 8: load_skill Tool', () => {
     });
   });
 
-  describe('Skill 未找到', () => {
-    it('应返回 SKILL_NOT_FOUND 信号', async () => {
+  describe('Skill not found', () => {
+    it('should return SKILL_NOT_FOUND signal', async () => {
       const skills: SkillManifest[] = [
         { name: 'skill-a', description: 'A', source: '/a' },
         { name: 'skill-b', description: 'B', source: '/b' },
@@ -147,7 +147,7 @@ describe('Step 8: load_skill Tool', () => {
       });
     });
 
-    it('没有可用 Skill 时应返回空列表', async () => {
+    it('should return empty list when no Skills are available', async () => {
       const provider = createMockProvider([], {});
 
       const tool = createLoadSkillTool(provider);
@@ -161,8 +161,8 @@ describe('Step 8: load_skill Tool', () => {
     });
   });
 
-  describe('重复加载同一 Skill', () => {
-    it('多次加载同一 Skill 应返回相同 SWITCH_SKILL 信号', async () => {
+  describe('Reloading the same Skill', () => {
+    it('multiple loads of the same Skill should return the same SWITCH_SKILL signal', async () => {
       const manifest: SkillManifest = {
         name: 'stable-skill',
         description: 'Stable',
@@ -186,8 +186,8 @@ describe('Step 8: load_skill Tool', () => {
     });
   });
 
-  describe('空 Skill 名称', () => {
-    it('空字符串名称应返回 SKILL_NOT_FOUND 信号', async () => {
+  describe('Empty Skill name', () => {
+    it('empty string name should return SKILL_NOT_FOUND signal', async () => {
       const skills: SkillManifest[] = [{ name: 'real-skill', description: 'Real', source: '/r' }];
       const provider = createMockProvider(skills, {
         'real-skill': 'Content',
@@ -204,8 +204,8 @@ describe('Step 8: load_skill Tool', () => {
     });
   });
 
-  describe('ToolRegistry 集成', () => {
-    it('应能注册到 ToolRegistry', () => {
+  describe('ToolRegistry integration', () => {
+    it('should be registerable to ToolRegistry', () => {
       const provider = createMockProvider();
       const tool = createLoadSkillTool(provider);
 
@@ -215,7 +215,7 @@ describe('Step 8: load_skill Tool', () => {
       expect(registry.has('load_skill')).toBe(true);
     });
 
-    it('应生成有效的 LLM 工具 schema', () => {
+    it('should generate valid LLM tool schema', () => {
       const provider = createMockProvider();
       const tool = createLoadSkillTool(provider);
 
@@ -235,7 +235,7 @@ describe('Step 8: load_skill Tool', () => {
       expect(params.type).toBe('object');
     });
 
-    it('应能通过 ToolRegistry 执行并返回 SWITCH_SKILL 信号', async () => {
+    it('should execute through ToolRegistry and return SWITCH_SKILL signal', async () => {
       const manifest: SkillManifest = {
         name: 'integration-test',
         description: 'Integration',
@@ -258,30 +258,30 @@ describe('Step 8: load_skill Tool', () => {
       });
     });
 
-    it('应通过 Zod schema 校验参数', async () => {
+    it('should validate parameters through Zod schema', async () => {
       const provider = createMockProvider();
       const tool = createLoadSkillTool(provider);
 
       const registry = new ToolRegistry();
       registry.register(tool);
 
-      // 缺少 name 参数应抛出校验错误
+      // Missing name parameter should throw validation error
       await expect(registry.execute('load_skill', {})).rejects.toThrow();
 
-      // name 类型错误应抛出校验错误
+      // Wrong name type should throw validation error
       await expect(registry.execute('load_skill', { name: 123 })).rejects.toThrow();
     });
   });
 
-  describe('loadInstructions 异常', () => {
-    it('当 loadInstructions 抛出异常时应该传播', async () => {
+  describe('loadInstructions exception', () => {
+    it('should propagate when loadInstructions throws', async () => {
       const manifest: SkillManifest = {
         name: 'broken-skill',
         description: 'Broken',
         source: '/skills/broken',
       };
       const provider = createMockProvider([manifest], {});
-      // 覆盖 loadInstructions 使其抛出
+      // Override loadInstructions to throw
       (provider.loadInstructions as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error('Failed to read skill file')
       );

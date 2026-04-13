@@ -1,7 +1,7 @@
 /**
- * @fileoverview return_skill 工具单元测试
+ * @fileoverview return_skill tool unit tests
  *
- * 测试 createReturnSkillTool 的信号返回和参数处理。
+ * Tests signal return and parameter handling of createReturnSkillTool.
  */
 import { describe, it, expect } from 'vitest';
 import { createReturnSkillTool } from '../../src/skills/return-skill-tool.js';
@@ -10,7 +10,7 @@ import { isSkillSignal } from '../../src/skills/types.js';
 
 describe('return_skill Tool', () => {
   describe('createReturnSkillTool', () => {
-    it('应返回正确的工具名称和描述', () => {
+    it('should return correct tool name and description', () => {
       const tool = createReturnSkillTool();
 
       expect(tool.name).toBe('return_skill');
@@ -19,7 +19,7 @@ describe('return_skill Tool', () => {
       expect(tool.description).toContain('return');
     });
 
-    it('应返回 Zod 参数 schema', () => {
+    it('should return Zod parameter schema', () => {
       const tool = createReturnSkillTool();
 
       expect(tool.parameters).toBeDefined();
@@ -27,8 +27,8 @@ describe('return_skill Tool', () => {
     });
   });
 
-  describe('RETURN_SKILL 信号', () => {
-    it('应返回 RETURN_SKILL 信号', async () => {
+  describe('RETURN_SKILL signal', () => {
+    it('should return RETURN_SKILL signal', async () => {
       const tool = createReturnSkillTool();
       const result = await tool.execute({
         result: 'Task completed successfully',
@@ -43,7 +43,7 @@ describe('return_skill Tool', () => {
       expect(isSkillSignal(result)).toBe(true);
     });
 
-    it('应支持 partial 状态', async () => {
+    it('should support partial status', async () => {
       const tool = createReturnSkillTool();
       const result = await tool.execute({
         result: 'Partial results obtained',
@@ -56,7 +56,7 @@ describe('return_skill Tool', () => {
       });
     });
 
-    it('应支持 failed 状态', async () => {
+    it('should support failed status', async () => {
       const tool = createReturnSkillTool();
       const result = await tool.execute({
         result: 'Task failed due to error',
@@ -69,7 +69,7 @@ describe('return_skill Tool', () => {
       });
     });
 
-    it('status 应默认为 success', async () => {
+    it('status should default to success', async () => {
       const tool = createReturnSkillTool();
       const result = await tool.execute({
         result: 'Default status test',
@@ -82,7 +82,7 @@ describe('return_skill Tool', () => {
       });
     });
 
-    it('应支持详细的返回结果', async () => {
+    it('should support detailed return result', async () => {
       const tool = createReturnSkillTool();
       const detailedResult = JSON.stringify({
         recordsProcessed: 100,
@@ -103,8 +103,8 @@ describe('return_skill Tool', () => {
     });
   });
 
-  describe('ToolRegistry 集成', () => {
-    it('应能注册到 ToolRegistry', () => {
+  describe('ToolRegistry integration', () => {
+    it('should be registerable to ToolRegistry', () => {
       const tool = createReturnSkillTool();
 
       const registry = new ToolRegistry();
@@ -113,7 +113,7 @@ describe('return_skill Tool', () => {
       expect(registry.has('return_skill')).toBe(true);
     });
 
-    it('应生成有效的 LLM 工具 schema', () => {
+    it('should generate valid LLM tool schema', () => {
       const tool = createReturnSkillTool();
 
       const registry = new ToolRegistry();
@@ -132,7 +132,7 @@ describe('return_skill Tool', () => {
       expect(params.type).toBe('object');
     });
 
-    it('应能通过 ToolRegistry 执行', async () => {
+    it('should execute through ToolRegistry', async () => {
       const tool = createReturnSkillTool();
 
       const registry = new ToolRegistry();
@@ -150,19 +150,19 @@ describe('return_skill Tool', () => {
       });
     });
 
-    it('应通过 Zod schema 校验参数', async () => {
+    it('should validate parameters through Zod schema', async () => {
       const tool = createReturnSkillTool();
 
       const registry = new ToolRegistry();
       registry.register(tool);
 
-      // 缺少 result 参数应抛出校验错误
+      // Missing result parameter should throw validation error
       await expect(registry.execute('return_skill', {})).rejects.toThrow();
 
-      // result 类型错误应抛出校验错误
+      // Wrong result type should throw validation error
       await expect(registry.execute('return_skill', { result: 123 })).rejects.toThrow();
 
-      // status 值不在枚举中应抛出校验错误
+      // status value not in enum should throw validation error
       await expect(
         registry.execute('return_skill', { result: 'test', status: 'invalid' })
       ).rejects.toThrow();

@@ -10,7 +10,7 @@ import { DefaultContextCompressor } from '../../src/compressor.js';
 import { createAgentState } from '../../src/state.js';
 import type { AgentState, ILLMProvider, CompressionConfig } from '../../src/types.js';
 
-// 辅助：创建指定消息数量的 AgentState
+// Helper: create an AgentState with a specified number of messages
 function createStateWithMessages(count: number): AgentState {
   const state = createAgentState({
     name: 'test',
@@ -18,7 +18,7 @@ function createStateWithMessages(count: number): AgentState {
     tools: [],
   });
 
-  // 直接操作 state.context.messages
+  // Directly manipulate state.context.messages
   for (let i = 0; i < count; i++) {
     state.context.messages.push({
       role: 'user',
@@ -31,7 +31,7 @@ function createStateWithMessages(count: number): AgentState {
   return state;
 }
 
-// 辅助：创建带有 compression 元数据的 state
+// Helper: create a state with compression metadata
 function createStateWithCompression(
   messageCount: number,
   anchor: number,
@@ -335,7 +335,7 @@ describe('DefaultContextCompressor - generateSummary', () => {
       instructions: 'test',
       tools: [],
     });
-    // 4 条消息，keepRecent=1 → anchor=3 → 压缩 messages[0..2]
+    // 4 messages, keepRecent=1 → anchor=3 → compress messages[0..2]
     state.context.messages.push(
       { role: 'user', content: 'Hello', type: 'text' },
       { role: 'assistant', content: 'Hi there', type: 'final' },
@@ -348,12 +348,12 @@ describe('DefaultContextCompressor - generateSummary', () => {
     const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
     const prompt = callArgs.messages[0].content as string;
 
-    // messages[0..2] 被压缩，包含 user、assistant、tool
+    // messages[0..2] are compressed, containing user, assistant, tool
     expect(prompt).toContain('User: Hello');
     expect(prompt).toContain('Assistant: Hi there');
     expect(prompt).toContain('Tool: Result: 42');
     expect(prompt).toContain('Summarize the following conversation');
-    // messages[3] 是 keepRecent 部分，不包含在 summary 中
+    // messages[3] is the keepRecent part, not included in summary
     expect(prompt).not.toContain('Follow up');
   });
 

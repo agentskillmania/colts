@@ -1,5 +1,5 @@
 /**
- * @fileoverview TimelineEntry 类型和过滤逻辑的单元测试
+ * @fileoverview TimelineEntry type and filtering logic unit tests
  */
 
 import { describe, it, expect } from 'vitest';
@@ -11,7 +11,7 @@ import {
   VISIBILITY_MAP,
 } from '../../src/types/timeline.js';
 
-/** 创建指定类型的条目（最小字段） */
+/** Create an entry of specified type (minimum fields) */
 function makeEntry(type: TimelineEntry['type'], overrides?: Partial<TimelineEntry>): TimelineEntry {
   const base: TimelineEntry = {
     type: 'system' as const,
@@ -19,7 +19,7 @@ function makeEntry(type: TimelineEntry['type'], overrides?: Partial<TimelineEntr
     content: 'test',
     timestamp: Date.now(),
   };
-  // 根据类型构建最小条目
+  // Build minimum entry according to type
   switch (type) {
     case 'user':
       return { type, id: 'test-1', content: 'hello', timestamp: Date.now(), ...overrides };
@@ -91,7 +91,7 @@ function makeEntry(type: TimelineEntry['type'], overrides?: Partial<TimelineEntr
 }
 
 describe('isVisible', () => {
-  // 验证所有条目类型在三个级别下的可见性
+  // Verify visibility of all entry types under three levels
   const allTypes: TimelineEntry['type'][] = [
     'user',
     'assistant',
@@ -110,16 +110,19 @@ describe('isVisible', () => {
 
   const levels: DetailLevel[] = ['compact', 'detail', 'verbose'];
 
-  it.each(allTypes)('应该为 %s 类型提供所有三个级别的可见性定义', (entryType) => {
-    const entry = makeEntry(entryType);
-    for (const level of levels) {
-      // 不应抛异常
-      expect(() => isVisible(entry, level)).not.toThrow();
+  it.each(allTypes)(
+    'should provide visibility definitions for all three levels for %s type',
+    (entryType) => {
+      const entry = makeEntry(entryType);
+      for (const level of levels) {
+        // Should not throw
+        expect(() => isVisible(entry, level)).not.toThrow();
+      }
     }
-  });
+  );
 
-  // compact 模式只显示核心信息
-  it('compact 模式隐藏 phase、thought、step-start、step-end、compress', () => {
+  // compact mode only shows core info
+  it('compact mode hides phase, thought, step-start, step-end, compress', () => {
     const hiddenTypes: TimelineEntry['type'][] = [
       'phase',
       'thought',
@@ -132,7 +135,7 @@ describe('isVisible', () => {
     }
   });
 
-  it('compact 模式显示 user、assistant、tool、run-complete、skill、subagent、system、error', () => {
+  it('compact mode shows user, assistant, tool, run-complete, skill, subagent, system, error', () => {
     const visibleTypes: TimelineEntry['type'][] = [
       'user',
       'assistant',
@@ -148,23 +151,23 @@ describe('isVisible', () => {
     }
   });
 
-  // detail 模式
-  it('detail 模式额外显示 step-start、step-end、compress', () => {
+  // detail mode
+  it('detail mode additionally shows step-start, step-end, compress', () => {
     const extraVisible: TimelineEntry['type'][] = ['step-start', 'step-end', 'compress'];
     for (const t of extraVisible) {
       expect(isVisible(makeEntry(t), 'detail')).toBe(true);
     }
   });
 
-  it('detail 模式仍然隐藏 phase、thought', () => {
+  it('detail mode still hides phase, thought', () => {
     const hidden: TimelineEntry['type'][] = ['phase', 'thought'];
     for (const t of hidden) {
       expect(isVisible(makeEntry(t), 'detail')).toBe(false);
     }
   });
 
-  // verbose 模式显示所有
-  it('verbose 模式显示所有条目类型', () => {
+  // verbose mode shows all
+  it('verbose mode shows all entry types', () => {
     for (const t of allTypes) {
       expect(isVisible(makeEntry(t), 'verbose')).toBe(true);
     }
@@ -172,7 +175,7 @@ describe('isVisible', () => {
 });
 
 describe('filterByDetailLevel', () => {
-  it('根据 level 过滤条目', () => {
+  it('filters entries by level', () => {
     const entries: TimelineEntry[] = [
       makeEntry('user'),
       makeEntry('phase'),
@@ -188,13 +191,13 @@ describe('filterByDetailLevel', () => {
     expect(verbose).toHaveLength(4);
   });
 
-  it('空数组返回空数组', () => {
+  it('empty array returns empty array', () => {
     expect(filterByDetailLevel([], 'compact')).toEqual([]);
   });
 });
 
-describe('VISIBILITY_MAP 完整性', () => {
-  it('每个条目类型都有三个级别的定义', () => {
+describe('VISIBILITY_MAP completeness', () => {
+  it('each entry type has definitions for all three levels', () => {
     const expectedTypes: TimelineEntry['type'][] = [
       'user',
       'assistant',

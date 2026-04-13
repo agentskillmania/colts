@@ -1,11 +1,11 @@
 /**
- * @fileoverview Skill 嵌套调用 E2E 集成测试
+ * @fileoverview Skill nested calling E2E integration test
  *
- * 测试完整的嵌套 Skill 调用流程：
- * 1. 顶层加载子 Skill
- * 2. 子 Skill 执行并返回结果
- * 3. 父 Skill 继续执行
- * 4. 多层嵌套支持
+ * Tests the complete nested Skill calling flow:
+ * 1. Top-level loads child Skill
+ * 2. Child Skill executes and returns result
+ * 3. Parent Skill continues execution
+ * 4. Multi-level nesting support
  */
 import { describe, it, expect, vi } from 'vitest';
 import { resolve } from 'node:path';
@@ -23,7 +23,7 @@ const defaultConfig: AgentConfig = {
 };
 
 /**
- * 创建模拟 LLM 客户端
+ * Create mock LLM client
  */
 function createMockLLMClient(responses: LLMResponse[]): LLMClient {
   let responseIndex = 0;
@@ -59,7 +59,7 @@ function createMockLLMClient(responses: LLMResponse[]): LLMClient {
 }
 
 /**
- * 创建工具调用响应
+ * Create tool call response
  */
 function createToolCallResponse(
   toolName: string,

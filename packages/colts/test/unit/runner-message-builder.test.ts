@@ -1,7 +1,7 @@
 /**
- * @fileoverview Runner Message Builder 单元测试
+ * @fileoverview Runner Message Builder unit tests
  *
- * 测试动态提示词注入和 Skill 模式切换。
+ * Tests dynamic prompt injection and Skill mode switching.
  */
 import { describe, it, expect } from 'vitest';
 import { buildMessages } from '../../src/runner-message-builder.js';

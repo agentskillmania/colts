@@ -551,7 +551,7 @@ describe('AgentRunner', () => {
         compressor: mockCompressor,
       });
 
-      // 创建带有消息的 state
+      // Create state with messages
       let state = createAgentState(defaultConfig);
       for (let i = 0; i < 10; i++) {
         state = addUserMessage(state, `Message ${i}`);
@@ -563,7 +563,7 @@ describe('AgentRunner', () => {
         summary: 'Summary of conversation',
         anchor: 5,
       });
-      // 原始 state 不变
+      // Original state unchanged
       expect(state.context.compression).toBeUndefined();
     });
 
@@ -592,9 +592,9 @@ describe('AgentRunner', () => {
       const state = createAgentState(defaultConfig);
       const { state: finalState } = await runner.step(state);
 
-      // step 完成后 shouldCompress 应被调用
+      // shouldCompress should be called after step completes
       expect(mockCompressor.shouldCompress).toHaveBeenCalled();
-      // 如果需要压缩，compress 也应被调用
+      // If compression is needed, compress should also be called
       if (mockCompressor.shouldCompress({ ...state, context: { ...state.context } })) {
         expect(mockCompressor.compress).toHaveBeenCalled();
       }
@@ -640,7 +640,7 @@ describe('AgentRunner', () => {
         llmClient: client,
       });
 
-      // 创建带有 compression 元数据的 state
+      // Create state with compression metadata
       let state = createAgentState(defaultConfig);
       state = addUserMessage(state, 'Old message 1');
       state = addAssistantMessage(state, 'Old response 1', { type: 'final', visible: true });
@@ -649,7 +649,7 @@ describe('AgentRunner', () => {
       state = addUserMessage(state, 'Recent message');
       state = addAssistantMessage(state, 'Recent response', { type: 'final', visible: true });
 
-      // 设置 compression：anchor=4，意味着 messages[0..3] 被压缩
+      // Set compression: anchor=4, meaning messages[0..3] are compressed
       state = {
         ...state,
         context: {
@@ -666,18 +666,18 @@ describe('AgentRunner', () => {
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const allContent = JSON.stringify(callArg.messages);
 
-      // 应包含 summary
+      // Should contain summary
       expect(allContent).toContain('Previous conversation about topic X');
-      // 应包含 anchor 之后的消息
+      // Should contain messages after anchor
       expect(allContent).toContain('Recent message');
-      // 不应包含 anchor 之前的原始消息（它们被压缩了）
+      // Should not contain original messages before anchor (they are compressed)
       expect(allContent).not.toContain('Old message 1');
     });
 
     it('should accept CompressionConfig for built-in compressor', () => {
       const client = createMockClient();
 
-      // 传入 CompressionConfig 而非 IContextCompressor
+      // Pass CompressionConfig instead of IContextCompressor
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
@@ -727,7 +727,7 @@ describe('AgentRunner', () => {
   // Skill integration
   // ============================================================
   describe('skill integration', () => {
-    /** 创建 mock ISkillProvider */
+    /** Create mock ISkillProvider */
     const createMockSkillProvider = (skills: SkillManifest[]): ISkillProvider => {
       const manifestMap = new Map(skills.map((s) => [s.name, s]));
       return {
@@ -756,7 +756,7 @@ describe('AgentRunner', () => {
       });
 
       expect(runner).toBeDefined();
-      // load_skill 工具应该被自动注册
+      // load_skill tool should be auto-registered
       const tools = runner.getToolRegistry().toToolSchemas();
       const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
       expect(loadSkillTool).toBeDefined();
@@ -772,7 +772,7 @@ describe('AgentRunner', () => {
       });
 
       expect(runner).toBeDefined();
-      // 即使目录不存在，load_skill 工具也应注册（provider 存在但没有 skills）
+      // load_skill tool should be registered even if directory doesn't exist (provider exists but has no skills)
       const tools = runner.getToolRegistry().toToolSchemas();
       const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
       expect(loadSkillTool).toBeDefined();
@@ -792,7 +792,7 @@ describe('AgentRunner', () => {
       });
 
       expect(runner).toBeDefined();
-      // 应使用注入的 provider，skillDirectories 被忽略
+      // Should use injected provider, skillDirectories is ignored
       const tools = runner.getToolRegistry().toToolSchemas();
       const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
       expect(loadSkillTool).toBeDefined();
@@ -820,11 +820,11 @@ describe('AgentRunner', () => {
         skillProvider,
       });
 
-      // 验证 load_skill 工具在 registry 中
+      // Verify load_skill tool is in registry
       const tools = runner.getToolRegistry().toToolSchemas();
       expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
 
-      // 执行 load_skill 工具
+      // Execute load_skill tool
       const result = await runner.getToolRegistry().execute('load_skill', { name: 'code-review' });
       expect(result).toMatchObject({
         type: 'SWITCH_SKILL',
@@ -862,7 +862,7 @@ describe('AgentRunner', () => {
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
 
-      // 系统提示应包含 skill 列表
+      // System prompt should contain skill list
       expect(firstUserMsg?.content).toContain('Available skills:');
       expect(firstUserMsg?.content).toContain(
         'code-review: Review code for security vulnerabilities'
@@ -881,7 +881,7 @@ describe('AgentRunner', () => {
         stopReason: 'stop',
       });
 
-      // 空 skill provider
+      // Empty skill provider
       const skillProvider = createMockSkillProvider([]);
 
       const runner = new AgentRunner({
@@ -896,7 +896,7 @@ describe('AgentRunner', () => {
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
 
-      // 没有 skills 时不应该包含 skill 相关内容
+      // Should not contain skill-related content when no skills exist
       expect(firstUserMsg?.content).not.toContain('Available skills:');
     });
 
@@ -914,13 +914,13 @@ describe('AgentRunner', () => {
   });
 
   // ============================================================
-  // SubAgent 集成
+  // SubAgent integration
   // ============================================================
   describe('subagent integration', () => {
-    /** 模拟 token 统计 */
+    /** Mock token stats */
     const mockTokens = { input: 10, output: 5 };
 
-    /** 创建模拟 LLM Client（支持多响应序列） */
+    /** Create mock LLM Client (supports multiple response sequences) */
     const createMultiResponseClient = (responses: LLMResponse[]): LLMClient => {
       let callIndex = 0;
       return {
@@ -934,7 +934,7 @@ describe('AgentRunner', () => {
       } as unknown as LLMClient;
     };
 
-    /** 创建测试用子 agent 配置 */
+    /** Create test sub-agent configs */
     const createTestSubAgents = (): SubAgentConfig[] => [
       {
         name: 'researcher',
@@ -957,7 +957,7 @@ describe('AgentRunner', () => {
       },
     ];
 
-    it('应该在提供 subAgents 时自动注册 delegate 工具', () => {
+    it('should auto-register delegate tool when subAgents are provided', () => {
       const client = createMockClient();
       const runner = new AgentRunner({
         model: 'gpt-4',
@@ -971,7 +971,7 @@ describe('AgentRunner', () => {
       expect(delegateTool!.function.description).toBeTruthy();
     });
 
-    it('不在提供 subAgents 时不注册 delegate 工具', () => {
+    it('should not register delegate tool when subAgents are not provided', () => {
       const client = createMockClient();
       const runner = new AgentRunner({
         model: 'gpt-4',
@@ -982,7 +982,7 @@ describe('AgentRunner', () => {
       expect(tools.some((t) => t.function.name === 'delegate')).toBe(false);
     });
 
-    it('空 subAgents 数组不注册 delegate 工具', () => {
+    it('should not register delegate tool for empty subAgents array', () => {
       const client = createMockClient();
       const runner = new AgentRunner({
         model: 'gpt-4',
@@ -994,7 +994,7 @@ describe('AgentRunner', () => {
       expect(tools.some((t) => t.function.name === 'delegate')).toBe(false);
     });
 
-    it('应该将子 agent 列表注入系统提示', async () => {
+    it('should inject sub-agent list into system prompt', async () => {
       const client = createMockClient();
       vi.mocked(client.call).mockResolvedValue({
         content: 'Response',
@@ -1014,14 +1014,14 @@ describe('AgentRunner', () => {
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
 
-      // 系统提示应包含子 agent 列表
+      // System prompt should contain sub-agent list
       expect(firstUserMsg?.content).toContain('Available sub-agents:');
       expect(firstUserMsg?.content).toContain('researcher: Information research specialist');
       expect(firstUserMsg?.content).toContain('writer: Content writing specialist');
       expect(firstUserMsg?.content).toContain('Use the delegate tool');
     });
 
-    it('不应在系统提示中包含子 agent 相关内容当没有配置子 agent 时', async () => {
+    it('should not include sub-agent related content in system prompt when no sub-agents are configured', async () => {
       const client = createMockClient();
       vi.mocked(client.call).mockResolvedValue({
         content: 'Response',
@@ -1043,12 +1043,12 @@ describe('AgentRunner', () => {
       expect(firstUserMsg?.content).not.toContain('Available sub-agents:');
     });
 
-    it('delegate 工具应可通过 registry 执行', async () => {
-      // 主 agent 调用 LLM 返回 delegate 工具调用
-      // 子 agent 的 LLM 调用（在 delegate tool 内部）也需要一个响应
+    it('delegate tool should be executable through registry', async () => {
+      // Main agent calls LLM and returns delegate tool call
+      // Sub-agent LLM call (inside delegate tool) also needs a response
       const client = createMultiResponseClient([
         {
-          // 子 agent 的 LLM 响应
+          // Sub-agent LLM response
           content: 'Research complete: found 3 relevant papers.',
           toolCalls: [],
           tokens: mockTokens,
@@ -1062,7 +1062,7 @@ describe('AgentRunner', () => {
         subAgents: createTestSubAgents(),
       });
 
-      // 直接通过 registry 执行 delegate 工具
+      // Execute delegate tool directly through registry
       const result = await runner.getToolRegistry().execute('delegate', {
         agent: 'researcher',
         task: 'Research TypeScript',
@@ -1074,7 +1074,7 @@ describe('AgentRunner', () => {
       expect(delegateResult.totalSteps).toBe(1);
     });
 
-    it('delegate 工具应该处理未知子 agent', async () => {
+    it('delegate tool should handle unknown sub-agent', async () => {
       const client = createMockClient();
       const runner = new AgentRunner({
         model: 'gpt-4',
@@ -1092,7 +1092,7 @@ describe('AgentRunner', () => {
       expect(delegateResult.totalSteps).toBe(0);
     });
 
-    it('subAgents 应该与其他选项（skills、tools）共存', () => {
+    it('subAgents should coexist with other options (skills, tools)', () => {
       const client = createMockClient();
       const skillProvider = {
         getManifest: vi.fn(),
@@ -1120,13 +1120,13 @@ describe('AgentRunner', () => {
       const tools = runner.getToolRegistry().toToolSchemas();
       const toolNames = tools.map((t) => t.function.name);
 
-      // delegate、load_skill、custom_tool 都应该注册
+      // delegate, load_skill, custom_tool should all be registered
       expect(toolNames).toContain('delegate');
       expect(toolNames).toContain('load_skill');
       expect(toolNames).toContain('custom_tool');
     });
 
-    it('应该正确处理子 agent 配置中带 allowDelegation 的情况', () => {
+    it('should correctly handle allowDelegation in sub-agent config', () => {
       const client = createMockClient();
       const subAgents: SubAgentConfig[] = [
         {

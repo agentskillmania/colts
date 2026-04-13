@@ -263,7 +263,7 @@ describe('advance()', () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
 
-    // Progress to executing-tool phase, 正确传递 result.state
+    // Progress to executing-tool phase, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
     result = await runner.advance(result.state, execState); // preparing -> calling-llm
     result = await runner.advance(result.state, execState, registry); // calling-llm -> llm-response
@@ -407,7 +407,7 @@ describe('advance()', () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
 
-    // Progress to parsed phase, 正确传递 result.state
+    // Progress to parsed phase, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
     result = await runner.advance(result.state, execState); // preparing -> calling-llm
     result = await runner.advance(result.state, execState, registry); // calling-llm -> llm-response
@@ -462,7 +462,7 @@ describe('advance()', () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
 
-    // Progress to parsed phase, 正确传递 result.state
+    // Progress to parsed phase, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
     result = await runner.advance(result.state, execState); // preparing -> calling-llm
     result = await runner.advance(result.state, execState); // calling-llm -> llm-response
@@ -513,7 +513,7 @@ describe('advanceStream()', () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
 
-    // Progress to calling-llm first, 正确传递 result.state
+    // Progress to calling-llm first, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
     result = await runner.advance(result.state, execState); // preparing -> calling-llm
 
@@ -571,7 +571,7 @@ describe('advanceStream()', () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
 
-    // Progress to calling-llm phase, 正确传递 result.state
+    // Progress to calling-llm phase, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
     result = await runner.advance(result.state, execState); // preparing -> calling-llm
 

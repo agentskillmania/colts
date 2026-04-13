@@ -171,7 +171,7 @@ describe('User Story: Run Execution with Real LLM', () => {
         expect(eventTypes).toContain('step:end');
         expect(eventTypes).toContain('complete');
 
-        // step:start 应在 token 之前
+        // step:start should come before token
         const firstStepStart = eventTypes.indexOf('step:start');
         const firstToken = eventTypes.indexOf('token');
         expect(firstStepStart).toBeLessThan(firstToken);

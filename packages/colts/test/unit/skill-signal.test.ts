@@ -1,5 +1,5 @@
 /**
- * @fileoverview Skill Signal 类型测试
+ * @fileoverview Skill Signal type tests
  */
 
 import { describe, it, expect } from 'vitest';

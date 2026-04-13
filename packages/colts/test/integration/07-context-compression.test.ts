@@ -22,7 +22,7 @@ import { createAgentState, addUserMessage, addAssistantMessage } from '../../src
 import type { AgentConfig } from '../../src/types.js';
 import { ToolRegistry, calculatorTool } from '../../src/index.js';
 
-// 辅助：创建指定消息数量的 state
+// Helper: create a state with a specified number of messages
 function createStateWithHistory(count: number): ReturnType<typeof createAgentState> {
   const config: AgentConfig = {
     name: 'compression-test-agent',
@@ -343,7 +343,7 @@ describe('User Story: Context Compression with Real LLM', () => {
 
           // And: Compressed state has metadata
           expect(compressed.context.compression).toBeDefined();
-          expect(compressed.context.messages.length).toBe(originalLength); // 消息不删除
+          expect(compressed.context.messages.length).toBe(originalLength); // messages are not deleted
         },
         120000
       );

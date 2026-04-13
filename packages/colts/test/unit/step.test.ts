@@ -96,7 +96,7 @@ describe('step()', () => {
     const state = createAgentState(defaultConfig);
     const { state: newState, result } = await runner.step(state);
 
-    // 验证 LLM 被正确调用
+    // Verify LLM is called correctly
     expect(client.call).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4',
@@ -148,7 +148,7 @@ describe('step()', () => {
     const state = createAgentState(defaultConfig);
     const { state: newState, result } = await runner.step(state, registry);
 
-    // 验证工具 schema 传给了 LLM
+    // Verify tool schema is passed to LLM
     expect(client.call).toHaveBeenCalledWith(
       expect.objectContaining({
         tools: expect.arrayContaining([expect.objectContaining({ name: 'calculate' })]),
@@ -597,10 +597,10 @@ describe('step()', () => {
   });
 
   // ============================================================
-  // SubAgent 事件传播
+  // SubAgent event propagation
   // ============================================================
   describe('subagent events in stepStream', () => {
-    /** 创建测试用子 agent 配置 */
+    /** Create test sub-agent configs */
     const createTestSubAgents = (): SubAgentConfig[] => [
       {
         name: 'researcher',
@@ -614,8 +614,8 @@ describe('step()', () => {
       },
     ];
 
-    it('应该在 delegate 工具执行时 emit subagent:start 和 subagent:end 事件', async () => {
-      // 第一个响应：主 agent LLM 返回 delegate 工具调用
+    it('should emit subagent:start and subagent:end events during delegate tool execution', async () => {
+      // First response: main agent LLM returns delegate tool call
       const mainResponse: LLMResponse = {
         content: 'Delegating to researcher',
         toolCalls: [
@@ -629,7 +629,7 @@ describe('step()', () => {
         stopReason: 'tool_calls',
       };
 
-      // 第二个响应：子 agent 的 LLM 响应（在 delegate tool 内部执行）
+      // Second response: sub-agent LLM response (executed inside delegate tool)
       const subAgentResponse: LLMResponse = {
         content: 'TypeScript is a typed superset of JavaScript.',
         toolCalls: [],
@@ -651,7 +651,7 @@ describe('step()', () => {
         events.push(event as { type: string });
       }
 
-      // 验证 subagent:start 事件
+      // Verify subagent:start event
       const startEvents = events.filter((e) => e.type === 'subagent:start');
       expect(startEvents.length).toBe(1);
       if (startEvents.length > 0) {
@@ -660,7 +660,7 @@ describe('step()', () => {
         expect(startEvent.task).toBe('Research TypeScript');
       }
 
-      // 验证 subagent:end 事件
+      // Verify subagent:end event
       const endEvents = events.filter((e) => e.type === 'subagent:end');
       expect(endEvents.length).toBe(1);
       if (endEvents.length > 0) {
@@ -675,7 +675,7 @@ describe('step()', () => {
       }
     });
 
-    it('subagent:start 应该在 subagent:end 之前 emit', async () => {
+    it('subagent:start should be emitted before subagent:end', async () => {
       const mainResponse: LLMResponse = {
         content: 'Delegating',
         toolCalls: [
@@ -718,7 +718,7 @@ describe('step()', () => {
       expect(startIndex).toBeLessThan(endIndex);
     });
 
-    it('非 delegate 工具调用不应产生 subagent 事件', async () => {
+    it('non-delegate tool calls should not produce subagent events', async () => {
       const mockResponse: LLMResponse = {
         content: 'Let me calculate',
         toolCalls: [
@@ -754,14 +754,14 @@ describe('step()', () => {
         events.push(event as { type: string });
       }
 
-      // 不应该有 subagent 事件
+      // Should not have subagent events
       expect(events.every((e) => !e.type.startsWith('subagent:'))).toBe(true);
-      // 应该有普通的 tool:start 和 tool:end
+      // Should have normal tool:start and tool:end
       expect(events.some((e) => e.type === 'tool:start')).toBe(true);
       expect(events.some((e) => e.type === 'tool:end')).toBe(true);
     });
 
-    it('没有配置子 agent 时不应产生 subagent 事件', async () => {
+    it('should not produce subagent events when no sub-agents are configured', async () => {
       const mockResponse: LLMResponse = {
         content: 'Calculating',
         toolCalls: [
@@ -787,7 +787,7 @@ describe('step()', () => {
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
-        // 不配置子 agent
+        // Do not configure sub-agents
       });
 
       const state = createAgentState(defaultConfig);

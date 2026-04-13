@@ -1,20 +1,20 @@
 /**
- * @fileoverview Skill 系统 E2E 集成测试（Step 10）
+ * @fileoverview Skill system E2E integration test (Step 10)
  *
- * 测试 Skill 系统的完整流程：
- * 1. FilesystemSkillProvider 扫描目录并发现 Skill
- * 2. Runner 构建消息时注入 Skill 元数据到系统提示
- * 3. LLM 看到可用的 Skill 列表和 load_skill 工具
- * 4. LLM 调用 load_skill 工具加载指定 Skill 的指令
- * 5. Skill 指令返回到 LLM 上下文中
- * 6. Agent 根据 Skill 指令执行任务
+ * Tests the complete Skill system flow:
+ * 1. FilesystemSkillProvider scans directories and discovers Skills
+ * 2. Runner injects Skill metadata into system prompt when building messages
+ * 3. LLM sees available Skill list and load_skill tool
+ * 4. LLM calls load_skill tool to load instructions for a specific Skill
+ * 5. Skill instructions return to LLM context
+ * 6. Agent executes tasks according to Skill instructions
  *
- * 测试场景：
- * - 完整的 Skill 发现和使用流程
- * - 多个 Skill 目录扫描
- * - Skill 元数据正确注入到系统提示
- * - load_skill 工具与 Runner 的集成
- * - 流式执行中的 Skill 加载事件
+ * Test scenarios:
+ * - Complete Skill discovery and usage flow
+ * - Multiple Skill directory scanning
+ * - Skill metadata correctly injected into system prompt
+ * - load_skill tool integration with Runner
+ * - Skill loading events in streaming execution
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -26,10 +26,10 @@ import type { AgentConfig } from '../../src/types.js';
 import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import type { StreamEvent } from '../../src/execution.js';
 
-/** 测试用的 Skill fixtures 目录 */
+/** Skill fixtures directory for tests */
 const FIXTURES_DIR = resolve(__dirname, '../fixtures/skills');
 
-/** 默认 Agent 配置 */
+/** Default Agent config */
 const defaultConfig: AgentConfig = {
   name: 'test-agent',
   instructions: 'You are a helpful assistant.',
@@ -37,9 +37,9 @@ const defaultConfig: AgentConfig = {
 };
 
 /**
- * 创建模拟 LLM 客户端
+ * Create mock LLM client
  *
- * @param responses - 按顺序返回的响应列表
+ * @param responses - List of responses returned in order
  */
 function createMockLLMClient(responses: LLMResponse[]): LLMClient {
   let responseIndex = 0;
@@ -71,11 +71,11 @@ function createMockLLMClient(responses: LLMResponse[]): LLMClient {
 }
 
 /**
- * 创建返回工具调用的模拟响应
+ * Create mock response that returns tool calls
  *
- * @param toolName - 工具名称
- * @param toolArgs - 工具参数
- * @param finalResponse - 工具调用后的最终响应
+ * @param toolName - Tool name
+ * @param toolArgs - Tool arguments
+ * @param finalResponse - Final response after tool call
  */
 function createToolCallResponse(
   toolName: string,
@@ -104,10 +104,10 @@ function createToolCallResponse(
   ];
 }
 
-describe('E2E: Skill 系统完整流程', () => {
-  describe('场景 1: 完整的 Skill 发现和使用流程', () => {
-    it('应能从文件系统发现 Skill 并在系统提示中显示列表', async () => {
-      // Given: 使用 skillDirectories 创建 Runner，自动扫描 fixtures 目录
+describe('E2E: Skill system complete flow', () => {
+  describe('Scenario 1: Complete Skill discovery and usage flow', () => {
+    it('should discover Skills from filesystem and display list in system prompt', async () => {
+      // Given: Create Runner with skillDirectories, auto-scan fixtures directory
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([
@@ -123,19 +123,19 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // When: 发起对话
+      // When: Start conversation
       const result = await runner.chat(state, 'What skills do you have?');
 
-      // Then: 应该收到响应
+      // Then: Should receive response
       expect(result.response).toBeDefined();
 
-      // And: LLM 调用时应该包含 Skill 列表
+      // And: LLM call should contain Skill list
       const mockClient = runner['llmProvider'] as LLMClient;
       const callArgs = vi.mocked(mockClient.call).mock.calls[0];
       const messages = callArgs[0].messages;
       const firstUserMessage = messages.find((m: { role: string }) => m.role === 'user');
 
-      // 验证系统提示中包含 Skill 列表
+      // Verify system prompt contains Skill list
       expect(firstUserMessage?.content).toContain('Available skills:');
       expect(firstUserMessage?.content).toContain('code-review:');
       expect(firstUserMessage?.content).toContain('testing:');
@@ -143,21 +143,21 @@ describe('E2E: Skill 系统完整流程', () => {
       expect(firstUserMessage?.content).toContain('load_skill tool');
     });
 
-    it('应能通过 load_skill 工具加载 Skill 指令', async () => {
-      // Given: 配置了 Skill provider 的 Runner
+    it('should load Skill instructions via load_skill tool', async () => {
+      // Given: Runner configured with Skill provider
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([]),
         skillDirectories: [FIXTURES_DIR],
       });
 
-      // When: 获取 tool registry
+      // When: Get tool registry
       const toolRegistry = runner.getToolRegistry();
 
-      // Then: load_skill 工具应该被注册
+      // Then: load_skill tool should be registered
       expect(toolRegistry.has('load_skill')).toBe(true);
 
-      // And: 工具执行结果应该返回 SWITCH_SKILL 信号
+      // And: Tool execution result should return SWITCH_SKILL signal
       const toolResult = await toolRegistry.execute('load_skill', { name: 'code-review' });
       expect(toolResult).toMatchObject({
         type: 'SWITCH_SKILL',
@@ -168,8 +168,8 @@ describe('E2E: Skill 系统完整流程', () => {
       expect(toolResult.instructions).toContain('Performance');
     });
 
-    it('应能在流式执行中正确处理 Skill 加载', async () => {
-      // Given: 配置了 Skill 的流式 Runner
+    it('should correctly handle Skill loading in streaming execution', async () => {
+      // Given: Streaming Runner configured with Skills
       const mockTokens = { input: 10, output: 5 };
       const runner = new AgentRunner({
         model: 'gpt-4',
@@ -187,30 +187,30 @@ describe('E2E: Skill 系统完整流程', () => {
       const state = createAgentState(defaultConfig);
       const events: StreamEvent[] = [];
 
-      // When: 流式执行对话
+      // When: Execute conversation in streaming mode
       for await (const event of runner.chatStream(state, 'Help me write tests.')) {
         events.push(event);
       }
 
-      // Then: 应该完成流式执行
+      // Then: Streaming execution should complete
       expect(events.length).toBeGreaterThan(0);
       expect(events.some((e) => e.type === 'done')).toBe(true);
 
-      // Note: token 事件可能在流式执行中，取决于 mock 实现
-      // 这里我们只验证流式执行完成
+      // Note: token events may occur during streaming execution depending on mock implementation
+      // Here we only verify streaming execution completes
     });
   });
 
-  describe('场景 2: 多个 Skill 目录扫描', () => {
-    it('应能从多个目录发现 Skill', () => {
-      // Given: FilesystemSkillProvider 扫描 fixtures 目录
-      // fixtures 目录包含 code-review、testing、deployment 等子目录
-      // 每个子目录都有一个 SKILL.md 文件
+  describe('Scenario 2: Multiple Skill directory scanning', () => {
+    it('should discover Skills from multiple directories', () => {
+      // Given: FilesystemSkillProvider scans fixtures directory
+      // fixtures directory contains subdirectories like code-review, testing, deployment
+      // Each subdirectory has a SKILL.md file
       const provider = new FilesystemSkillProvider([FIXTURES_DIR]);
       const skills = provider.listSkills();
 
-      // Then: 应该发现所有目录中的 Skill
-      // fixtures 目录下有 3 个 skill 子目录
+      // Then: Should discover all Skills in directories
+      // fixtures directory has 3 skill subdirectories
       expect(skills.length).toBeGreaterThanOrEqual(3);
       const skillNames = skills.map((s) => s.name);
       expect(skillNames).toContain('code-review');
@@ -218,8 +218,8 @@ describe('E2E: Skill 系统完整流程', () => {
       expect(skillNames).toContain('deployment');
     });
 
-    it('应能在 Runner 中使用多目录 Skill provider', async () => {
-      // Given: 使用多目录 provider 创建 Runner
+    it('should use multi-directory Skill provider in Runner', async () => {
+      // Given: Create Runner using multi-directory provider
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([
@@ -235,13 +235,13 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // When: 发起对话
+      // When: Start conversation
       const result = await runner.chat(state, 'List your skills.');
 
-      // Then: 应该收到响应
+      // Then: Should receive response
       expect(result.response).toBeDefined();
 
-      // And: 系统提示应该包含所有 Skill
+      // And: System prompt should contain all Skills
       const mockClient = runner['llmProvider'] as LLMClient;
       const callArgs = vi.mocked(mockClient.call).mock.calls[0];
       const messages = callArgs[0].messages;
@@ -253,9 +253,9 @@ describe('E2E: Skill 系统完整流程', () => {
     });
   });
 
-  describe('场景 3: Skill 元数据正确注入到系统提示', () => {
-    it('应正确格式化 Skill 列表', async () => {
-      // Given: 有多个 Skill 的 Runner
+  describe('Scenario 3: Skill metadata correctly injected into system prompt', () => {
+    it('should correctly format Skill list', async () => {
+      // Given: Runner with multiple Skills
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([
@@ -270,27 +270,27 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // When: 发起对话
+      // When: Start conversation
       await runner.chat(state, 'Hello');
 
-      // Then: Skill 列表应该正确格式化
+      // Then: Skill list should be correctly formatted
       const mockClient = runner['llmProvider'] as LLMClient;
       const callArgs = vi.mocked(mockClient.call).mock.calls[0];
       const messages = callArgs[0].messages;
       const firstUserMessage = messages.find((m: { role: string }) => m.role === 'user');
       const content = firstUserMessage?.content || '';
 
-      // 验证格式："- name: description"
+      // Verify format: "- name: description"
       expect(content).toMatch(/code-review:\s*Perform comprehensive code reviews/);
       expect(content).toMatch(/testing:\s*Write comprehensive unit tests/);
       expect(content).toMatch(/deployment:\s*Guide users through safe deployment/);
 
-      // 验证包含使用说明
+      // Verify usage instructions are included
       expect(content).toContain('Use the load_skill tool');
     });
 
-    it('应该合并系统提示和 Skill 列表', async () => {
-      // Given: 带有自定义系统提示的 Runner
+    it('should merge system prompt and Skill list', async () => {
+      // Given: Runner with custom system prompt
       const customSystemPrompt = 'You are a specialized coding assistant.';
       const runner = new AgentRunner({
         model: 'gpt-4',
@@ -307,25 +307,25 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // When: 发起对话
+      // When: Start conversation
       await runner.chat(state, 'Hello');
 
-      // Then: 系统提示应该包含自定义提示和 Skill 列表
+      // Then: System prompt should contain custom prompt and Skill list
       const mockClient = runner['llmProvider'] as LLMClient;
       const callArgs = vi.mocked(mockClient.call).mock.calls[0];
       const messages = callArgs[0].messages;
       const firstUserMessage = messages.find((m: { role: string }) => m.role === 'user');
       const content = firstUserMessage?.content || '';
 
-      // 验证包含自定义系统提示
+      // Verify custom system prompt is included
       expect(content).toContain(customSystemPrompt);
 
-      // 验证包含 Skill 列表
+      // Verify Skill list is included
       expect(content).toContain('Available skills:');
     });
 
-    it('没有 Skill 时不应包含 Skill 相关内容', async () => {
-      // Given: 没有配置 Skill 的 Runner
+    it('should not contain Skill-related content when no Skills are configured', async () => {
+      // Given: Runner without Skill configuration
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([
@@ -339,10 +339,10 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // When: 发起对话
+      // When: Start conversation
       await runner.chat(state, 'Hello');
 
-      // Then: 系统提示中不应包含 Skill 相关内容
+      // Then: System prompt should not contain Skill-related content
       const mockClient = runner['llmProvider'] as LLMClient;
       const callArgs = vi.mocked(mockClient.call).mock.calls[0];
       const messages = callArgs[0].messages;
@@ -354,44 +354,44 @@ describe('E2E: Skill 系统完整流程', () => {
     });
   });
 
-  describe('场景 4: load_skill 工具集成', () => {
-    it('应自动注册 load_skill 工具', () => {
-      // Given: 使用 skillDirectories 创建 Runner
+  describe('Scenario 4: load_skill tool integration', () => {
+    it('should auto-register load_skill tool', () => {
+      // Given: Create Runner with skillDirectories
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([]),
         skillDirectories: [FIXTURES_DIR],
       });
 
-      // When: 获取工具注册表
+      // When: Get tool registry
       const toolRegistry = runner.getToolRegistry();
 
-      // Then: load_skill 工具应该被注册
+      // Then: load_skill tool should be registered
       expect(toolRegistry.has('load_skill')).toBe(true);
 
-      // And: 工具应该有正确的 schema
+      // And: Tool should have correct schema
       const tools = toolRegistry.toToolSchemas();
       const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
       expect(loadSkillTool).toBeDefined();
       expect(loadSkillTool?.function.description).toContain('Load a skill');
     });
 
-    it('未配置 Skill 时不应注册 load_skill 工具', () => {
-      // Given: 没有配置 Skill 的 Runner
+    it('should not register load_skill tool when Skills are not configured', () => {
+      // Given: Runner without Skill configuration
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([]),
       });
 
-      // When: 获取工具注册表
+      // When: Get tool registry
       const toolRegistry = runner.getToolRegistry();
 
-      // Then: load_skill 工具不应该被注册
+      // Then: load_skill tool should not be registered
       expect(toolRegistry.has('load_skill')).toBe(false);
     });
 
-    it('应能通过 ToolRegistry 执行 load_skill', async () => {
-      // Given: 配置了 Skill 的 Runner
+    it('should execute load_skill through ToolRegistry', async () => {
+      // Given: Runner configured with Skills
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([]),
@@ -400,10 +400,10 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const toolRegistry = runner.getToolRegistry();
 
-      // When: 执行 load_skill 工具
+      // When: Execute load_skill tool
       const result = await toolRegistry.execute('load_skill', { name: 'testing' });
 
-      // Then: 应该返回 SWITCH_SKILL 信号
+      // Then: Should return SWITCH_SKILL signal
       expect(result).toMatchObject({
         type: 'SWITCH_SKILL',
         to: 'testing',
@@ -413,8 +413,8 @@ describe('E2E: Skill 系统完整流程', () => {
       expect(result.instructions).toContain('Unit Tests');
     });
 
-    it('加载不存在的 Skill 应返回错误信息', async () => {
-      // Given: 配置了 Skill 的 Runner
+    it('should return error when loading non-existent Skill', async () => {
+      // Given: Runner configured with Skills
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([]),
@@ -423,10 +423,10 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const toolRegistry = runner.getToolRegistry();
 
-      // When: 尝试加载不存在的 Skill
+      // When: Try to load non-existent Skill
       const result = await toolRegistry.execute('load_skill', { name: 'nonexistent' });
 
-      // Then: 应该返回 SKILL_NOT_FOUND 信号
+      // Then: Should return SKILL_NOT_FOUND signal
       expect(result).toMatchObject({
         type: 'SKILL_NOT_FOUND',
         requested: 'nonexistent',
@@ -436,8 +436,8 @@ describe('E2E: Skill 系统完整流程', () => {
       expect(result.available).toContain('deployment');
     });
 
-    it('应能加载多个不同的 Skill', async () => {
-      // Given: 配置了多个 Skill 的 Runner
+    it('should be able to load multiple different Skills', async () => {
+      // Given: Runner configured with multiple Skills
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([]),
@@ -446,7 +446,7 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const toolRegistry = runner.getToolRegistry();
 
-      // When: 加载不同的 Skill
+      // When: Load different Skills
       const codeReviewResult = await toolRegistry.execute('load_skill', {
         name: 'code-review',
       });
@@ -457,7 +457,7 @@ describe('E2E: Skill 系统完整流程', () => {
         name: 'deployment',
       });
 
-      // Then: 每个 Skill 应该返回 SWITCH_SKILL 信号
+      // Then: Each Skill should return SWITCH_SKILL signal
       expect(codeReviewResult).toMatchObject({ type: 'SWITCH_SKILL', to: 'code-review' });
       expect(codeReviewResult.instructions).toContain('Security');
       expect(codeReviewResult.instructions).toContain('Performance');
@@ -472,9 +472,9 @@ describe('E2E: Skill 系统完整流程', () => {
     });
   });
 
-  describe('场景 5: Agent 完整工作流', () => {
-    it('应能使用 Skill 指导其行为', async () => {
-      // Given: 配置了 code-review Skill 的 Runner
+  describe('Scenario 5: Agent complete workflow', () => {
+    it('should use Skill to guide its behavior', async () => {
+      // Given: Runner configured with code-review Skill
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: createMockLLMClient([
@@ -490,16 +490,16 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // When: 请求代码审查
+      // When: Request code review
       const result = await runner.chat(state, 'Review this code for security issues.');
 
-      // Then: 应该收到响应
+      // Then: Should receive response
       expect(result.response).toBeDefined();
       expect(result.state.context.messages).toHaveLength(2);
     });
 
-    it('应能在多轮对话中使用 Skill', async () => {
-      // Given: 配置了 Skill 的 Runner
+    it('should use Skill in multi-turn conversation', async () => {
+      // Given: Runner configured with Skills
       const mockTokens = { input: 10, output: 5 };
       const runner = new AgentRunner({
         model: 'gpt-4',
@@ -522,28 +522,28 @@ describe('E2E: Skill 系统完整流程', () => {
 
       let state = createAgentState(defaultConfig);
 
-      // When: 第一轮对话
+      // When: First turn
       const result1 = await runner.chat(state, 'What can you help with?');
       state = result1.state;
 
-      // Then: 第一轮应该有响应
+      // Then: First turn should have response
       expect(result1.response).toBeDefined();
       expect(state.context.stepCount).toBe(1);
 
-      // When: 第二轮对话
+      // When: Second turn
       const result2 = await runner.chat(state, 'Help me write tests.');
       state = result2.state;
 
-      // Then: 第二轮应该有响应并保持上下文
+      // Then: Second turn should have response and retain context
       expect(result2.response).toBeDefined();
       expect(state.context.stepCount).toBe(2);
       expect(state.context.messages).toHaveLength(4);
     });
   });
 
-  describe('场景 6: 边界条件和异常处理', () => {
-    it('应处理空 Skill 目录', async () => {
-      // Given: 使用空目录创建 Runner
+  describe('Scenario 6: Edge cases and error handling', () => {
+    it('should handle empty Skill directory', async () => {
+      // Given: Create Runner with empty directory
       const emptyDir = resolve(FIXTURES_DIR, 'empty');
 
       const runner = new AgentRunner({
@@ -560,10 +560,10 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // When: 发起对话
+      // When: Start conversation
       const result = await runner.chat(state, 'Hello');
 
-      // Then: 应该正常工作，但没有 Skill 列表
+      // Then: Should work normally but without Skill list
       expect(result.response).toBeDefined();
 
       const mockClient = runner['llmProvider'] as LLMClient;
@@ -575,8 +575,8 @@ describe('E2E: Skill 系统完整流程', () => {
       expect(content).not.toContain('Available skills:');
     });
 
-    it('应处理不存在的 Skill 目录', async () => {
-      // Given: 使用不存在的目录创建 Runner
+    it('should handle non-existent Skill directory', async () => {
+      // Given: Create Runner with non-existent directory
       const nonexistentDir = resolve(FIXTURES_DIR, 'does-not-exist');
 
       const runner = new AgentRunner({
@@ -593,26 +593,26 @@ describe('E2E: Skill 系统完整流程', () => {
 
       const state = createAgentState(defaultConfig);
 
-      // When: 发起对话
+      // When: Start conversation
       const result = await runner.chat(state, 'Hello');
 
-      // Then: 应该正常工作，但没有 Skill 列表
+      // Then: Should work normally but without Skill list
       expect(result.response).toBeDefined();
     });
 
-    it('应优先使用注入的 skillProvider 而非 skillDirectories', async () => {
-      // Given: 创建一个只包含 code-review 的 custom provider
-      // FilesystemSkillProvider 扫描指定目录的子目录
-      // 所以我们扫描整个 FIXTURES_DIR，然后验证只注入了部分技能
+    it('should prefer injected skillProvider over skillDirectories', async () => {
+      // Given: Create a custom provider that only contains code-review
+      // FilesystemSkillProvider scans subdirectories of the specified directory
+      // So we scan the entire FIXTURES_DIR, then verify only partial skills are injected
       const customProvider = new FilesystemSkillProvider([FIXTURES_DIR]);
 
-      // 创建一个 mock provider，只返回 code-review skill
+      // Create a mock provider that only returns code-review skill
       const mockProvider = {
         getManifest: vi.fn((name: string) => customProvider.getManifest(name)),
         loadInstructions: vi.fn((name: string) => customProvider.loadInstructions(name)),
         loadResource: vi.fn(),
         listSkills: vi.fn(() => {
-          // 只返回 code-review，过滤掉其他 skills
+          // Only return code-review, filter out other skills
           return customProvider.listSkills().filter((s) => s.name === 'code-review');
         }),
         refresh: vi.fn(),
@@ -629,47 +629,47 @@ describe('E2E: Skill 系统完整流程', () => {
           },
         ]),
         skillProvider: mockProvider as any,
-        skillDirectories: [FIXTURES_DIR], // 这个应该被忽略
+        skillDirectories: [FIXTURES_DIR], // This should be ignored
       });
 
       const state = createAgentState(defaultConfig);
 
-      // When: 发起对话
+      // When: Start conversation
       await runner.chat(state, 'Hello');
 
-      // Then: 应该只使用注入的 provider（只有 code-review）
+      // Then: Should only use injected provider (only code-review)
       const mockClient = runner['llmProvider'] as LLMClient;
       const callArgs = vi.mocked(mockClient.call).mock.calls[0];
       const messages = callArgs[0].messages;
       const firstUserMessage = messages.find((m: { role: string }) => m.role === 'user');
       const content = firstUserMessage?.content || '';
 
-      // 应该包含 code-review
+      // Should contain code-review
       expect(content).toContain('code-review:');
 
-      // 不应该包含 testing 和 deployment（因为 mock provider 只返回 code-review）
-      // 提取 skill 列表部分
+      // Should not contain testing and deployment (because mock provider only returns code-review)
+      // Extract skill list part
       const skillListMatch = content.match(/Available skills:\n([\s\S]*?)\n\n/);
       if (skillListMatch) {
         const skillList = skillListMatch[1];
-        // 应该只有 code-review
+        // Should only have code-review
         expect(skillList).toContain('code-review:');
-        // 不应该有 testing 和 deployment
+        // Should not have testing and deployment
         expect(skillList).not.toContain('testing:');
         expect(skillList).not.toContain('deployment:');
       }
     });
   });
 
-  describe('场景 7: Skill 内容验证', () => {
-    it('应正确解析 YAML frontmatter', async () => {
-      // Given: 创建 FilesystemSkillProvider
+  describe('Scenario 7: Skill content validation', () => {
+    it('should correctly parse YAML frontmatter', async () => {
+      // Given: Create FilesystemSkillProvider
       const provider = new FilesystemSkillProvider([FIXTURES_DIR]);
 
-      // When: 获取 code-review Skill
+      // When: Get code-review Skill
       const manifest = provider.getManifest('code-review');
 
-      // Then: 应该正确解析元数据
+      // Then: Should correctly parse metadata
       expect(manifest).toBeDefined();
       expect(manifest!.name).toBe('code-review');
       expect(manifest!.description).toBe(
@@ -677,14 +677,14 @@ describe('E2E: Skill 系统完整流程', () => {
       );
     });
 
-    it('应能加载完整的 Skill 指令内容', async () => {
-      // Given: 创建 FilesystemSkillProvider
+    it('should be able to load complete Skill instruction content', async () => {
+      // Given: Create FilesystemSkillProvider
       const provider = new FilesystemSkillProvider([FIXTURES_DIR]);
 
-      // When: 加载 code-review Skill 指令
+      // When: Load code-review Skill instructions
       const instructions = await provider.loadInstructions('code-review');
 
-      // Then: 应该包含完整的内容（不含 frontmatter）
+      // Then: Should contain complete content (without frontmatter)
       expect(instructions).toContain('# Code Review Skill');
       expect(instructions).toContain('Security');
       expect(instructions).toContain('Performance');
@@ -693,14 +693,14 @@ describe('E2E: Skill 系统完整流程', () => {
       expect(instructions).not.toContain('description:');
     });
 
-    it('应列出所有可用的 Skill', () => {
-      // Given: 创建 FilesystemSkillProvider
+    it('should list all available Skills', () => {
+      // Given: Create FilesystemSkillProvider
       const provider = new FilesystemSkillProvider([FIXTURES_DIR]);
 
-      // When: 列出所有 Skill
+      // When: List all Skills
       const skills = provider.listSkills();
 
-      // Then: 应该包含所有 fixture 中的 Skill
+      // Then: Should contain all fixture Skills
       expect(skills.length).toBeGreaterThanOrEqual(3);
       const skillNames = skills.map((s) => s.name);
       expect(skillNames).toContain('code-review');

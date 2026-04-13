@@ -1,14 +1,14 @@
 /**
- * @fileoverview delegate tool 单元测试
+ * @fileoverview delegate tool unit tests
  *
- * 测试 createDelegateTool 工厂函数，包括：
- * - 成功委派任务给子 agent
- * - 子 agent 成功返回
- * - 子 agent 错误返回
- * - 子 agent 达到最大步数
- * - extraInstructions 正确追加
- * - 未知子 agent 返回错误
- * - 子 agent 拥有独立的工具集
+ * Tests the createDelegateTool factory function, including:
+ * - Successfully delegating tasks to sub-agent
+ * - Sub-agent successful return
+ * - Sub-agent error return
+ * - Sub-agent reaching max steps
+ * - extraInstructions correctly appended
+ * - Unknown sub-agent returns error
+ * - Sub-agent has independent tool set
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -20,17 +20,17 @@ import type { SubAgentConfig, DelegateResult } from '../../src/subagent/types.js
 import { ToolRegistry } from '../../src/tools/registry.js';
 
 // ============================================================
-// 辅助工具
+// Helpers
 // ============================================================
 
-/** 模拟 token 统计 */
+/** Mock token stats */
 const mockTokens = { input: 10, output: 5 };
 
 /**
- * 创建模拟 LLM Client
+ * Create mock LLM Client
  *
- * @param responses - LLM 响应序列，每次 call 返回下一个
- * @returns 模拟的 LLMClient
+ * @param responses - LLM response sequence, each call returns the next one
+ * @returns Mock LLMClient
  */
 function createMockLLMClient(responses: LLMResponse[]): LLMClient {
   let callIndex = 0;
@@ -48,7 +48,7 @@ function createMockLLMClient(responses: LLMResponse[]): LLMClient {
   } as unknown as LLMClient;
 }
 
-/** 创建 LLM 错误的 mock client */
+/** Create mock client that returns LLM error */
 function createErrorLLMClient(errorMessage: string): LLMClient {
   return {
     call: vi.fn().mockRejectedValue(new Error(errorMessage)),
@@ -56,7 +56,7 @@ function createErrorLLMClient(errorMessage: string): LLMClient {
   } as unknown as LLMClient;
 }
 
-/** 创建持续返回工具调用的 mock client（用于 max_steps 测试） */
+/** Create mock client that continuously returns tool calls (for max_steps test) */
 function createToolCallLoopLLMClient(toolName: string, callCount: number): LLMClient {
   const response: LLMResponse = {
     content: 'Thinking...',
@@ -75,9 +75,9 @@ function createToolCallLoopLLMClient(toolName: string, callCount: number): LLMCl
 }
 
 /**
- * 创建测试用的子 agent 配置映射
+ * Create test sub-agent configuration map
  *
- * @param overrides - 可选覆盖默认配置
+ * @param overrides - Optional overrides for default config
  * @returns Map<string, SubAgentConfig>
  */
 function createSubAgentConfigs(
@@ -128,7 +128,7 @@ function createSubAgentConfigs(
 }
 
 // ============================================================
-// 测试
+// Tests
 // ============================================================
 
 describe('createDelegateTool', () => {
@@ -139,10 +139,10 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 基本属性
+  // Basic properties
   // ----------------------------------------------------------
   describe('tool properties', () => {
-    it('应该返回名为 "delegate" 的工具', () => {
+    it('should return a tool named "delegate"', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
@@ -153,7 +153,7 @@ describe('createDelegateTool', () => {
       expect(tool.name).toBe('delegate');
     });
 
-    it('应该有非空描述', () => {
+    it('should have a non-empty description', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
@@ -165,7 +165,7 @@ describe('createDelegateTool', () => {
       expect(typeof tool.description).toBe('string');
     });
 
-    it('应该有有效的 Zod 参数 schema', () => {
+    it('should have a valid Zod parameter schema', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
@@ -177,7 +177,7 @@ describe('createDelegateTool', () => {
       expect(tool.parameters._def).toBeDefined();
     });
 
-    it('应该可注册到 ToolRegistry', () => {
+    it('should be registerable to ToolRegistry', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
@@ -193,10 +193,10 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 成功委派
+  // Successful delegation
   // ----------------------------------------------------------
   describe('successful delegation', () => {
-    it('应该成功委派任务给子 agent 并返回成功结果', async () => {
+    it('should successfully delegate task to sub-agent and return success result', async () => {
       const mockResponse: LLMResponse = {
         content: 'Research result: TypeScript is a typed superset of JavaScript.',
         toolCalls: [],
@@ -222,7 +222,7 @@ describe('createDelegateTool', () => {
       expect(result.finalState!.context.stepCount).toBe(1);
     });
 
-    it('应该通过 ToolRegistry 执行并返回正确结果', async () => {
+    it('should execute through ToolRegistry and return correct result', async () => {
       const mockResponse: LLMResponse = {
         content: 'Written article about AI.',
         toolCalls: [],
@@ -252,10 +252,10 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 子 agent 错误
+  // Sub-agent error
   // ----------------------------------------------------------
   describe('sub-agent error', () => {
-    it('应该在子 agent 出错时返回错误信息', async () => {
+    it('should return error message when sub-agent errors', async () => {
       const client = createErrorLLMClient('API rate limit exceeded');
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
@@ -276,14 +276,14 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 子 agent 达到最大步数
+  // Sub-agent reaches max steps
   // ----------------------------------------------------------
   describe('max steps reached', () => {
-    it('应该在子 agent 达到最大步数时返回 "Max steps reached"', async () => {
-      // 子 agent 每步都调用工具，永远不会停止
+    it('should return "Max steps reached" when sub-agent reaches max steps', async () => {
+      // Sub-agent calls tool every step, never stops
       const client = createToolCallLoopLLMClient('search', 20);
 
-      // researcher 的 maxSteps 为 5
+      // researcher maxSteps is 5
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
         subAgentConfigs,
@@ -300,10 +300,10 @@ describe('createDelegateTool', () => {
       expect(result.finalState).not.toBeNull();
     });
 
-    it('应该使用 defaultMaxSteps 当子 agent 未配置 maxSteps 时', async () => {
+    it('should use defaultMaxSteps when sub-agent has no maxSteps configured', async () => {
       const client = createToolCallLoopLLMClient('search', 20);
 
-      // writer 没有 maxSteps 配置，使用 defaultMaxSteps
+      // writer has no maxSteps config, uses defaultMaxSteps
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
         subAgentConfigs,
@@ -325,7 +325,7 @@ describe('createDelegateTool', () => {
   // extraInstructions
   // ----------------------------------------------------------
   describe('extra instructions', () => {
-    it('应该将 extraInstructions 追加到子 agent 的 instructions 后', async () => {
+    it('should append extraInstructions to sub-agent instructions', async () => {
       const client = createMockLLMClient([
         {
           content: 'Done',
@@ -347,11 +347,11 @@ describe('createDelegateTool', () => {
         extraInstructions: 'Focus on academic sources only.',
       })) as DelegateResult;
 
-      // 验证 LLM 被调用时 instructions 包含追加内容
+      // Verify instructions contain appended content when LLM is called
       expect(client.call).toHaveBeenCalled();
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const messages = callArg.messages;
-      // instructions 会出现在第一个 user message 中（通过 buildMessages）
+      // instructions appear in the first user message (via buildMessages)
       const firstUserMsg = messages.find((m: { role: string }) => m.role === 'user');
       const content =
         typeof firstUserMsg?.content === 'string'
@@ -363,7 +363,7 @@ describe('createDelegateTool', () => {
       expect(result.totalSteps).toBe(1);
     });
 
-    it('不应该修改 instructions 当 extraInstructions 未提供时', async () => {
+    it('should not modify instructions when extraInstructions is not provided', async () => {
       const client = createMockLLMClient([
         {
           content: 'Done',
@@ -392,16 +392,16 @@ describe('createDelegateTool', () => {
           ? firstUserMsg.content
           : JSON.stringify(firstUserMsg?.content);
       expect(content).toContain('You are a research specialist.');
-      // 不应该包含额外追加的换行和空内容
+      // Should not contain extra appended newlines and empty content
       expect(content).not.toContain('\n\nundefined');
     });
   });
 
   // ----------------------------------------------------------
-  // 未知子 agent
+  // Unknown sub-agent
   // ----------------------------------------------------------
   describe('unknown sub-agent', () => {
-    it('应该在请求未知子 agent 时返回包含可用列表的错误', async () => {
+    it('should return error with available list when requesting unknown sub-agent', async () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
@@ -421,7 +421,7 @@ describe('createDelegateTool', () => {
       expect(result.finalState).toBeNull();
     });
 
-    it('当没有配置任何子 agent 时应该返回空列表', async () => {
+    it('should return empty list when no sub-agents are configured', async () => {
       const emptyConfigs = new Map<string, SubAgentConfig>();
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
@@ -442,11 +442,11 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 独立工具集
+  // Independent tool set
   // ----------------------------------------------------------
   describe('independent tool set', () => {
-    it('子 agent 应该只看到自己的工具，而不是主 agent 的工具', async () => {
-      // 创建两个子 agent，各有不同的工具
+    it('sub-agent should only see its own tools, not main agent tools', async () => {
+      // Create two sub-agents with different tools
       const agentWithToolA: SubAgentConfig = {
         name: 'agent-a',
         description: 'Agent A',
@@ -471,7 +471,7 @@ describe('createDelegateTool', () => {
       configs.set('agent-a', agentWithToolA);
       configs.set('agent-b', agentWithToolB);
 
-      // 创建返回工具调用的 mock client
+      // Create mock client that returns tool calls
       const callToolAResponse: LLMResponse = {
         content: 'Using tool-a',
         toolCalls: [
@@ -504,15 +504,15 @@ describe('createDelegateTool', () => {
         task: 'Use your tools',
       })) as DelegateResult;
 
-      // agent-a 应该成功调用了 tool-a
+      // agent-a should successfully call tool-a
       expect(result.answer).toBe('Done with tool-a');
       expect(result.totalSteps).toBe(2);
-      // 验证传给 LLM 的 tools 包含 tool-a（通过 toToolSchemas 传给 LLM）
+      // Verify tools passed to LLM contain tool-a (passed via toToolSchemas)
       expect(client.call).toHaveBeenCalled();
     });
 
-    it('不同子 agent 应该有不同的工具集', async () => {
-      // 创建父 Agent 的工具注册表，并注册工具
+    it('different sub-agents should have different tool sets', async () => {
+      // Create parent Agent tool registry and register tools
       const parentRegistry = new ToolRegistry();
       parentRegistry.register({
         name: 'search',
@@ -566,10 +566,10 @@ describe('createDelegateTool', () => {
         llmProvider: client,
       });
 
-      // 委派给 searcher
+      // Delegate to searcher
       await tool.execute({ agent: 'searcher', task: 'Find info' });
 
-      // 验证第一次 LLM 调用传入了 search 工具（pi-ai Tool 格式：{ name, description, parameters }）
+      // Verify first LLM call passed search tool (pi-ai Tool format: { name, description, parameters })
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
       expect(firstCall.tools).toBeDefined();
       const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
@@ -579,10 +579,10 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 多步工具调用流程
+  // Multi-step tool execution flow
   // ----------------------------------------------------------
   describe('multi-step tool execution', () => {
-    it('应该支持子 agent 多步工具调用后给出最终答案', async () => {
+    it('should support sub-agent multi-step tool calls before final answer', async () => {
       const responses: LLMResponse[] = [
         {
           content: 'Let me search for that',
@@ -624,10 +624,10 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 参数验证
+  // Parameter validation
   // ----------------------------------------------------------
   describe('parameter validation', () => {
-    it('应该通过 ToolRegistry 验证参数', async () => {
+    it('should validate parameters through ToolRegistry', async () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
@@ -638,17 +638,17 @@ describe('createDelegateTool', () => {
       const registry = new ToolRegistry();
       registry.register(tool);
 
-      // 缺少 agent 参数
+      // Missing agent parameter
       await expect(registry.execute('delegate', { task: 'Do something' })).rejects.toThrow();
 
-      // 缺少 task 参数
+      // Missing task parameter
       await expect(registry.execute('delegate', { agent: 'researcher' })).rejects.toThrow();
 
-      // 空参数
+      // Empty parameters
       await expect(registry.execute('delegate', {})).rejects.toThrow();
     });
 
-    it('应该生成有效的 tool schema', () => {
+    it('should generate valid tool schema', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
@@ -674,20 +674,20 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 默认 maxSteps
+  // Default maxSteps
   // ----------------------------------------------------------
   describe('default maxSteps', () => {
-    it('应该使用默认 defaultMaxSteps=10 当未提供时', async () => {
+    it('should use default defaultMaxSteps=10 when not provided', async () => {
       const client = createToolCallLoopLLMClient('search', 20);
 
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
         subAgentConfigs,
         llmProvider: client,
-        // 不提供 defaultMaxSteps
+        // do not provide defaultMaxSteps
       });
 
-      // writer 没有 maxSteps，使用默认的 10
+      // writer has no maxSteps, uses default 10
       const result = (await tool.execute({
         agent: 'writer',
         task: 'Long task',
@@ -697,7 +697,7 @@ describe('createDelegateTool', () => {
       expect(result.totalSteps).toBe(10);
     });
 
-    it('子 agent 自定义 maxSteps 应该覆盖 defaultMaxSteps', async () => {
+    it('sub-agent custom maxSteps should override defaultMaxSteps', async () => {
       const client = createToolCallLoopLLMClient('search', 20);
 
       const tool = createDelegateTool({
@@ -707,7 +707,7 @@ describe('createDelegateTool', () => {
         defaultMaxSteps: 100,
       });
 
-      // researcher 的 maxSteps 为 5
+      // researcher has maxSteps of 5
       const result = (await tool.execute({
         agent: 'researcher',
         task: 'Research task',
@@ -719,10 +719,10 @@ describe('createDelegateTool', () => {
   });
 
   // ----------------------------------------------------------
-  // 状态隔离
+  // State isolation
   // ----------------------------------------------------------
   describe('state isolation', () => {
-    it('多次委派应该各自独立，不共享状态', async () => {
+    it('multiple delegations should be independent and not share state', async () => {
       const client = createMockLLMClient([
         {
           content: 'First answer',
@@ -754,23 +754,23 @@ describe('createDelegateTool', () => {
         task: 'Second task',
       })) as DelegateResult;
 
-      // 两次委派应该是独立的
+      // Two delegations should be independent
       expect(result1.answer).toBe('First answer');
       expect(result2.answer).toBe('Second answer');
-      // 两次都是单步完成
+      // Both complete in single step
       expect(result1.totalSteps).toBe(1);
       expect(result2.totalSteps).toBe(1);
-      // 状态各自独立
+      // States are independent
       expect(result1.finalState!.id).not.toBe(result2.finalState!.id);
     });
   });
 
   // ----------------------------------------------------------
-  // 工具继承（从父 Agent 继承工具实现）
+  // Tool inheritance (inherit tool implementations from parent Agent)
   // ----------------------------------------------------------
   describe('tool inheritance from parent', () => {
-    it('子 agent 应该能执行父 agent 注册的真实工具', async () => {
-      // 创建父 Agent 的工具注册表，并注册一个真实的 calculator 工具
+    it('sub-agent should be able to execute real tools registered by parent agent', async () => {
+      // Create parent Agent tool registry and register a real calculator tool
       const parentRegistry = new ToolRegistry();
       let toolExecuted = false;
       let receivedArgs: unknown = null;
@@ -782,14 +782,14 @@ describe('createDelegateTool', () => {
         execute: async ({ expression }) => {
           toolExecuted = true;
           receivedArgs = expression;
-          // 安全地计算简单表达式
+          // Safely compute simple expressions
           if (expression === '2+2') return '4';
           if (expression === '10*5') return '50';
           return `Result of ${expression}`;
         },
       });
 
-      // 创建子 agent 配置，声明使用 calculator 工具
+      // Create sub-agent config declaring use of calculator tool
       const calculatorAgent: SubAgentConfig = {
         name: 'calculator',
         description: 'Calculator agent',
@@ -804,7 +804,7 @@ describe('createDelegateTool', () => {
       const configs = new Map<string, SubAgentConfig>();
       configs.set('calculator', calculatorAgent);
 
-      // Mock LLM 返回工具调用
+      // Mock LLM returns tool call
       const client = createMockLLMClient([
         {
           content: 'Let me calculate that',
@@ -837,19 +837,19 @@ describe('createDelegateTool', () => {
         task: 'Calculate 2+2',
       })) as DelegateResult;
 
-      // 验证工具被执行
+      // Verify tool was executed
       expect(toolExecuted).toBe(true);
       expect(receivedArgs).toBe('2+2');
-      // 验证子 agent 返回了正确的结果
+      // Verify sub-agent returned correct result
       expect(result.answer).toBe('The answer is 4');
       expect(result.totalSteps).toBe(2);
     });
 
-    it('子 agent 不应该访问父 agent 未注册的工具', async () => {
-      // 父 Agent 的注册表为空（没有注册任何工具）
+    it('sub-agent should not access tools not registered by parent agent', async () => {
+      // Parent Agent registry is empty (no tools registered)
       const parentRegistry = new ToolRegistry();
 
-      // 子 agent 配置声明使用 search 工具
+      // Sub-agent config declares use of search tool
       const searcherAgent: SubAgentConfig = {
         name: 'searcher',
         description: 'Search agent',
@@ -863,7 +863,7 @@ describe('createDelegateTool', () => {
       const configs = new Map<string, SubAgentConfig>();
       configs.set('searcher', searcherAgent);
 
-      // Mock LLM - 即使 LLM 想调用 search 工具，子 agent 也没有这个工具
+      // Mock LLM - even if LLM wants to call search tool, sub-agent doesn't have it
       const client = createMockLLMClient([
         {
           content: 'Search result',
@@ -884,15 +884,15 @@ describe('createDelegateTool', () => {
         task: 'Search for something',
       })) as DelegateResult;
 
-      // 子 agent 仍然可以运行，但没有 search 工具可用
+      // Sub-agent can still run, but no search tool is available
       expect(result.answer).toBe('Search result');
-      // 验证传给 LLM 的 tools 是空的（因为 parentRegistry 中没有 search 工具）
+      // Verify tools passed to LLM are empty (because parentRegistry has no search tool)
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
       expect(firstCall.tools).toEqual([]);
     });
 
-    it('子 agent 应该继承父 agent 工具的执行函数', async () => {
-      // 父 Agent 注册一个带副作用的工具
+    it('sub-agent should inherit tool execution functions from parent agent', async () => {
+      // Parent Agent registers a tool with side effects
       const parentRegistry = new ToolRegistry();
       const executionLog: string[] = [];
 
@@ -948,17 +948,17 @@ describe('createDelegateTool', () => {
 
       await tool.execute({ agent: 'logger', task: 'Log some messages' });
 
-      // 验证父 Agent 的工具被正确执行
+      // Verify parent Agent tool was correctly executed
       expect(executionLog).toEqual(['First', 'Second']);
     });
   });
 
   // ----------------------------------------------------------
-  // allowDelegation 限制
+  // allowDelegation restriction
   // ----------------------------------------------------------
   describe('allowDelegation restriction', () => {
-    it('allowDelegation=false 时子 agent 不应该有 delegate 工具', async () => {
-      // 父 Agent 注册 delegate 工具
+    it('sub-agent should not have delegate tool when allowDelegation=false', async () => {
+      // Parent Agent registers delegate tool
       const parentRegistry = new ToolRegistry();
       const delegateToolImpl: Tool = {
         name: 'delegate',
@@ -968,7 +968,7 @@ describe('createDelegateTool', () => {
       };
       parentRegistry.register(delegateToolImpl);
 
-      // 子 agent 声明使用 delegate 工具，但 allowDelegation=false
+      // Sub-agent declares use of delegate tool, but allowDelegation=false
       const restrictedAgent: SubAgentConfig = {
         name: 'restricted',
         description: 'Restricted agent',
@@ -980,7 +980,7 @@ describe('createDelegateTool', () => {
             { name: 'search', description: 'Search', parameters: {} },
           ],
         },
-        allowDelegation: false, // 关键：不允许委派
+        allowDelegation: false, // Key: disallow delegation
       };
 
       parentRegistry.register({
@@ -1018,8 +1018,8 @@ describe('createDelegateTool', () => {
       expect(toolNames).not.toContain('delegate'); // 但没有 delegate
     });
 
-    it('allowDelegation=true 时子 agent 可以有 delegate 工具', async () => {
-      // 父 Agent 注册 delegate 工具
+    it('sub-agent can have delegate tool when allowDelegation=true', async () => {
+      // Parent Agent registers delegate tool
       const parentRegistry = new ToolRegistry();
       const delegateToolImpl: Tool = {
         name: 'delegate',
@@ -1029,7 +1029,7 @@ describe('createDelegateTool', () => {
       };
       parentRegistry.register(delegateToolImpl);
 
-      // 子 agent 声明使用 delegate 工具，allowDelegation=true
+      // Sub-agent declares use of delegate tool, allowDelegation=true
       const delegatorAgent: SubAgentConfig = {
         name: 'delegator',
         description: 'Delegator agent',
@@ -1038,7 +1038,7 @@ describe('createDelegateTool', () => {
           instructions: 'You can delegate.',
           tools: [{ name: 'delegate', description: 'Delegate', parameters: {} }],
         },
-        allowDelegation: true, // 关键：允许委派
+        allowDelegation: true, // key: allow delegation
       };
 
       const configs = new Map<string, SubAgentConfig>();
@@ -1068,8 +1068,8 @@ describe('createDelegateTool', () => {
       expect(toolNames).toContain('delegate'); // 有 delegate
     });
 
-    it('未设置 allowDelegation 时默认不允许委派', async () => {
-      // 父 Agent 注册 delegate 工具
+    it('should disallow delegation by default when allowDelegation is not set', async () => {
+      // Parent Agent registers delegate tool
       const parentRegistry = new ToolRegistry();
       parentRegistry.register({
         name: 'delegate',
@@ -1078,7 +1078,7 @@ describe('createDelegateTool', () => {
         execute: async () => 'delegated',
       });
 
-      // 子 agent 未设置 allowDelegation（默认 undefined）
+      // Sub-agent does not set allowDelegation (default undefined)
       const defaultAgent: SubAgentConfig = {
         name: 'default',
         description: 'Default agent',
@@ -1087,7 +1087,7 @@ describe('createDelegateTool', () => {
           instructions: 'You work.',
           tools: [{ name: 'delegate', description: 'Delegate', parameters: {} }],
         },
-        // allowDelegation 未设置，默认为 false
+        // allowDelegation not set, defaults to false
       };
 
       const configs = new Map<string, SubAgentConfig>();

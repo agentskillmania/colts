@@ -251,27 +251,27 @@ describe('Step 0: AgentState', () => {
     });
 
     it('should allow restored state to continue state operations', () => {
-      // 验证：恢复的 Agent 能继续执行（验收标准第 4 条）
+      // Verify: restored Agent can continue execution (acceptance criterion #4)
       let state = createAgentState(baseConfig);
       state = addUserMessage(state, 'Before snapshot');
 
-      // 创建快照
+      // Create snapshot
       const snapshot = createSnapshot(state);
 
-      // 继续修改原状态
+      // Continue modifying original state
       state = addUserMessage(state, 'After snapshot');
       expect(state.context.messages).toHaveLength(2);
 
-      // 从快照恢复，应该只有 1 条消息
+      // Restore from snapshot, should only have 1 message
       const restored = restoreSnapshot(snapshot);
       expect(restored.context.messages).toHaveLength(1);
       expect(restored.context.messages[0].content).toBe('Before snapshot');
 
-      // 恢复后的状态可以继续执行 state 操作
+      // Restored state can continue state operations
       const continued = addUserMessage(restored, 'After restore');
       expect(continued.context.messages).toHaveLength(2);
       expect(continued.context.messages[1].content).toBe('After restore');
-      // 恢复的状态本身不变
+      // Restored state itself unchanged
       expect(restored.context.messages).toHaveLength(1);
     });
 
@@ -279,11 +279,11 @@ describe('Step 0: AgentState', () => {
       let state = createAgentState(baseConfig);
       state = addUserMessage(state, 'Before serialize');
 
-      // 序列化 → 反序列化
+      // Serialize → Deserialize
       const json = serializeState(state);
       const restored = deserializeState(json);
 
-      // 恢复后可继续操作
+      // Can continue operations after restore
       const continued = addUserMessage(restored, 'After deserialize');
       expect(continued.context.messages).toHaveLength(2);
       expect(continued.context.messages[1].content).toBe('After deserialize');
@@ -324,7 +324,7 @@ describe('Step 0: AgentState', () => {
   });
 
   describe('loadSkill', () => {
-    it('应在无 skillState 时初始化并设置 current 和 loadedInstructions', () => {
+    it('should initialize and set current and loadedInstructions when no skillState exists', () => {
       const state = createAgentState(baseConfig);
       const newState = loadSkill(state, 'tell-time', 'Report current time');
 
@@ -334,7 +334,7 @@ describe('Step 0: AgentState', () => {
       expect(newState.context.skillState!.stack).toEqual([]);
     });
 
-    it('应将已有活跃 skill 压栈（支持嵌套）', () => {
+    it('should push existing active skill onto stack (supports nesting)', () => {
       let state = createAgentState(baseConfig);
       state = loadSkill(state, 'tell-time', 'Report time');
       state = loadSkill(state, 'greeting', 'Say hello');
@@ -345,7 +345,7 @@ describe('Step 0: AgentState', () => {
       expect(state.context.skillState!.stack[0].skillName).toBe('tell-time');
     });
 
-    it('不应修改原始 state（不可变性）', () => {
+    it('should not modify original state (immutability)', () => {
       const state = createAgentState(baseConfig);
       const newState = loadSkill(state, 'test', 'instructions');
 

@@ -1,7 +1,7 @@
 /**
- * @fileoverview useAgent 流式逻辑单元测试
+ * @fileoverview useAgent streaming logic unit tests
  *
- * 测试 parseCommand + 模拟流式逻辑，验证 TimelineEntry 状态更新正确性。
+ * Tests parseCommand + simulated streaming logic, verifying TimelineEntry state updates.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -10,9 +10,9 @@ import { parseCommand } from '../../src/hooks/use-agent.js';
 import type { TimelineEntry } from '../../src/types/timeline.js';
 import { filterByDetailLevel } from '../../src/types/timeline.js';
 
-describe('useAgent 流式逻辑', () => {
+describe('useAgent streaming logic', () => {
   describe('parseCommand', () => {
-    it('应该解析所有命令类型', () => {
+    it('should parse all command types', () => {
       expect(parseCommand('/run').type).toBe('mode-run');
       expect(parseCommand('/step').type).toBe('mode-step');
       expect(parseCommand('/advance').type).toBe('mode-advance');
@@ -25,26 +25,26 @@ describe('useAgent 流式逻辑', () => {
       expect(parseCommand('/show:verbose').type).toBe('show-verbose');
     });
 
-    it('应该提取 /skill 参数', () => {
+    it('should extract /skill argument', () => {
       const cmd = parseCommand('/skill my-skill');
       expect(cmd.skillName).toBe('my-skill');
     });
 
-    it('/skill 无参数匹配为 skill 类型', () => {
+    it('/skill without argument matches skill type', () => {
       const cmd = parseCommand('/skill');
       expect(cmd.type).toBe('skill');
       expect(cmd.skillName).toBeUndefined();
     });
 
-    it('/skill 尾部空格等同于无参数', () => {
+    it('/skill trailing space equals no argument', () => {
       const cmd = parseCommand('/skill ');
       expect(cmd.type).toBe('skill');
       expect(cmd.skillName).toBeUndefined();
     });
   });
 
-  describe('TimelineEntry 状态更新模拟', () => {
-    it('模拟 token 累积到 assistant 条目', () => {
+  describe('TimelineEntry state update simulation', () => {
+    it('simulates token accumulation to assistant entry', () => {
       const assistantId = 'asst-1';
       let entries: TimelineEntry[] = [
         {
@@ -56,7 +56,7 @@ describe('useAgent 流式逻辑', () => {
         },
       ];
 
-      // 模拟 token 事件
+      // Simulate token events
       const tokens = ['Hello', ' world'];
       let accumulated = '';
       for (const token of tokens) {
@@ -72,7 +72,7 @@ describe('useAgent 流式逻辑', () => {
       expect(asstEntry.isStreaming).toBe(true);
     });
 
-    it('模拟 tool:start + tool:end 条目', () => {
+    it('simulates tool:start + tool:end entries', () => {
       let entries: TimelineEntry[] = [];
 
       // tool:start
@@ -82,7 +82,7 @@ describe('useAgent 流式逻辑', () => {
         { type: 'tool', id: toolId, tool: 'read_file', isRunning: true, timestamp: Date.now() },
       ];
 
-      // tool:end — 更新最近的 running tool
+      // tool:end — update most recent running tool
       const idx = entries.findLastIndex
         ? entries.findLastIndex((e) => e.type === 'tool' && e.isRunning)
         : (() => {
@@ -105,7 +105,7 @@ describe('useAgent 流式逻辑', () => {
       expect(toolEntry.isRunning).toBe(false);
     });
 
-    it('模拟 stepStream token 累积', () => {
+    it('simulates stepStream token accumulation', () => {
       const events: StreamEvent[] = [
         { type: 'token', token: 'Step ' },
         { type: 'token', token: 'result' },
@@ -127,7 +127,7 @@ describe('useAgent 流式逻辑', () => {
       expect(tools).toEqual(['read_file']);
     });
 
-    it('模拟 advanceStream phase 变化', () => {
+    it('simulates advanceStream phase changes', () => {
       const events: StreamEvent[] = [
         { type: 'phase-change', from: { type: 'idle' }, to: { type: 'calling-llm' } },
         { type: 'token', token: 'thinking...' },
@@ -147,8 +147,8 @@ describe('useAgent 流式逻辑', () => {
     });
   });
 
-  describe('完整对话流模拟', () => {
-    it('用户消息 + 助手流式 + 完成', () => {
+  describe('Full conversation flow simulation', () => {
+    it('user message + assistant streaming + completion', () => {
       const assistantId = 'asst-1';
       let entries: TimelineEntry[] = [
         { type: 'user', id: 'user-1', content: 'What is 2+2?', timestamp: Date.now() },
@@ -161,7 +161,7 @@ describe('useAgent 流式逻辑', () => {
         },
       ];
 
-      // 模拟流式 token
+      // Simulate streaming tokens
       const tokens = ['2+2', ' equals 4'];
       let accumulated = '';
       for (const token of tokens) {
@@ -171,7 +171,7 @@ describe('useAgent 流式逻辑', () => {
         );
       }
 
-      // 模拟完成
+      // Simulate completion
       entries = entries.map((e) =>
         e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
       );
@@ -184,7 +184,7 @@ describe('useAgent 流式逻辑', () => {
       expect(asst.isStreaming).toBe(false);
     });
 
-    it('DetailLevel 过滤正确性', () => {
+    it('DetailLevel filtering correctness', () => {
       const entries: TimelineEntry[] = [
         { type: 'user', id: '1', content: 'hi', timestamp: Date.now() },
         { type: 'phase', id: '2', from: 'idle', to: 'calling-llm', timestamp: Date.now() },

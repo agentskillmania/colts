@@ -98,7 +98,7 @@ describe('run()', () => {
       expect(result.totalSteps).toBe(1);
     }
 
-    // 原状态不可变
+    // Original state is immutable
     expect(state.context.stepCount).toBe(0);
     expect(finalState.context.stepCount).toBe(1);
   });
@@ -106,14 +106,14 @@ describe('run()', () => {
   it('should loop through tool execution to final answer', async () => {
     const responses: LLMResponse[] = [
       {
-        // 第一步：LLM 调用工具
+        // Step 1: LLM calls tool
         content: 'Let me calculate',
         toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '2+2' } }],
         tokens: mockTokens,
         stopReason: 'tool_calls',
       },
       {
-        // 第二步：LLM 给出最终答案
+        // Step 2: LLM gives final answer
         content: 'The result is 4',
         toolCalls: [],
         tokens: mockTokens,
@@ -146,7 +146,7 @@ describe('run()', () => {
   });
 
   it('should return max_steps when limit is reached', async () => {
-    // LLM 每次都调用工具，永远不会停止
+    // LLM calls tool every time, never stops
     const toolCallResponse: LLMResponse = {
       content: 'Thinking...',
       toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
@@ -154,7 +154,7 @@ describe('run()', () => {
       stopReason: 'tool_calls',
     };
 
-    // 返回足够多的工具调用响应
+    // Return enough tool call responses
     const responses = Array(10).fill(toolCallResponse);
     const client = createMockLLMClient(responses);
 
@@ -218,7 +218,7 @@ describe('run()', () => {
 
     const { result } = await runner.run(state);
 
-    // step() 内部捕获错误，返回 error
+    // step() catches error internally, returns error
     expect(result.type).toBe('error');
     if (result.type === 'error') {
       expect(result.error.message).toContain('API error');
@@ -281,13 +281,13 @@ describe('runStream()', () => {
       events.push(event as { type: string });
     }
 
-    // 应有 step:start
+    // Should have step:start
     expect(events.some((e) => e.type === 'step:start')).toBe(true);
-    // 应有 token 事件（逐字输出）
+    // Should have token events (word by word output)
     expect(events.some((e) => e.type === 'token')).toBe(true);
-    // 应有 step:end
+    // Should have step:end
     expect(events.some((e) => e.type === 'step:end')).toBe(true);
-    // 应有 complete
+    // Should have complete
     expect(events.some((e) => e.type === 'complete')).toBe(true);
   });
 
@@ -311,7 +311,7 @@ describe('runStream()', () => {
     }
 
     expect(tokens.length).toBeGreaterThan(0);
-    // 拼接后应包含完整内容
+    // Concatenated result should contain full content
     expect(tokens.join('')).toContain('One');
   });
 
@@ -452,10 +452,10 @@ describe('runStream()', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     for await (const event of runner.runStream(state, undefined, registry)) {
       stepCount++;
-      if (stepCount > 5) break; // 中断流式
+      if (stepCount > 5) break; // interrupt streaming
     }
 
-    // 应该已经中断，没有抛错
+    // Should have interrupted without error
     expect(stepCount).toBeGreaterThan(0);
   });
 
@@ -535,9 +535,9 @@ describe('runStream()', () => {
       }
     }
 
-    // 原状态不可变
+    // Original state is immutable
     expect(originalState.context.stepCount).toBe(originalStepCount);
-    // 最终状态已更新
+    // Final state is updated
     expect(returnValue.state.context.stepCount).toBe(2);
   });
 
@@ -573,10 +573,10 @@ describe('runStream()', () => {
   });
 
   // ============================================================
-  // SubAgent runStream 事件传播
+  // SubAgent runStream event propagation
   // ============================================================
-  it('应该通过 runStream 传播 subagent 事件', async () => {
-    /** 创建测试用子 agent 配置 */
+  it('should propagate subagent events through runStream', async () => {
+    /** Create test sub-agent configs */
     const createTestSubAgents = (): SubAgentConfig[] => [
       {
         name: 'researcher',
@@ -590,7 +590,7 @@ describe('runStream()', () => {
       },
     ];
 
-    // 第一步：主 agent 委派给子 agent
+    // Step 1: Main agent delegates to sub-agent
     const delegateResponse: LLMResponse = {
       content: 'Delegating to researcher',
       toolCalls: [
@@ -604,7 +604,7 @@ describe('runStream()', () => {
       stopReason: 'tool_calls',
     };
 
-    // 子 agent 的 LLM 响应（在 delegate tool 内部）
+    // Sub-agent LLM response (inside delegate tool)
     const subAgentResponse: LLMResponse = {
       content: 'Research result: found relevant info.',
       toolCalls: [],
@@ -612,7 +612,7 @@ describe('runStream()', () => {
       stopReason: 'stop',
     };
 
-    // 第二步：主 agent 基于子 agent 结果给出最终答案
+    // Step 2: Main agent gives final answer based on sub-agent result
     const finalResponse: LLMResponse = {
       content: 'Based on research, the answer is X.',
       toolCalls: [],
@@ -634,21 +634,21 @@ describe('runStream()', () => {
       events.push(event as { type: string });
     }
 
-    // 应该有 subagent:start 和 subagent:end 事件
+    // Should have subagent:start and subagent:end events
     expect(events.some((e) => e.type === 'subagent:start')).toBe(true);
     expect(events.some((e) => e.type === 'subagent:end')).toBe(true);
 
-    // 应该有正常的 step:start、step:end 和 complete 事件
+    // Should have normal step:start, step:end, and complete events
     expect(events.some((e) => e.type === 'step:start')).toBe(true);
     expect(events.some((e) => e.type === 'step:end')).toBe(true);
     expect(events.some((e) => e.type === 'complete')).toBe(true);
 
-    // 验证 subagent:start 在 subagent:end 之前
+    // Verify subagent:start is before subagent:end
     const startIndex = events.findIndex((e) => e.type === 'subagent:start');
     const endIndex = events.findIndex((e) => e.type === 'subagent:end');
     expect(startIndex).toBeLessThan(endIndex);
 
-    // 验证最终结果
+    // Verify final result
     const completeEvent = events.find((e) => e.type === 'complete') as {
       type: string;
       result: { type: string; answer: string; totalSteps: number };
