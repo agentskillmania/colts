@@ -6,6 +6,7 @@
  */
 
 import type { AgentState, IToolRegistry } from './types.js';
+import { updateState } from './state.js';
 import type {
   AdvanceResult,
   ExecutionState,
@@ -182,17 +183,19 @@ export async function* executeStepStream(
         const skillState = currentState.context.skillState;
 
         if (signal.type === 'SWITCH_SKILL' && skillState) {
-          // Push current skill to stack
-          if (skillState.current) {
-            skillState.stack.push({
-              skillName: skillState.current,
-              loadedAt: Date.now(),
-              taskContext: signal.task,
-            });
-          }
-          // Switch to new skill
-          skillState.current = signal.to;
-          skillState.loadedInstructions = signal.instructions;
+          // 用 updateState 保证 Immer 冻结对象也能安全修改
+          currentState = updateState(currentState, (draft) => {
+            const ss = draft.context.skillState!;
+            if (ss.current) {
+              ss.stack.push({
+                skillName: ss.current,
+                loadedAt: Date.now(),
+                taskContext: signal.task,
+              });
+            }
+            ss.current = signal.to;
+            ss.loadedInstructions = signal.instructions;
+          });
 
           // Yield skill event and continue execution
           yield { type: 'skill:start', name: signal.to, task: signal.task };
@@ -203,25 +206,25 @@ export async function* executeStepStream(
         }
 
         if (signal.type === 'RETURN_SKILL' && skillState) {
-          if (skillState.stack.length === 0) {
-            yield {
-              type: 'error',
-              error: new Error('No parent skill to return to'),
-              context: { step: 0 },
-            };
-            return {
-              state: currentState,
-              result: { type: 'error', error: new Error('No parent skill to return to') },
-            };
+          const stackLen = skillState.stack.length;
+          if (stackLen === 0) {
+            // 顶层 skill 无父 skill 可退，静默忽略
+            execState.phase = { type: 'idle' };
+            continue;
           }
 
-          // Pop parent skill from stack
-          const parent = skillState.stack.pop()!;
-          skillState.current = parent.skillName;
-          delete skillState.loadedInstructions;
+          // 用 updateState 保证 Immer 冻结对象也能安全修改
+          let parentSkillName: string;
+          currentState = updateState(currentState, (draft) => {
+            const ss = draft.context.skillState!;
+            const parent = ss.stack.pop()!;
+            parentSkillName = parent.skillName;
+            ss.current = parentSkillName;
+            delete ss.loadedInstructions;
+          });
 
           // Yield skill event
-          yield { type: 'skill:end', name: parent.skillName, result: signal.result };
+          yield { type: 'skill:end', name: parentSkillName!, result: signal.result };
 
           // Reset phase to idle to continue with parent skill
           execState.phase = { type: 'idle' };
