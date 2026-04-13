@@ -1,8 +1,8 @@
 /**
- * @fileoverview 单条时间线渲染组件 — 根据 TimelineEntry type 选择样式
+ * @fileoverview Single timeline entry renderer — selects the layout based on TimelineEntry type
  *
- * user / assistant / tool 使用自定义布局（流式光标、参数层级）。
- * 其余条目使用 @inkjs/ui 的 Alert（醒目事件）或 StatusMessage（行内状态）。
+ * user / assistant / tool use custom layouts (streaming cursor, argument hierarchy).
+ * All other entries use @inkjs/ui Alert (prominent events) or StatusMessage (inline status).
  */
 
 import React from 'react';
@@ -12,17 +12,17 @@ import type { TimelineEntry } from '../../types/timeline.js';
 import { theme } from '../../utils/theme.js';
 
 /**
- * TimelineEntry 组件 props
+ * TimelineEntry component props
  */
 export interface TimelineEntryProps {
-  /** 时间线条目数据 */
+  /** Timeline entry data */
   entry: TimelineEntry;
 }
 
 /**
- * 单条时间线渲染
+ * Single timeline entry renderer
  *
- * 根据 entry.type 选择组件和格式。
+ * Chooses the component and format based on entry.type.
  */
 export function TimelineEntry({ entry }: TimelineEntryProps) {
   switch (entry.type) {
@@ -58,10 +58,10 @@ export function TimelineEntry({ entry }: TimelineEntryProps) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// 自定义布局：user / assistant / tool
+// Custom layouts: user / assistant / tool
 // ──────────────────────────────────────────────────────────────
 
-/** 用户消息 */
+/** User message */
 function UserEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'user' }> }) {
   return (
     <Box>
@@ -71,7 +71,7 @@ function UserEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'user' }> 
   );
 }
 
-/** 助手回复 */
+/** Assistant reply */
 function AssistantEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'assistant' }> }) {
   const cursor = entry.isStreaming ? '▌' : '';
   return (
@@ -82,7 +82,7 @@ function AssistantEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'assi
   );
 }
 
-/** 工具调用 */
+/** Tool call */
 function ToolEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'tool' }> }) {
   if (entry.isRunning) {
     return (
@@ -109,10 +109,10 @@ function ToolEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'tool' }> 
 }
 
 // ──────────────────────────────────────────────────────────────
-// @inkjs/ui 组件：Alert（醒目）+ StatusMessage（行内）
+// @inkjs/ui components: Alert (prominent) + StatusMessage (inline)
 // ──────────────────────────────────────────────────────────────
 
-/** Phase 变化 */
+/** Phase change */
 function PhaseEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'phase' }> }) {
   return (
     <Box marginLeft={1}>
@@ -130,7 +130,7 @@ function ThoughtEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'though
   );
 }
 
-/** Step 开始 */
+/** Step start */
 function StepStartEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'step-start' }> }) {
   return (
     <Box marginLeft={1}>
@@ -139,7 +139,7 @@ function StepStartEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'step
   );
 }
 
-/** Step 结束 */
+/** Step end */
 function StepEndEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'step-end' }> }) {
   const variant = entry.result.type === 'done' ? 'success' : 'info';
   const label = entry.result.type === 'done' ? 'done (final)' : 'done (continue)';
@@ -150,7 +150,7 @@ function StepEndEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'step-e
   );
 }
 
-/** Run 完成 — Alert（带边框，醒目） */
+/** Run complete — Alert (bordered, prominent) */
 function RunCompleteEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'run-complete' }> }) {
   const r = entry.result;
   if (r.type === 'success') {
@@ -162,7 +162,7 @@ function RunCompleteEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'ru
   return <Alert variant="error">Run error: {r.error.message}</Alert>;
 }
 
-/** 压缩 */
+/** Compression */
 function CompressEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'compress' }> }) {
   if (entry.status === 'compressing') {
     return (
@@ -210,7 +210,7 @@ function SubagentEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'subag
   );
 }
 
-/** 系统消息 */
+/** System message */
 function SystemEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'system' }> }) {
   return (
     <Box marginLeft={1}>
@@ -219,16 +219,16 @@ function SystemEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'system'
   );
 }
 
-/** 错误 — Alert（带边框，醒目） */
+/** Error — Alert (bordered, prominent) */
 function ErrorEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'error' }> }) {
   return <Alert variant="error">{entry.message}</Alert>;
 }
 
 // ──────────────────────────────────────────────────────────────
-// 工具函数
+// Utilities
 // ──────────────────────────────────────────────────────────────
 
-/** 格式化工具参数为可读字符串 */
+/** Format tool args as a readable string */
 function formatArgs(args: unknown): string {
   if (typeof args === 'object' && args !== null) {
     const entries = Object.entries(args as Record<string, unknown>);
@@ -237,14 +237,14 @@ function formatArgs(args: unknown): string {
   return truncate(String(args), 80);
 }
 
-/** 格式化工具结果为可读字符串 */
+/** Format tool result as a readable string */
 function formatResult(result: unknown): string {
   if (result === undefined) return '';
   const str = typeof result === 'string' ? result : JSON.stringify(result);
   return truncate(str, 80);
 }
 
-/** 截断字符串 */
+/** Truncate a string */
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
   return s.slice(0, max) + '...';

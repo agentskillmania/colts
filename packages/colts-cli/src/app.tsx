@@ -1,5 +1,5 @@
 /**
- * @fileoverview 根组件 — 路由到主界面或配置引导
+ * @fileoverview Root component — routes to the main TUI or config guidance
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -21,18 +21,18 @@ import { theme } from './utils/theme.js';
  * App props
  */
 interface AppProps {
-  /** 应用配置 */
+  /** Application config */
   config: AppConfig;
-  /** AgentRunner 实例（配置无效时可能为 null） */
+  /** AgentRunner instance (null when config is invalid) */
   runner: AgentRunner | null;
-  /** 初始 AgentState（可能为 null） */
+  /** Initial AgentState (may be null) */
   initialState?: AgentState | null;
 }
 
 /**
- * 根组件
+ * Root component
  *
- * 根据配置有效性路由到主界面或配置引导。
+ * Routes to the main TUI or config guidance based on config validity.
  */
 export function App({ config, runner, initialState }: AppProps) {
   return (
@@ -47,18 +47,18 @@ export function App({ config, runner, initialState }: AppProps) {
 }
 
 /**
- * 主界面
+ * Main TUI
  *
- * 单画布布局：HeaderBar + TimelinePanel + InputBar。
+ * Single-canvas layout: HeaderBar + TimelinePanel + InputBar.
  */
 function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: AgentRunner; initialState: AgentState | null }) {
   const { exit } = useApp();
 
-  // Session 持久化
+  // Session persistence
   const { save, restoreLatest, setSessionId } = useSession();
   const lastSavedRef = useRef<AgentState | null>(null);
 
-  // Agent 交互
+  // Agent interaction
   const {
     entries,
     mode,
@@ -74,7 +74,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
 
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'error'>('idle');
 
-  // 启动时恢复最近的 session
+  // Restore the most recent session on startup
   useEffect(() => {
     if (initialState) {
       setSessionId(initialState.id);
@@ -87,7 +87,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
     });
   }, []);
 
-  // state 变化时自动保存（运行中不保存，避免频繁 IO）
+  // Auto-save when state changes (skip while running to avoid frequent IO)
   useEffect(() => {
     if (!state || isRunning) return;
     if (state === lastSavedRef.current) return;
@@ -95,7 +95,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
     lastSavedRef.current = state;
   }, [state, isRunning, save]);
 
-  // Ctrl+C: 运行中 → 中断，否则退出
+  // Ctrl+C: abort while running, otherwise exit
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       if (isRunning) {
@@ -108,10 +108,10 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
 
   const handleSubmit = useCallback(
     async (value: string) => {
-      // 暂停时空输入 = 继续
+      // Empty input while paused = resume
       if (!value.trim() && !isPaused) return;
 
-      // 模式切换命令在 handleSubmit 中拦截（保持与 InputBar 的联动）
+      // Intercept mode-switch commands in handleSubmit (keeps InputBar in sync)
       const { parseCommand } = await import('./hooks/use-agent.js');
       const cmd = parseCommand(value);
 
@@ -160,9 +160,9 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
 }
 
 /**
- * 配置引导
+ * Config guidance
  *
- * 配置无效时显示，提示用户编辑配置文件。
+ * Shown when the config is invalid, prompting the user to edit the config file.
  */
 function ConfigPrompt({ configPath }: { configPath?: string }) {
   const { exit } = useApp();

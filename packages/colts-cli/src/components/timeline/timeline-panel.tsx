@@ -1,5 +1,5 @@
 /**
- * @fileoverview 时间线容器组件 — 根据 DetailLevel 过滤并渲染 TimelineEntry
+ * @fileoverview Timeline container component — filters and renders TimelineEntry by DetailLevel
  */
 
 import React from 'react';
@@ -12,18 +12,18 @@ import { TimelineEntry as TimelineEntryComponent } from './timeline-entry.js';
  * TimelinePanel props
  */
 export interface TimelinePanelProps {
-  /** 所有时间线条目 */
+  /** All timeline entries */
   entries: TimelineEntry[];
-  /** 展示级别 */
+  /** Detail level */
   detailLevel: DetailLevel;
 }
 
 /**
- * 时间线容器组件
+ * Timeline container component
  *
- * 根据 detailLevel 过滤条目后逐条渲染。
+ * Filters entries by detailLevel and renders them one by one.
  *
- * @param props - entries 和 detailLevel
+ * @param props - entries and detailLevel
  */
 export function TimelinePanel({ entries, detailLevel }: TimelinePanelProps) {
   const visible = filterByDetailLevel(entries, detailLevel);

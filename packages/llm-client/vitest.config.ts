@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import dotenv from 'dotenv';
 
-// 从根 .env 文件加载环境变量（集成测试需要 API key 和 ENABLE_INTEGRATION_TESTS）
+// Load environment variables from root .env file (integration tests need API key and ENABLE_INTEGRATION_TESTS)
 dotenv.config({ path: '../../.env' });
 
 export default defineConfig({
