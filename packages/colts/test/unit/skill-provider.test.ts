@@ -608,4 +608,30 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       expect(content2).toBe('# Updated');
     });
   });
+
+  describe('~ 路径展开', () => {
+    it('~/ 路径应展开为 HOME 目录并正确扫描', () => {
+      const home = process.env.HOME!;
+      // 在 HOME 下的临时位置创建 skill
+      const testSubDir = `.colts-test-tilde-${Date.now()}`;
+      const fullDir = join(home, testSubDir);
+      mkdirSync(fullDir, { recursive: true });
+
+      createSkillDir(fullDir, 'tilde-skill', 'name: tilde-skill\ndescription: Tilde', '# Body');
+
+      // 用 ~/ 前缀引用
+      provider = new FilesystemSkillProvider([`~/${testSubDir}`]);
+      const skills = provider.listSkills();
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe('tilde-skill');
+
+      rmSync(fullDir, { recursive: true, force: true });
+    });
+
+    it('不存在的 ~/ 路径应被静默忽略', () => {
+      provider = new FilesystemSkillProvider(['~/__colts_nonexistent_test__']);
+      expect(provider.listSkills()).toEqual([]);
+    });
+  });
 });

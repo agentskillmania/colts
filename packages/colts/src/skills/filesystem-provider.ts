@@ -97,9 +97,16 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
  * @param directory - Root directory to scan
  * @returns Array of discovered skill manifests
  */
+function expandHome(filePath: string): string {
+  if (filePath.startsWith('~/') || filePath === '~') {
+    return filePath.replace('~', process.env.HOME ?? '');
+  }
+  return filePath;
+}
+
 function scanDirectory(directory: string): SkillManifest[] {
   const manifests: SkillManifest[] = [];
-  const resolvedDir = resolve(directory);
+  const resolvedDir = resolve(expandHome(directory));
 
   if (!existsSync(resolvedDir)) {
     return manifests;
