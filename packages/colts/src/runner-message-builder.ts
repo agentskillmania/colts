@@ -6,10 +6,60 @@
  */
 
 import type { Message as PiAIMessage, TextContent, Tool } from '@mariozechner/pi-ai';
-import type { AgentState, IToolRegistry } from './types.js';
+import type { AgentState, IToolRegistry, SkillState } from './types.js';
 import type { ISkillProvider } from './skills/types.js';
 import type { SubAgentConfig } from './subagent/types.js';
 import type { ToolSchema } from './tools/registry.js';
+
+/**
+ * Build skill mode guide based on current skill state
+ */
+function buildSkillGuide(skillState: SkillState | undefined): string | null {
+  if (!skillState) return null;
+
+  const isInSubSkill = skillState.current && skillState.stack.length > 0;
+
+  if (isInSubSkill) {
+    // Sub-skill mode: teach return_skill
+    const parent = skillState.stack[skillState.stack.length - 1].skillName;
+    return `=== SKILL MODE: SUB-SKILL ===
+You are currently executing as a sub-skill.
+
+Parent skill: ${parent}
+Current skill: ${skillState.current}
+
+When you COMPLETE your assigned task, you MUST call the \`return_skill\` tool:
+{
+  "result": "Your specific answer here (be detailed)",
+  "status": "success"
+}
+
+⚠️ IMPORTANT: Do not just say "I'm done" — always use return_skill!
+=============================`.trim();
+  }
+
+  // Top-level mode: teach load_skill
+  if (skillState.availableSkills?.length) {
+    const skillLines = skillState.availableSkills
+      .map((s) => `- ${s.name}: ${s.description}`)
+      .join('\n');
+
+    return `=== SKILL MODE: TOP-LEVEL ===
+You have access to specialized skills. When you need expertise beyond your base knowledge:
+
+Use the \`load_skill\` tool:
+{
+  "name": "skill-name",
+  "task": "Describe what you need done"
+}
+
+Available skills:
+${skillLines}
+=============================`.trim();
+  }
+
+  return null;
+}
 
 /**
  * Options for buildMessages
@@ -45,8 +95,19 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
     systemParts.push(state.config.instructions);
   }
 
-  // Inject skill list into system prompt
-  if (opts.skillProvider) {
+  // Inject current skill instructions (if in sub-skill mode)
+  if (state.context.skillState?.loadedInstructions) {
+    systemParts.push(state.context.skillState.loadedInstructions);
+  }
+
+  // Inject dynamic skill guide based on current mode
+  const skillGuide = buildSkillGuide(state.context.skillState);
+  if (skillGuide) {
+    systemParts.push(skillGuide);
+  }
+
+  // Inject top-level skill list only when not in sub-skill mode
+  if (opts.skillProvider && !state.context.skillState?.current) {
     const skills = opts.skillProvider.listSkills();
     if (skills.length > 0) {
       const skillLines = skills.map((s) => `- ${s.name}: ${s.description}`);
