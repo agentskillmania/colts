@@ -826,7 +826,11 @@ describe('AgentRunner', () => {
 
       // 执行 load_skill 工具
       const result = await runner.getToolRegistry().execute('load_skill', { name: 'code-review' });
-      expect(result).toBe('Instructions for code-review');
+      expect(result).toMatchObject({
+        type: 'SWITCH_SKILL',
+        to: 'code-review',
+        instructions: 'Instructions for code-review',
+      });
     });
 
     it('should include skill list in system prompt when skillProvider has skills', async () => {

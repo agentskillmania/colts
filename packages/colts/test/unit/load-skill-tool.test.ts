@@ -56,7 +56,7 @@ describe('Step 8: load_skill Tool', () => {
   });
 
   describe('加载已存在的 Skill 指令', () => {
-    it('应能加载并返回 Skill 指令内容', async () => {
+    it('应返回 SWITCH_SKILL 信号', async () => {
       const manifest: SkillManifest = {
         name: 'code-review',
         description: 'Code review skill',
@@ -69,7 +69,32 @@ describe('Step 8: load_skill Tool', () => {
       const tool = createLoadSkillTool(provider);
       const result = await tool.execute({ name: 'code-review' });
 
-      expect(result).toBe('# Code Review\n\nStep 1: Read the code.');
+      expect(result).toEqual({
+        type: 'SWITCH_SKILL',
+        to: 'code-review',
+        instructions: '# Code Review\n\nStep 1: Read the code.',
+        task: 'Execute as instructed',
+      });
+    });
+
+    it('应传递 task 参数', async () => {
+      const manifest: SkillManifest = {
+        name: 'code-review',
+        description: 'Code review skill',
+        source: '/skills/code-review',
+      };
+      const provider = createMockProvider([manifest], {
+        'code-review': '# Code Review',
+      });
+
+      const tool = createLoadSkillTool(provider);
+      const result = await tool.execute({ name: 'code-review', task: 'Review this PR' });
+
+      expect(result).toMatchObject({
+        type: 'SWITCH_SKILL',
+        to: 'code-review',
+        task: 'Review this PR',
+      });
     });
 
     it('应通过 skillProvider.getManifest 查找 Skill', async () => {
@@ -102,7 +127,7 @@ describe('Step 8: load_skill Tool', () => {
   });
 
   describe('Skill 未找到', () => {
-    it('应返回包含可用 Skill 列表的错误信息', async () => {
+    it('应返回 SKILL_NOT_FOUND 信号', async () => {
       const skills: SkillManifest[] = [
         { name: 'skill-a', description: 'A', source: '/a' },
         { name: 'skill-b', description: 'B', source: '/b' },
@@ -115,23 +140,29 @@ describe('Step 8: load_skill Tool', () => {
       const tool = createLoadSkillTool(provider);
       const result = await tool.execute({ name: 'nonexistent' });
 
-      expect(result).toBe(
-        "Error: Skill 'nonexistent' not found. Available skills: skill-a, skill-b"
-      );
+      expect(result).toEqual({
+        type: 'SKILL_NOT_FOUND',
+        requested: 'nonexistent',
+        available: ['skill-a', 'skill-b'],
+      });
     });
 
-    it('没有可用 Skill 时应显示空列表', async () => {
+    it('没有可用 Skill 时应返回空列表', async () => {
       const provider = createMockProvider([], {});
 
       const tool = createLoadSkillTool(provider);
       const result = await tool.execute({ name: 'anything' });
 
-      expect(result).toBe("Error: Skill 'anything' not found. Available skills: ");
+      expect(result).toEqual({
+        type: 'SKILL_NOT_FOUND',
+        requested: 'anything',
+        available: [],
+      });
     });
   });
 
   describe('重复加载同一 Skill', () => {
-    it('多次加载同一 Skill 应返回相同内容', async () => {
+    it('多次加载同一 Skill 应返回相同 SWITCH_SKILL 信号', async () => {
       const manifest: SkillManifest = {
         name: 'stable-skill',
         description: 'Stable',
@@ -146,13 +177,17 @@ describe('Step 8: load_skill Tool', () => {
       const result1 = await tool.execute({ name: 'stable-skill' });
       const result2 = await tool.execute({ name: 'stable-skill' });
 
-      expect(result1).toBe(result2);
-      expect(result1).toBe('Always the same content');
+      expect(result1).toEqual(result2);
+      expect(result1).toMatchObject({
+        type: 'SWITCH_SKILL',
+        to: 'stable-skill',
+        instructions: 'Always the same content',
+      });
     });
   });
 
   describe('空 Skill 名称', () => {
-    it('空字符串名称应正确处理并返回错误', async () => {
+    it('空字符串名称应返回 SKILL_NOT_FOUND 信号', async () => {
       const skills: SkillManifest[] = [{ name: 'real-skill', description: 'Real', source: '/r' }];
       const provider = createMockProvider(skills, {
         'real-skill': 'Content',
@@ -161,7 +196,11 @@ describe('Step 8: load_skill Tool', () => {
       const tool = createLoadSkillTool(provider);
       const result = await tool.execute({ name: '' });
 
-      expect(result).toBe("Error: Skill '' not found. Available skills: real-skill");
+      expect(result).toEqual({
+        type: 'SKILL_NOT_FOUND',
+        requested: '',
+        available: ['real-skill'],
+      });
     });
   });
 
@@ -196,7 +235,7 @@ describe('Step 8: load_skill Tool', () => {
       expect(params.type).toBe('object');
     });
 
-    it('应能通过 ToolRegistry 执行', async () => {
+    it('应能通过 ToolRegistry 执行并返回 SWITCH_SKILL 信号', async () => {
       const manifest: SkillManifest = {
         name: 'integration-test',
         description: 'Integration',
@@ -212,7 +251,11 @@ describe('Step 8: load_skill Tool', () => {
       registry.register(tool);
 
       const result = await registry.execute('load_skill', { name: 'integration-test' });
-      expect(result).toBe('Integration content');
+      expect(result).toMatchObject({
+        type: 'SWITCH_SKILL',
+        to: 'integration-test',
+        instructions: 'Integration content',
+      });
     });
 
     it('应通过 Zod schema 校验参数', async () => {
