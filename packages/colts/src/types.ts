@@ -69,6 +69,36 @@ export interface CompressionMeta {
 }
 
 /**
+ * Skill stack frame for nested skill calling
+ */
+export interface SkillStackFrame {
+  /** Name of the skill in this frame */
+  skillName: string;
+  /** Timestamp when this skill was loaded */
+  loadedAt: number;
+  /** Optional task context passed to the skill */
+  taskContext?: unknown;
+}
+
+/**
+ * Skill state for nested skill calling
+ * Stored in AgentContext to persist across steps and sessions
+ */
+export interface SkillState {
+  /** Stack of parent skills (for return navigation) */
+  stack: SkillStackFrame[];
+  /** Currently active skill name */
+  current: string | null;
+  /** Cached instructions of current skill (to avoid re-loading) */
+  loadedInstructions?: string;
+  /** Available skills at top level (for load_skill tool) */
+  availableSkills?: Array<{
+    name: string;
+    description: string;
+  }>;
+}
+
+/**
  * Agent context
  */
 export interface AgentContext {
@@ -80,6 +110,8 @@ export interface AgentContext {
   lastToolResult?: unknown;
   /** Compression metadata (present when context has been compressed) */
   compression?: CompressionMeta;
+  /** Skill state for nested skill calling */
+  skillState?: SkillState;
 }
 
 /**
