@@ -27,6 +27,8 @@ async function main() {
         baseUrl: config.llm.baseUrl,
       },
       systemPrompt: config.agent?.instructions,
+      maxSteps: config.maxSteps,
+      requestTimeout: config.requestTimeout,
       skillDirectories: config.skills,
     };
     runner = new AgentRunner(runnerOptions);

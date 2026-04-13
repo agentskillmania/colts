@@ -208,6 +208,54 @@ llm:
         process.chdir(originalCwd);
       }
     });
+
+    it('should return default maxSteps and requestTimeout when not specified', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+`;
+      const localConfig = path.join(testDir, 'colts.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.maxSteps).toBe(20);
+        expect(config.requestTimeout).toBe(1_800_000);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should return custom maxSteps and requestTimeout when specified', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+maxSteps: 50
+requestTimeout: 60000
+`;
+      const localConfig = path.join(testDir, 'colts.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.maxSteps).toBe(50);
+        expect(config.requestTimeout).toBe(60000);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
   });
 
   describe('saveConfig', () => {

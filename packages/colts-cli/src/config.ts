@@ -27,6 +27,8 @@ export interface ColtsConfig extends Record<string, unknown> {
     name?: string;
     instructions?: string;
   };
+  maxSteps?: number;
+  requestTimeout?: number;
   skills?: string[];
   subAgents?: Array<{
     name: string;
@@ -39,9 +41,6 @@ export interface ColtsConfig extends Record<string, unknown> {
     maxSteps?: number;
     allowDelegation?: boolean;
   }>;
-  persistence?: {
-    enabled?: boolean;
-  };
 }
 
 /**
@@ -64,11 +63,21 @@ export interface AppConfig {
     name: string;
     instructions: string;
   };
+  /** Default max steps for run mode */
+  maxSteps?: number;
+  /** Request timeout in milliseconds */
+  requestTimeout?: number;
   /** Skill directory list */
   skills?: string[];
   /** SubAgent configuration list */
   subAgents?: ColtsConfig['subAgents'];
 }
+
+/** 默认最大步数 */
+const DEFAULT_MAX_STEPS = 20;
+
+/** 默认请求超时（ms） */
+const DEFAULT_REQUEST_TIMEOUT = 1_800_000;
 
 /** Default configuration YAML */
 const DEFAULT_CONFIG_YAML = `llm:
@@ -77,10 +86,21 @@ const DEFAULT_CONFIG_YAML = `llm:
 
 agent:
   name: colts-agent
-  instructions: "You are a helpful assistant."
+  instructions: |
+    You are an intelligent agent. Follow these principles:
+    - Analyze the user's request carefully before acting.
+    - Use available tools to gather information and complete tasks.
+    - Break complex tasks into smaller, manageable steps.
+    - Report results clearly and concisely.
+    - If something is unclear, ask the user for clarification.
 
-persistence:
-  enabled: true
+maxSteps: 20
+requestTimeout: 1800000
+
+skills:
+  - ./skills
+  - ~/.agentskillmania/colts/skills
+
 `;
 
 /**
@@ -168,8 +188,10 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
       },
       agent: {
         name: config.agent?.name ?? 'colts-agent',
-        instructions: config.agent?.instructions ?? 'You are a helpful assistant.',
+        instructions: config.agent?.instructions ?? '',
       },
+      maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
+      requestTimeout: config.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT,
       skills: config.skills,
       subAgents: config.subAgents,
     };
