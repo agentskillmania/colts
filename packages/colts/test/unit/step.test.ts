@@ -836,42 +836,50 @@ describe('step()', () => {
       expect(hasErrorEvent).toBe(true);
     });
 
-    it('should handle error in stepStream from advance error phase', async () => {
-      // Create a client that returns error in a way that triggers the error phase
-      const errorClient = {
+    it('should handle error phase from executeAdvanceStream', async () => {
+      // Test executeAdvanceStream when executeAdvance returns error phase
+      // This covers the error handling path in executeAdvanceStream
+      const { executeAdvanceStream } = await import('../../src/runner-stream.js');
+      const { createExecutionState } = await import('../../src/execution.js');
+      const { ToolRegistry } = await import('../../src/tools/registry.js');
+      
+      const mockClient = {
         call: vi.fn().mockResolvedValue({
-          content: '',
+          content: 'test',
           toolCalls: [],
           tokens: { input: 0, output: 0 },
           stopReason: 'stop',
         }),
-        stream: vi.fn().mockImplementation(async function* () {
-          // Simulate a stream that errors
-          yield { type: 'text' as const, delta: 'test', accumulatedContent: 'test' };
-          // This should trigger error handling in advance
-          throw new Error('LLM Stream Error');
-        }),
+        stream: vi.fn(),
       };
 
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: errorClient as unknown as LLMClient,
-      });
+      const ctx = {
+        llmProvider: mockClient as unknown as ILLMClient,
+        toolRegistry: new ToolRegistry(),
+        options: { model: 'gpt-4' },
+      };
+
       const state = createAgentState(defaultConfig);
+      
+      // Create custom execState with an invalid phase to trigger default case in executeAdvance
+      const execState = createExecutionState();
+      (execState as { phase: { type: string } }).phase = { type: 'invalid-phase' } as ExecutionState['phase'];
 
-      const events: { type: string }[] = [];
-      let errorOccurred = false;
-
+      const events: { type: string; error?: Error }[] = [];
+      
       try {
-        for await (const event of runner.stepStream(state)) {
-          events.push(event as { type: string });
+        const generator = executeAdvanceStream(ctx, state, execState, undefined, undefined);
+        for await (const event of generator) {
+          events.push(event as { type: string; error?: Error });
         }
-      } catch {
-        errorOccurred = true;
+      } catch (error) {
+        // Expected
       }
 
-      // Should either have error event or throw
-      expect(errorOccurred || events.some((e) => e.type === 'error')).toBe(true);
+      // Should have error phase in execState
+      expect(execState.phase.type).toBe('error');
     });
+
+
   });
 });
