@@ -2,7 +2,16 @@
 
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
-YAML configuration file reader with default values and deep merge support.
+A robust configuration management library for loading, merging, and persisting YAML-based settings with deep merge support, default value fallback, and runtime override capabilities.
+
+## Features
+
+- **Deep Merge**: Recursively merges nested objects and arrays element-by-element
+- **Default Value Fallback**: Auto-creates config files from a default YAML template
+- **Runtime Overrides**: Apply temporary overrides (e.g., CLI arguments) with highest priority
+- **Immutable Values**: Returned configuration objects are frozen
+- **Path Support**: Accepts absolute paths, relative paths, and `~`-prefixed home directory paths
+- **Dot-Notation Access**: Read and update nested values via dot-separated key paths
 
 ## Installation
 
@@ -10,12 +19,12 @@ YAML configuration file reader with default values and deep merge support.
 pnpm add @agentskillmania/settings-yaml
 ```
 
-## Usage
+## Quick Start
 
 ```typescript
-import { Settings } from "@agentskillmania/settings-yaml";
+import { Settings } from '@agentskillmania/settings-yaml';
 
-const settings = new Settings("/path/to/config.yaml");
+const settings = new Settings('/path/to/config.yaml');
 
 await settings.initialize({
   defaultYaml: `
@@ -29,52 +38,106 @@ const config = settings.getValues();
 console.log(config.server.port); // 3000
 ```
 
-## API
+## Merge Priority
+
+When initializing, values are merged in the following priority (highest to lowest):
+
+1. `override` object passed to `initialize()`
+2. Existing config file on disk
+3. `defaultYaml` template
+
+## API Reference
 
 ### `constructor(configPath: string)`
 
-Creates a Settings instance. Supports the following path formats:
-- Absolute path: `/path/to/config.yaml`
-- Relative path: `./config.yaml` or `config.yaml`
-- Home directory: `~/.config/app/config.yaml`
+Creates a `Settings` instance. Supported path formats:
+
+- **Absolute path**: `/path/to/config.yaml`
+- **Relative path**: `./config.yaml` or `config.yaml`
+- **Home directory**: `~/.config/app/config.yaml`
 
 ### `async initialize(options?: InitializeOptions<T>): Promise<void>`
 
 Initializes the configuration:
 
-- Config file does not exist + has defaultYaml: Creates file with default values
-- Config file does not exist + no defaultYaml: Throws error
-- Config file exists: Reads and deep merges with defaults
-- Intermediate directories don't exist: Creates them recursively
-- `override` parameter for temporary config overrides (e.g., CLI arguments)
-
-**Merge priority:** override > config file > defaultYaml
+- If the config file does **not exist** and `defaultYaml` is provided: creates the file with defaults
+- If the config file does **not exist** and no `defaultYaml` is provided: throws an error
+- If the config file **exists**: reads and deep-merges it with `defaultYaml`
+- Intermediate directories are created automatically
+- `override` values take the highest priority
 
 ### `getValues(): T`
 
-Returns the configuration values as a frozen object.
+Returns the merged configuration as a deeply frozen object.
+
+### `has(keyPath: string): boolean`
+
+Checks whether a nested key exists using dot notation.
+
+```typescript
+settings.has('server.port'); // true or false
+settings.has('database.host'); // true or false
+```
+
+### `set(keyPath: string, value: unknown): void`
+
+Updates a nested value using dot notation. Modifies the in-memory config only — call `save()` to persist.
+
+```typescript
+settings.set('server.port', 8080);
+settings.set('database.ssl.enabled', true);
+```
+
+### `toObject(): Record<string, unknown>`
+
+Returns a mutable deep copy of the current configuration.
+
+### `async save(): Promise<void>`
+
+Persists the current in-memory configuration back to the YAML file on disk. Parent directories are created if needed.
+
+```typescript
+settings.set('llm.model', 'gpt-4o');
+await settings.save();
+```
 
 ## Examples
 
+### Defaults only
+
 ```typescript
-// Only defaults
 await settings.initialize({
   defaultYaml: `server: { port: 3000 }`,
 });
+```
 
-// Only override (when config file exists)
+### Override existing config
+
+```typescript
 await settings.initialize({
   override: { server: { port: 9000 } },
 });
+```
 
-// Both defaults and override
+### Defaults + override
+
+```typescript
 await settings.initialize({
   defaultYaml: `server: { port: 3000 }`,
   override: { server: { port: 9000 } },
 });
+// Result: { server: { port: 9000 } }
+```
 
-// Neither (read config file only)
+### Read and modify
+
+```typescript
 await settings.initialize();
+
+if (settings.has('debug')) {
+  settings.set('debug', false);
+  await settings.save();
+}
 ```
 
 ## Development
@@ -83,10 +146,10 @@ await settings.initialize();
 # Build
 pnpm build
 
-# Test
+# Run tests
 pnpm test
 
-# Test coverage
+# Run tests with coverage
 pnpm test:coverage
 ```
 

@@ -2,20 +2,22 @@
 
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
-Agent framework with detailed output, step-by-step execution, and state transparency.
+Core ReAct agent framework for development and debugging. Provides a stateless runner, immutable state updates, three-level execution control, streaming support, context compression, skill system, and subagent delegation.
 
 ## Features
 
-- **Stateless Runner**: One runner instance can concurrently execute multiple AgentState instances
-- **Immutable State**: All state updates via Immer, original state never modified
-- **Three-Level Execution Control**: Micro-step (`advance`), meso-step (`step`), macro-step (`run`)
-- **Streaming Support**: Real-time token output and phase observation via `*Stream` methods
-- **Context Compression**: Built-in strategies (truncate, sliding-window, summarize, hybrid)
+- **Stateless Runner**: A single `AgentRunner` can safely execute multiple `AgentState` instances concurrently
+- **Immutable State**: All state updates use Immer — the original state is never modified
+- **Three-Level Execution Control**:
+  - Micro-step: `advance()` / `advanceStream()` — progress one execution phase at a time
+  - Meso-step: `step()` / `stepStream()` — complete one full ReAct cycle
+  - Macro-step: `run()` / `runStream()` — loop until completion or `maxSteps` exhausted
+- **Streaming Support**: Real-time token output, phase transitions, tool calls, and compression events
+- **Context Compression**: Built-in `DefaultContextCompressor` with strategies `truncate`, `sliding-window`, `summarize`, and `hybrid`
 - **Human-in-the-Loop**: Built-in `ask_human` tool and `ConfirmableRegistry`
-- **AbortSignal**: Standard cancellation support throughout the execution chain
-- **Tool System**: Zod-based parameter validation with automatic JSON Schema generation
-- **Skill System**: Load domain-specific instructions from SKILL.md files, auto-discovery from directories
-- **Subagent System**: Delegate tasks to specialized sub-agents with independent state and tools
+- **Tool System**: Zod-based parameter validation with automatic JSON Schema generation via `zodToJsonSchema`
+- **Skill System**: Auto-discover and load domain-specific instructions from `SKILL.md` files; supports nested skill calling
+- **Subagent System**: Delegate tasks to specialized sub-agents with independent configs, tools, and state
 
 ## Installation
 
@@ -25,25 +27,37 @@ pnpm add @agentskillmania/colts
 
 ## Quick Start
 
-```typescript
-import { AgentRunner, createAgentState } from '@agentskillmania/colts';
+### Injection mode (recommended for production)
 
-// Create runner (injection mode)
+```typescript
+import { AgentRunner, createAgentState, ToolRegistry } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/llm-client';
+
+const llmClient = new LLMClient();
+llmClient.registerProvider({ name: 'openai', maxConcurrency: 10 });
+llmClient.registerApiKey({
+  key: process.env.OPENAI_API_KEY!,
+  provider: 'openai',
+  maxConcurrency: 5,
+  models: [{ modelId: 'gpt-4o', maxConcurrency: 2 }],
+});
+
 const runner = new AgentRunner({
-  model: 'gpt-4',
-  llmClient: myLLMClient,
+  model: 'gpt-4o',
+  llmClient,
   systemPrompt: 'You are a helpful assistant.',
 });
 
-// Create initial state
 let state = createAgentState({
   name: 'my-agent',
   instructions: 'You help users with calculations.',
+  tools: [],
 });
 
-// Simple chat
+// Simple chat (single turn)
 const chatResult = await runner.chat(state, 'What is 2+2?');
 console.log(chatResult.response); // "4"
+console.log(chatResult.tokens);   // { input: 15, output: 2 }
 state = chatResult.state;
 
 // Run until completion (auto-loop with tool execution)
@@ -53,69 +67,183 @@ if (result.type === 'success') {
 }
 ```
 
-## Quick Init Mode
+### Quick-init mode (convenient for prototyping)
 
 ```typescript
+import { AgentRunner, createAgentState, calculatorTool } from '@agentskillmania/colts';
+
 const runner = new AgentRunner({
-  model: 'gpt-4',
+  model: 'gpt-4o',
   llm: { apiKey: 'sk-...', provider: 'openai' },
   tools: [calculatorTool],
   maxSteps: 10,
 });
 ```
 
-## Step-by-Step Execution
+## Execution APIs
+
+### Chat
+
+Single-turn conversation without tool execution.
 
 ```typescript
-// One ReAct cycle
-const { state: newState, result } = await runner.step(state);
-if (result.type === 'done') console.log('Answer:', result.answer);
-if (result.type === 'continue') console.log('Tool result:', result.toolResult);
+const result = await runner.chat(state, 'Hello!', { priority: 0 });
+// result: { state, response, tokens, stopReason }
 
-// Phase-by-phase control
-const execState = createExecutionState();
-while (true) {
-  const { state: s, phase, done } = await runner.advance(state, execState);
-  state = s;
-  console.log('Phase:', phase.type);
-  if (done) break;
+for await (const chunk of runner.chatStream(state, 'Hello!')) {
+  if (chunk.type === 'text') process.stdout.write(chunk.delta);
+  if (chunk.type === 'done') console.log('\nTokens:', chunk.tokens);
 }
 ```
 
-## Streaming
+### Run
+
+Auto-loop `step()` until a final answer is reached or `maxSteps` is exhausted.
 
 ```typescript
-// Real-time token output
+const { state: finalState, result } = await runner.run(state, { maxSteps: 15 });
+// result.type: 'success' | 'max_steps' | 'error'
+
 for await (const event of runner.runStream(state)) {
   if (event.type === 'token') process.stdout.write(event.token);
   if (event.type === 'complete') console.log('\nDone:', event.result);
 }
 ```
 
-## Skill System
+### Step
 
-Skills are domain-specific instruction sets that agents can load on demand.
+Execute exactly one ReAct cycle (preparing → calling-llm → parsing → [executing-tool] → completed).
 
 ```typescript
-import { AgentRunner, FilesystemSkillProvider } from '@agentskillmania/colts';
+const { state: newState, result } = await runner.step(state);
+// result.type: 'done' | 'continue' | 'error'
 
-// Auto-discover skills from directories
-const runner = new AgentRunner({
-  model: 'gpt-4',
-  llmClient: myLLMClient,
-  skillDirectories: ['./skills'],
+for await (const event of runner.stepStream(state)) {
+  if (event.type === 'token') process.stdout.write(event.token);
+  if (event.type === 'phase-change') console.log('Phase:', event.to.type);
+}
+```
+
+### Advance
+
+Fine-grained phase-by-phase execution. You manage the `ExecutionState` externally.
+
+```typescript
+import { createExecutionState, isTerminalPhase } from '@agentskillmania/colts';
+
+const execState = createExecutionState();
+while (!isTerminalPhase(execState.phase)) {
+  const { state: newState, phase, done } = await runner.advance(state, execState);
+  state = newState;
+  console.log('Phase:', phase.type);
+  if (phase.type === 'parsed' && phase.action) {
+    console.log('Action:', phase.action);
+  }
+}
+
+// Streaming variant
+for await (const event of runner.advanceStream(state, execState)) {
+  if (event.type === 'token') process.stdout.write(event.token);
+}
+```
+
+## State Management
+
+`AgentState` is pure data — serializable, immutable, and cloneable.
+
+```typescript
+import {
+  createAgentState,
+  addUserMessage,
+  addAssistantMessage,
+  incrementStepCount,
+  createSnapshot,
+  restoreSnapshot,
+  serializeState,
+  deserializeState,
+} from '@agentskillmania/colts';
+
+let state = createAgentState({ name: 'agent', instructions: '...', tools: [] });
+state = addUserMessage(state, 'Hello');
+state = addAssistantMessage(state, 'Hi there!', { type: 'final', visible: true });
+state = incrementStepCount(state);
+
+// Snapshots
+const snapshot = createSnapshot(state);
+const restored = restoreSnapshot(snapshot);
+
+// Serialization
+const json = serializeState(state);
+state = deserializeState(json);
+```
+
+## Tool System
+
+Register tools with Zod schemas. The runner auto-generates JSON Schemas for the LLM.
+
+```typescript
+import { z } from 'zod';
+import { ToolRegistry } from '@agentskillmania/colts';
+
+const registry = new ToolRegistry();
+registry.register({
+  name: 'calculate',
+  description: 'Evaluate a math expression',
+  parameters: z.object({ expression: z.string() }),
+  execute: async ({ expression }) => eval(expression).toString(),
 });
 
-// Or inject a custom skill provider
-const skillProvider = new FilesystemSkillProvider(['./skills', '~/.colts/skills']);
-const runner2 = new AgentRunner({
-  model: 'gpt-4',
-  llmClient: myLLMClient,
-  skillProvider,
+const runner = new AgentRunner({
+  model: 'gpt-4o',
+  llmClient,
+  toolRegistry: registry,
 });
 ```
 
-Skills are discovered from `SKILL.md` files with YAML frontmatter:
+Built-in tools:
+
+- `calculatorTool` — basic math evaluator
+- `createAskHumanTool(handler)` — pause execution to ask a human
+
+## Context Compression
+
+Prevent unbounded context growth with `DefaultContextCompressor`. Messages are **never deleted** — compression only affects what is sent to the LLM.
+
+```typescript
+import { DefaultContextCompressor } from '@agentskillmania/colts';
+
+const runner = new AgentRunner({
+  model: 'gpt-4o',
+  llmClient,
+  compressor: {
+    strategy: 'hybrid',
+    threshold: 50,
+    thresholdType: 'message-count',
+    keepRecent: 10,
+  },
+});
+```
+
+Strategies:
+
+- `truncate` / `sliding-window` — drop old messages
+- `summarize` / `hybrid` — call the LLM to summarize old messages (requires `llmClient`)
+
+## Skill System
+
+Skills are domain-specific instruction sets loaded from `SKILL.md` files.
+
+```typescript
+import { FilesystemSkillProvider } from '@agentskillmania/colts';
+
+const runner = new AgentRunner({
+  model: 'gpt-4o',
+  llmClient,
+  skillDirectories: ['./skills', '~/.agentskillmania/colts/skills'],
+});
+```
+
+`SKILL.md` format:
 
 ```markdown
 ---
@@ -128,86 +256,79 @@ description: Perform comprehensive code reviews
 You are a code review expert...
 ```
 
-The `load_skill` tool is automatically registered when a skill provider is configured.
-
-### Nested Skill Calling
-
-Skills can call other skills and return results back to the parent skill:
-
-1. **Top-level skill** uses `load_skill` to switch to a sub-skill
-2. **Sub-skill** executes its task, then uses `return_skill` to return results
-3. **Parent skill** receives the result and continues execution
-
-The Runner automatically manages the skill stack in `state.context.skillState`:
-
-```typescript
-// After load_skill, state.context.skillState looks like:
-{
-  current: 'code-review',
-  stack: [
-    { skillName: 'top-level', loadedAt: 1234567890 }
-  ],
-  loadedInstructions: '...'
-}
-```
-
-This enables composable workflows such as:
-- `planner` → `load_skill('researcher')` → `return_skill(...)` → planner continues
-- `coding` → `load_skill('testing')` → `return_skill(...)` → coding continues
+When a skill provider is configured, the runner automatically registers:
+- `load_skill` — switch to a different skill
+- `return_skill` — return from a nested skill call
 
 ## Subagent System
 
-Delegate tasks to specialized sub-agents with independent state and tool sets.
+Delegate tasks to independent sub-agents.
 
 ```typescript
-import { AgentRunner } from '@agentskillmania/colts';
 import type { SubAgentConfig } from '@agentskillmania/colts';
 
 const researcher: SubAgentConfig = {
   name: 'researcher',
-  description: 'Information research specialist',
+  description: 'Research specialist',
   config: {
     name: 'researcher',
-    instructions: 'You research topics thoroughly.',
-    tools: [{ name: 'search', description: 'Search the web', parameters: {} }],
-  },
-  maxSteps: 5,
-};
-
-const writer: SubAgentConfig = {
-  name: 'writer',
-  description: 'Content writing specialist',
-  config: {
-    name: 'writer',
-    instructions: 'You write clear, engaging content.',
+    instructions: 'Research topics thoroughly.',
     tools: [],
   },
+  maxSteps: 5,
+  allowDelegation: false,
 };
 
 const runner = new AgentRunner({
-  model: 'gpt-4',
-  llmClient: myLLMClient,
-  subAgents: [researcher, writer],
+  model: 'gpt-4o',
+  llmClient,
+  subAgents: [researcher],
 });
 ```
 
-The `delegate` tool is automatically registered, enabling the main agent to delegate tasks to sub-agents.
+The `delegate` tool is automatically registered, allowing the parent agent to invoke sub-agents.
+
+## Runner Events
+
+`AgentRunner` extends `EventEmitter` and emits the following events:
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `run:start` | `{ state }` | A `run()` / `runStream()` started |
+| `run:end` | `{ state, result }` | Run completed |
+| `step:start` | `{ state, stepNumber }` | A `step()` / `stepStream()` started |
+| `step:end` | `{ state, stepNumber, result }` | Step completed |
+| `advance:phase` | `{ from, to, state }` | Phase changed during `advance()` |
+| `llm:tokens` | `{ tokens: string[] }` | Token batch from LLM |
+| `tool:call` | `{ tool, arguments }` | Tool execution started |
+| `tool:result` | `{ tool, result }` | Tool execution completed |
+| `skill:load` | `{ name }` | Skill loaded |
+| `compress:start` | `{ state }` | Compression started |
+| `compress:end` | `{ state, summary, removedCount }` | Compression completed |
+| `error` | `{ state, error, phase }` | Error occurred |
 
 ## Stream Events
 
-| Event | Description |
-|-------|-------------|
-| `phase-change` | Execution phase transition |
-| `token` | Real-time token output |
-| `tool:start` | Tool execution started |
-| `tool:end` | Tool execution completed |
-| `skill:loading` | Skill instructions being loaded |
-| `skill:loaded` | Skill instructions loaded |
-| `subagent:start` | Sub-agent task started |
-| `subagent:end` | Sub-agent task completed |
-| `compressing` | Context compression started |
-| `compressed` | Context compression completed |
-| `error` | Execution error |
+Events yielded by `*Stream` methods:
+
+| Event | Fields | Description |
+|-------|--------|-------------|
+| `phase-change` | `from`, `to` | Execution phase transition |
+| `token` | `token` | Real-time token output |
+| `tool:start` | `action` | Tool execution started |
+| `tool:end` | `result` | Tool execution completed |
+| `skill:loading` | `name` | Skill instructions loading |
+| `skill:loaded` | `name`, `tokenCount` | Skill instructions loaded |
+| `skill:start` | `name`, `task` | Skill task started |
+| `skill:end` | `name`, `result` | Skill task ended |
+| `subagent:start` | `name`, `task` | Sub-agent task started |
+| `subagent:end` | `name`, `result` | Sub-agent task ended |
+| `compressing` | — | Context compression started |
+| `compressed` | `summary`, `removedCount` | Context compression completed |
+| `error` | `error`, `context` | Execution error |
+| `step:start` | `step`, `state` | Step started (runStream only) |
+| `step:end` | `step`, `result` | Step ended (runStream only) |
+| `complete` | `result` | Run completed (runStream only) |
 
 ## License
 
