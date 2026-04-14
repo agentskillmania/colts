@@ -45,8 +45,8 @@ describe('buildMessages', () => {
       expect(systemMessage?.content).toContain('code-review: Review code');
       expect(systemMessage?.content).toContain('testing: Write tests');
       expect(systemMessage?.content).toContain('load_skill');
-      // Top-level guide should prohibit return_skill (contain "NOT call return_skill")
-      expect(systemMessage?.content).toContain('NOT call return_skill');
+      // Top-level guide should require return_skill
+      expect(systemMessage?.content).toContain('ALWAYS use return_skill when done');
     });
 
     it('should include ACTIVE guide without sub-skill list when no availableSkills', () => {
@@ -62,7 +62,7 @@ describe('buildMessages', () => {
       );
 
       expect(systemMessage?.content).toContain('SKILL MODE: ACTIVE');
-      expect(systemMessage?.content).toContain('respond DIRECTLY to the user');
+      expect(systemMessage?.content).toContain('ALWAYS use return_skill when done');
     });
 
     it('should include SUB-SKILL guide when in sub-skill mode', () => {
