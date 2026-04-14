@@ -21,6 +21,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { LLMClient } from '@agentskillmania/llm-client';
 import {
   AgentRunner,
   createAgentState,
