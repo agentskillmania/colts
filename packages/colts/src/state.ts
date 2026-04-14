@@ -83,47 +83,61 @@ export function addUserMessage(state: AgentState, content: string): AgentState {
 }
 
 /**
- * Add an assistant message to the conversation history
+ * 添加 assistant 消息到会话历史
  *
- * @param state - Current state
- * @param content - Message content
- * @param options - Optional parameters (type, visibility)
- * @returns New state with the assistant message appended
+ * @param state - 当前状态
+ * @param content - 消息内容
+ * @param options - 可选参数（type, toolCalls）
+ * @returns 追加了 assistant 消息的新状态
  */
 export function addAssistantMessage(
   state: AgentState,
   content: string,
   options?: {
     type?: Message['type'];
-    visible?: boolean;
+    toolCalls?: Message['toolCalls'];
   }
 ): AgentState {
   return updateState(state, (draft) => {
-    draft.context.messages.push({
+    const msg: Message = {
       role: 'assistant',
       content,
       type: options?.type ?? 'text',
-      visible: options?.visible ?? true,
       timestamp: Date.now(),
-    });
+    };
+    if (options?.toolCalls && options.toolCalls.length > 0) {
+      msg.toolCalls = options.toolCalls;
+    }
+    draft.context.messages.push(msg);
   });
 }
 
 /**
- * Add a tool result message to the conversation history
+ * 添加工具结果消息到会话历史
  *
- * @param state - Current state
- * @param content - Tool return content
- * @returns New state with the tool message appended
+ * @param state - 当前状态
+ * @param content - 工具返回内容
+ * @param options - 可选参数（toolCallId, toolName）
+ * @returns 追加了工具消息的新状态
  */
-export function addToolMessage(state: AgentState, content: string): AgentState {
+export function addToolMessage(
+  state: AgentState,
+  content: string,
+  options?: {
+    toolCallId?: string;
+    toolName?: string;
+  }
+): AgentState {
   return updateState(state, (draft) => {
-    draft.context.messages.push({
+    const msg: Message = {
       role: 'tool',
       content,
       type: 'tool-result',
       timestamp: Date.now(),
-    });
+    };
+    if (options?.toolCallId) msg.toolCallId = options.toolCallId;
+    if (options?.toolName) msg.toolName = options.toolName;
+    draft.context.messages.push(msg);
   });
 }
 
