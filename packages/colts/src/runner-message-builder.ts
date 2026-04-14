@@ -44,7 +44,7 @@ Rules:
 =============================`.trim();
   }
 
-  // Top-level skill active: can load sub-skills, responds directly when done
+  // 顶层 skill：可加载子技能，完成后必须 return_skill
   if (skillState.availableSkills?.length) {
     const skillLines = skillState.availableSkills
       .map((s) => `- ${s.name}: ${s.description}`)
@@ -64,18 +64,30 @@ Use the \`load_skill\` tool:
 Available sub-skills:
 ${skillLines}
 
+When you COMPLETE your task, you MUST call the \`return_skill\` tool:
+{
+  "result": "Your final answer here (be detailed)",
+  "status": "success"
+}
+
 Rules:
-- When your task is complete, respond DIRECTLY to the user — do NOT call return_skill
+- ALWAYS use return_skill when done — do NOT just respond with text
 - You may call load_skill to delegate sub-tasks to specialized skills
 =============================`.trim();
   }
 
-  // Top-level skill without available sub-skills list
+  // 顶层 skill 无子技能
   return `=== SKILL MODE: ACTIVE ===
 You are currently executing the '${skillState.current}' skill.
 
+When you COMPLETE your task, you MUST call the \`return_skill\` tool:
+{
+  "result": "Your final answer here (be detailed)",
+  "status": "success"
+}
+
 Rules:
-- When your task is complete, respond DIRECTLY to the user — do NOT call return_skill
+- ALWAYS use return_skill when done — do NOT just respond with text
 =============================`.trim();
 }
 
