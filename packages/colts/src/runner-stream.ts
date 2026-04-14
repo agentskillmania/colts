@@ -255,7 +255,7 @@ export async function* executeStepStream(
             // Sub-skill finished, returned to parent
             yield {
               type: 'skill:end',
-              name: sigResult.parentName,
+              name: sigResult.completedSkill,
               result: (phase.result as SkillSignal & { result: string }).result,
               state: currentState,
             };

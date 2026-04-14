@@ -24,7 +24,7 @@ import { updateState } from '../state.js';
  */
 export type SkillSignalResult =
   | { action: 'loaded'; skillName: string; parentPushed: boolean }
-  | { action: 'returned'; parentName: string }
+  | { action: 'returned'; completedSkill: string; parentName: string }
   | { action: 'top-level-return'; skillName: string }
   | { action: 'same-skill'; currentSkill: string }
   | { action: 'cyclic'; currentSkill: string }
@@ -162,6 +162,7 @@ function applyReturnSkill(
   }
 
   // Non-empty stack: pop parent and restore
+  const completedSkill = skillState.current;
   let parentSkillName: string;
   const newState = updateState(state, (draft) => {
     const ss = draft.context.skillState!;
@@ -171,7 +172,7 @@ function applyReturnSkill(
     ss.loadedInstructions = parent.savedInstructions;
   });
 
-  return [newState, { action: 'returned', parentName: parentSkillName! }];
+  return [newState, { action: 'returned', completedSkill, parentName: parentSkillName! }];
 }
 
 /**
