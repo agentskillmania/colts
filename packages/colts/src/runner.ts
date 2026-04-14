@@ -457,7 +457,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // 4. Add assistant message to state
     newState = addAssistantMessage(newState, response.content, {
       type: 'final',
-      visible: true,
     });
 
     // 5. Increment step count
@@ -548,7 +547,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             const finalState = incrementStepCount(
               addAssistantMessage(currentState, accumulatedContent, {
                 type: 'final',
-                visible: true,
               })
             );
 

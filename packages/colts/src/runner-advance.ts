@@ -12,7 +12,12 @@ import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.
 import { toolCallToAction } from './execution.js';
 import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
 import { isSkillSignal, type SkillSignal } from './skills/types.js';
-import { addAssistantMessage, addToolMessage, incrementStepCount } from './state.js';
+import {
+  addAssistantMessage,
+  addToolMessage,
+  addUserMessage,
+  incrementStepCount,
+} from './state.js';
 
 /**
  * Runner context passed to extracted functions instead of `this`
@@ -181,9 +186,14 @@ function advanceToParsed(state: AgentState, execState: ExecutionState): AdvanceR
 function advanceFromParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
   if (execState.action) {
     const thought = execState.thought ?? '';
+    const toolCalls = execState.allActions?.map((a) => ({
+      id: a.id,
+      name: a.tool,
+      arguments: a.arguments,
+    }));
     const newState = addAssistantMessage(state, thought, {
       type: 'thought',
-      visible: false,
+      toolCalls,
     });
     execState.phase = { type: 'executing-tool', action: execState.action };
     return { state: newState, phase: execState.phase, done: false };
@@ -247,7 +257,26 @@ async function advanceToToolResult(
   } else {
     toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
   }
-  const newState = incrementStepCount(addToolMessage(state, toolResultContent));
+  const newState = incrementStepCount(
+    addToolMessage(state, toolResultContent, {
+      toolCallId: action.id,
+      toolName: action.tool,
+    })
+  );
+
+  // skill 切换时注入任务指令 user 消息（始终注入）
+  if (isSkillSignal(result)) {
+    const sig = result as SkillSignal;
+    if (sig.type === 'SWITCH_SKILL') {
+      const task = (sig as SkillSignal & { task?: string }).task;
+      const instruction =
+        task && task !== 'Execute as instructed'
+          ? task
+          : 'Follow the loaded skill instructions to complete the user request.';
+      const withTask = addUserMessage(newState, instruction);
+      return { state: withTask, phase: execState.phase, done: false };
+    }
+  }
 
   return { state: newState, phase: execState.phase, done: false };
 }
@@ -257,9 +286,7 @@ function advanceToCompleted(state: AgentState, execState: ExecutionState): Advan
   execState.phase = { type: 'completed', answer };
 
   if (execState.toolResult === undefined) {
-    const newState = incrementStepCount(
-      addAssistantMessage(state, answer, { type: 'final', visible: true })
-    );
+    const newState = incrementStepCount(addAssistantMessage(state, answer, { type: 'final' }));
     return { state: newState, phase: execState.phase, done: true };
   }
 
