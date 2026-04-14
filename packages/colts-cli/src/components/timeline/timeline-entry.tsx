@@ -204,11 +204,26 @@ function SkillEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'skill' }
       </Box>
     );
   }
+  if (entry.status === 'loaded') {
+    return (
+      <Box marginLeft={1}>
+        <StatusMessage variant="success">
+          Skill loaded: {entry.name} ({entry.tokenCount} chars)
+        </StatusMessage>
+      </Box>
+    );
+  }
+  if (entry.status === 'active') {
+    return (
+      <Box marginLeft={1}>
+        <StatusMessage variant="info">Skill activated: {entry.name}</StatusMessage>
+      </Box>
+    );
+  }
+  // status === 'completed'
   return (
     <Box marginLeft={1}>
-      <StatusMessage variant="success">
-        Skill loaded: {entry.name} ({entry.tokenCount} chars)
-      </StatusMessage>
+      <StatusMessage variant="success">Skill completed: {entry.name}</StatusMessage>
     </Box>
   );
 }
