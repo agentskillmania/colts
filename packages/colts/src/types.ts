@@ -161,7 +161,12 @@ import type { ToolSchema, Tool as LocalTool } from './tools/registry.js';
  * The LLMClient from @agentskillmania/llm-client satisfies this interface.
  */
 export interface ILLMProvider {
-  /** Blocking call */
+  /**
+   * Blocking LLM call
+   *
+   * @param options - Call options including model, messages, and tools
+   * @returns LLM response with content and token usage
+   */
   call(options: {
     model: string;
     messages: LLMMessage[];
@@ -171,7 +176,12 @@ export interface ILLMProvider {
     signal?: AbortSignal;
   }): Promise<LLMResponse>;
 
-  /** Streaming call */
+  /**
+   * Streaming LLM call
+   *
+   * @param options - Call options including model, messages, and tools
+   * @returns Async iterable of stream events
+   */
   stream(options: {
     model: string;
     messages: LLMMessage[];
@@ -189,24 +199,64 @@ export interface ILLMProvider {
  * The ToolRegistry class satisfies this interface.
  */
 export interface IToolRegistry {
-  /** Execute specified tool */
+  /**
+   * Execute specified tool
+   *
+   * @param name - Tool name
+   * @param args - Tool arguments
+   * @param options - Optional execution options including abort signal
+   * @returns Tool execution result
+   */
   execute(name: string, args: unknown, options?: { signal?: AbortSignal }): Promise<unknown>;
-  /** Get JSON schemas of all tools (for LLM) */
+
+  /**
+   * Get JSON schemas of all tools (for LLM)
+   *
+   * @returns Array of tool schemas
+   */
   toToolSchemas(): ToolSchema[];
-  /** Register a new tool */
+
+  /**
+   * Register a new tool
+   *
+   * @param tool - Tool definition
+   */
   register<T extends ZodTypeAny>(tool: {
     name: string;
     description: string;
     parameters: T;
     execute: (args: unknown, options?: { signal?: AbortSignal }) => Promise<unknown>;
   }): void;
-  /** Unregister a tool by name */
+
+  /**
+   * Unregister a tool by name
+   *
+   * @param name - Tool name
+   * @returns true if the tool was removed
+   */
   unregister(name: string): boolean;
-  /** Check if tool exists */
+
+  /**
+   * Check if tool exists
+   *
+   * @param name - Tool name
+   * @returns true if the tool is registered
+   */
   has(name: string): boolean;
-  /** Get all registered tool names */
+
+  /**
+   * Get all registered tool names
+   *
+   * @returns Array of registered tool names
+   */
   getToolNames(): string[];
-  /** Get a tool by name (returns undefined if not found) */
+
+  /**
+   * Get a tool by name
+   *
+   * @param name - Tool name
+   * @returns Tool definition or undefined if not found
+   */
   get(name: string): LocalTool | undefined;
 }
 
@@ -266,9 +316,20 @@ export interface CompressResult {
  * Messages are never modified — only the LLM's view changes.
  */
 export interface IContextCompressor {
-  /** Check if compression is needed for the given state */
+  /**
+   * Check if compression is needed for the given state
+   *
+   * @param state - Current agent state
+   * @returns true if compression should be triggered
+   */
   shouldCompress(state: AgentState): boolean;
-  /** Execute compression, return metadata (does not modify messages) */
+
+  /**
+   * Execute compression, return metadata (does not modify messages)
+   *
+   * @param state - Current agent state
+   * @returns Compression result with summary and anchor index
+   */
   compress(state: AgentState): Promise<CompressResult>;
 }
 

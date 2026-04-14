@@ -1,7 +1,8 @@
 /**
  * @fileoverview Tools module
  *
- * Tool registry and built-in tools for ReAct agents.
+ * Exports the ToolRegistry implementation, built-in tools (calculator),
+ * human-in-the-loop support (ask_human), and the confirmable registry wrapper.
  */
 
 export {

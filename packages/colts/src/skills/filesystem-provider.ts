@@ -92,10 +92,10 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
 }
 
 /**
- * Scan a directory for sub-directories containing SKILL.md
+ * Expand home directory tilde in file paths
  *
- * @param directory - Root directory to scan
- * @returns Array of discovered skill manifests
+ * @param filePath - File path that may contain a leading ~
+ * @returns Expanded absolute path
  */
 function expandHome(filePath: string): string {
   if (filePath.startsWith('~/') || filePath === '~') {
@@ -104,6 +104,12 @@ function expandHome(filePath: string): string {
   return filePath;
 }
 
+/**
+ * Scan a directory for sub-directories containing SKILL.md
+ *
+ * @param directory - Root directory to scan
+ * @returns Array of discovered skill manifests
+ */
 function scanDirectory(directory: string): SkillManifest[] {
   const manifests: SkillManifest[] = [];
   const resolvedDir = resolve(expandHome(directory));

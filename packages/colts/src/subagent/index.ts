@@ -1,7 +1,8 @@
 /**
  * @fileoverview Sub-agent module
  *
- * Sub-agent type definitions and tools.
+ * Exports sub-agent type definitions and the delegate tool factory
+ * for delegating tasks from a parent agent to specialized sub-agents.
  */
 
 export type { SubAgentConfig, DelegateResult, SubAgentStreamEvent } from './types.js';

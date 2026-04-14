@@ -36,6 +36,9 @@ const STATUS_CONFIG: Record<RunStatus, { color: 'gray' | 'yellow' | 'red'; label
  * Right side displays keyboard shortcut hints.
  *
  * @param props - Component props
+ * @param props.model - Model name
+ * @param props.status - Run status
+ * @returns Rendered header bar
  */
 export function HeaderBar({ model, status }: HeaderBarProps) {
   const statusConfig = STATUS_CONFIG[status];

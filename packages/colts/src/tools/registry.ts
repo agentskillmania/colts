@@ -116,6 +116,7 @@ export class ToolRegistry {
    * Check if tool exists
    *
    * @param name - Tool name
+   * @returns true if the tool is registered
    */
   has(name: string): boolean {
     return this.tools.has(name);
@@ -123,6 +124,8 @@ export class ToolRegistry {
 
   /**
    * Get all registered tool names
+   *
+   * @returns Array of registered tool names
    */
   getToolNames(): string[] {
     return Array.from(this.tools.keys());

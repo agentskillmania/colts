@@ -31,6 +31,8 @@ const MODE_CONFIG: Record<ExecutionMode, { color: 'green' | 'yellow' | 'blue'; l
  * Renders the current execution mode label using @inkjs/ui Badge.
  *
  * @param props - Component props
+ * @param props.mode - Current execution mode
+ * @returns Rendered mode badge
  */
 export function ModeBadge({ mode }: ModeBadgeProps) {
   const config = MODE_CONFIG[mode];

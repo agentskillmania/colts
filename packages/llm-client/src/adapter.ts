@@ -1,5 +1,5 @@
 /**
- * Pi-ai adapter with retry logic and token tracking
+ * @fileoverview Pi-ai adapter with retry logic and token tracking.
  *
  * @module
  * @remarks

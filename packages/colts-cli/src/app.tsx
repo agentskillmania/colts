@@ -33,6 +33,12 @@ interface AppProps {
  * Root component
  *
  * Routes to the main TUI or config guidance based on config validity.
+ *
+ * @param props - Component props
+ * @param props.config - Application config
+ * @param props.runner - AgentRunner instance (null when config is invalid)
+ * @param props.initialState - Initial AgentState (may be null)
+ * @returns Rendered app root
  */
 export function App({ config, runner, initialState }: AppProps) {
   return (

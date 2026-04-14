@@ -23,6 +23,10 @@ export interface TimelineEntryProps {
  * Single timeline entry renderer
  *
  * Chooses the component and format based on entry.type.
+ *
+ * @param props - Component props
+ * @param props.entry - Timeline entry data
+ * @returns Rendered timeline entry or null for unknown types
  */
 export function TimelineEntry({ entry }: TimelineEntryProps) {
   switch (entry.type) {
@@ -228,7 +232,12 @@ function ErrorEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'error' }
 // Utilities
 // ──────────────────────────────────────────────────────────────
 
-/** Format tool args as a readable string */
+/**
+ * Format tool args as a readable string
+ *
+ * @param args - Tool arguments object or primitive value
+ * @returns Formatted string representation
+ */
 function formatArgs(args: unknown): string {
   if (typeof args === 'object' && args !== null) {
     const entries = Object.entries(args as Record<string, unknown>);
@@ -237,14 +246,25 @@ function formatArgs(args: unknown): string {
   return truncate(String(args), 80);
 }
 
-/** Format tool result as a readable string */
+/**
+ * Format tool result as a readable string
+ *
+ * @param result - Tool result value
+ * @returns Formatted string representation
+ */
 function formatResult(result: unknown): string {
   if (result === undefined) return '';
   const str = typeof result === 'string' ? result : JSON.stringify(result);
   return truncate(str, 80);
 }
 
-/** Truncate a string */
+/**
+ * Truncate a string to a maximum length
+ *
+ * @param s - Input string
+ * @param max - Maximum allowed length
+ * @returns Truncated string with ellipsis if it exceeds max
+ */
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
   return s.slice(0, max) + '...';

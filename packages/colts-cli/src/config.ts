@@ -17,28 +17,48 @@ const CONFIG_FILE = 'config.yaml';
  * colts.yaml configuration structure
  */
 export interface ColtsConfig extends Record<string, unknown> {
+  /** LLM provider settings */
   llm?: {
+    /** Provider name (e.g., openai) */
     provider?: string;
+    /** API key for the provider */
     apiKey?: string;
+    /** Model identifier */
     model?: string;
+    /** Custom base URL for the provider API */
     baseUrl?: string;
   };
+  /** Agent character settings */
   agent?: {
+    /** Agent name */
     name?: string;
+    /** System instructions */
     instructions?: string;
   };
+  /** Maximum number of execution steps */
   maxSteps?: number;
+  /** Request timeout in milliseconds */
   requestTimeout?: number;
+  /** Skill directory paths */
   skills?: string[];
+  /** SubAgent definitions */
   subAgents?: Array<{
+    /** SubAgent name */
     name: string;
+    /** SubAgent description */
     description: string;
+    /** SubAgent configuration */
     config: {
+      /** SubAgent name */
       name: string;
+      /** SubAgent instructions */
       instructions: string;
+      /** Available tools */
       tools?: Array<{ name: string; description: string; parameters?: Record<string, unknown> }>;
     };
+    /** Maximum steps for this sub-agent */
     maxSteps?: number;
+    /** Whether delegation is allowed */
     allowDelegation?: boolean;
   }>;
 }
@@ -142,6 +162,9 @@ async function findConfigPath(globalDir?: string): Promise<string | null> {
 
 /**
  * Get global config file path
+ *
+ * @param globalDir - Optional override for the global config directory
+ * @returns Absolute path to the global config file
  */
 function getGlobalConfigPath(globalDir?: string): string {
   return path.join(globalDir ?? CONFIG_DIR, CONFIG_FILE);
@@ -149,6 +172,9 @@ function getGlobalConfigPath(globalDir?: string): string {
 
 /**
  * Check if configuration contains required LLM settings
+ *
+ * @param config - Raw configuration object
+ * @returns True if both provider and apiKey are present
  */
 function isValidConfig(config: ColtsConfig): boolean {
   return !!(config.llm?.apiKey && config.llm?.provider);

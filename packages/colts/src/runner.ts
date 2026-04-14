@@ -48,24 +48,33 @@ import { EventEmitter } from 'eventemitter3';
  * Runner event map - flat naming, no nesting
  */
 export interface RunnerEventMap {
-  // Execution lifecycle
+  /** Fired when a run starts */
   'run:start': { state: AgentState };
+  /** Fired when a run ends */
   'run:end': { state: AgentState; result: RunResult };
 
+  /** Fired when a step starts */
   'step:start': { state: AgentState; stepNumber: number };
+  /** Fired when a step ends */
   'step:end': { state: AgentState; stepNumber: number; result: StepResult };
 
+  /** Fired when the execution phase changes */
   'advance:phase': { from: Phase; to: Phase; state: AgentState };
 
-  // Error events
+  /** Fired when an error occurs */
   error: { state: AgentState; error: Error; phase: 'run' | 'step' | 'advance' };
 
-  // Execution details
+  /** Fired when LLM tokens are received */
   'llm:tokens': { tokens: string[] };
+  /** Fired when a tool is called */
   'tool:call': { tool: string; arguments: unknown };
+  /** Fired when a tool returns a result */
   'tool:result': { tool: string; result: unknown };
+  /** Fired when a skill is loaded */
   'skill:load': { name: string };
+  /** Fired when context compression starts */
   'compress:start': { state: AgentState };
+  /** Fired when context compression ends */
   'compress:end': { state: AgentState; summary: string; removedCount: number };
 }
 
@@ -212,6 +221,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     return this._skillProvider;
   }
 
+  /**
+   * Create an AgentRunner instance
+   *
+   * @param options - Runner configuration options
+   * @throws ConfigurationError if LLM configuration is invalid
+   */
   constructor(options: RunnerOptions) {
     super();
     // Validate LLM configuration (mutually exclusive)
@@ -309,6 +324,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
   /**
    * Register a tool at runtime
+   *
+   * @param tool - Tool definition to register
    */
   registerTool(tool: ColtsTool): void {
     this.toolRegistry.register(tool);
@@ -316,6 +333,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
   /**
    * Unregister a tool at runtime
+   *
+   * @param name - Name of the tool to unregister
+   * @returns true if the tool was removed
    */
   unregisterTool(name: string): boolean {
     return this.toolRegistry.unregister(name);
@@ -323,6 +343,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
   /**
    * Get the internal LLM provider (for advanced use)
+   *
+   * @returns The configured LLM provider instance
    */
   getLLMProvider(): ILLMProvider {
     return this.llmProvider;
@@ -330,6 +352,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
   /**
    * Get the internal tool registry (for advanced use)
+   *
+   * @returns The configured tool registry instance
    */
   getToolRegistry(): IToolRegistry {
     return this.toolRegistry;
@@ -337,6 +361,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
   /**
    * Build RunnerContext for extracted functions
+   *
+   * @returns Runner context with current configuration
    * @private
    */
   private get ctx(): RunnerContext {
@@ -539,12 +565,22 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     });
   }
 
+  /**
+   * Get tools formatted for LLM calls
+   *
+   * @param registry - Optional tool registry
+   * @returns Array of tools in pi-ai format
+   * @private
+   */
   private getToolsForLLM(registry?: IToolRegistry): Tool[] | undefined {
     return getToolsForLLM(registry);
   }
 
   /**
    * Initialize skill state in AgentState if not present
+   *
+   * @param state - Agent state to initialize
+   * @private
    */
   private initializeSkillState(state: AgentState): void {
     if (!state.context.skillState && this._skillProvider) {

@@ -10,6 +10,10 @@ import type { AgentState, IContextCompressor } from './types.js';
 
 /**
  * Manually compress state using the given compressor
+ *
+ * @param compressor - Context compressor implementation
+ * @param state - Current agent state
+ * @returns New state with compression metadata applied
  */
 export async function compressState(
   compressor: IContextCompressor,
@@ -23,6 +27,10 @@ export async function compressState(
 
 /**
  * Check if compression is needed and apply it
+ *
+ * @param compressor - Optional context compressor implementation
+ * @param state - Current agent state
+ * @returns New state with compression metadata if compression was triggered, otherwise the original state
  */
 export async function maybeCompress(
   compressor: IContextCompressor | undefined,

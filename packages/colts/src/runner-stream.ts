@@ -28,6 +28,13 @@ import { isSkillSignal, type SkillSignal } from './skills/types.js';
  *
  * Shared between advanceStream() and stepStream() to avoid duplicate logic.
  * Yields token events in real-time and stores the complete response in execState.
+ *
+ * @param ctx - Runner context
+ * @param state - Current agent state
+ * @param execState - Execution state
+ * @param registry - Optional tool registry
+ * @param signal - Optional abort signal
+ * @yields StreamEvent token events
  */
 export async function* streamCallingLLM(
   ctx: RunnerContext,
@@ -88,6 +95,14 @@ export async function* streamCallingLLM(
 
 /**
  * Stream phase advancement (micro-step streaming)
+ *
+ * @param ctx - Runner context
+ * @param state - Current agent state
+ * @param execState - Execution state
+ * @param toolRegistry - Optional tool registry
+ * @param options - Optional advance options
+ * @yields Stream events during phase advancement
+ * @returns Final advance result
  */
 export async function* executeAdvanceStream(
   ctx: RunnerContext,
@@ -125,6 +140,14 @@ export async function* executeAdvanceStream(
 
 /**
  * Stream one ReAct cycle with observation (meso-step streaming)
+ *
+ * @param ctx - Runner context
+ * @param compressor - Optional context compressor
+ * @param state - Current agent state
+ * @param toolRegistry - Optional tool registry
+ * @param options - Optional execution options
+ * @yields Stream events during the step
+ * @returns Final state and step result
  */
 export async function* executeStepStream(
   ctx: RunnerContext,
@@ -294,6 +317,14 @@ import type { RunResult, RunStreamEvent } from './execution.js';
 
 /**
  * Stream run until completion (macro-step streaming)
+ *
+ * @param ctx - Runner context
+ * @param compressor - Optional context compressor
+ * @param state - Current agent state
+ * @param options - Optional run configuration
+ * @param toolRegistry - Optional tool registry
+ * @yields Run stream events across steps
+ * @returns Final state and run result
  */
 export async function* executeRunStream(
   ctx: RunnerContext,

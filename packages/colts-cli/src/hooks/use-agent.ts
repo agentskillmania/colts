@@ -32,6 +32,7 @@ export type ExecutionMode = 'run' | 'step' | 'advance';
  * Parsed command
  */
 export interface ParsedCommand {
+  /** Command type */
   type:
     | 'mode-run'
     | 'mode-step'
@@ -43,8 +44,11 @@ export interface ParsedCommand {
     | 'help'
     | 'skill'
     | 'message';
+  /** Raw input text */
   raw: string;
+  /** Target skill name (for /skill command) */
   skillName?: string;
+  /** Message to send to the skill (for /skill command) */
   skillMessage?: string;
 }
 
@@ -468,6 +472,13 @@ const RENDER_INTERVAL = 50;
  *
  * Uses runStream for a full ReAct loop (including tool calls).
  * Stream starts after manually adding the user message.
+ *
+ * @param runner - AgentRunner instance
+ * @param currentState - Current AgentState
+ * @param userInput - User message text
+ * @param setEntries - Setter for timeline entries
+ * @param setState - Setter for AgentState
+ * @param signal - AbortSignal for cancellation
  */
 async function executeRun(
   runner: AgentRunner,
@@ -785,6 +796,14 @@ async function executeRun(
  * Step mode streaming execution
  *
  * Uses stepStream to execute one ReAct cycle. Pauses after completion, waiting for the user to press Enter to continue.
+ *
+ * @param runner - AgentRunner instance
+ * @param currentState - Current AgentState
+ * @param userInput - User message text
+ * @param setEntries - Setter for timeline entries
+ * @param setState - Setter for AgentState
+ * @param signal - AbortSignal for cancellation
+ * @param pauseFn - Async function that pauses execution until resumed
  */
 async function executeStep(
   runner: AgentRunner,
@@ -1062,6 +1081,14 @@ async function executeStep(
  * Advance mode streaming execution
  *
  * Uses advanceStream to execute one phase advancement. Pauses after each phase change, waiting to continue.
+ *
+ * @param runner - AgentRunner instance
+ * @param currentState - Current AgentState
+ * @param userInput - User message text
+ * @param setEntries - Setter for timeline entries
+ * @param setState - Setter for AgentState
+ * @param signal - AbortSignal for cancellation
+ * @param pauseFn - Async function that pauses execution until resumed
  */
 async function executeAdvance(
   runner: AgentRunner,

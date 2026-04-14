@@ -10,6 +10,8 @@ import type { AgentState, AgentConfig, Message, Snapshot } from './types.js';
 
 /**
  * Generate unique ID
+ *
+ * @returns Unique identifier string
  */
 function generateId(): string {
   return `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -17,6 +19,9 @@ function generateId(): string {
 
 /**
  * Compute checksum (simple implementation, production can use stricter algorithm)
+ *
+ * @param state - Agent state to checksum
+ * @returns Hexadecimal checksum string
  */
 function computeChecksum(state: AgentState): string {
   const data = JSON.stringify(state);
@@ -50,7 +55,7 @@ export function createAgentState(config: AgentConfig): AgentState {
  * Update state using Immer
  *
  * @param state - Current state (not modified)
- * @param recipe - Update function (can modify draft)
+ * @param recipe - Update function that can modify the draft
  * @returns New AgentState (immutable)
  */
 export function updateState(
@@ -61,11 +66,11 @@ export function updateState(
 }
 
 /**
- * Add user message
+ * Add a user message to the conversation history
  *
  * @param state - Current state
  * @param content - Message content
- * @returns New state (with new message)
+ * @returns New state with the user message appended
  */
 export function addUserMessage(state: AgentState, content: string): AgentState {
   return updateState(state, (draft) => {
@@ -78,12 +83,12 @@ export function addUserMessage(state: AgentState, content: string): AgentState {
 }
 
 /**
- * Add assistant message
+ * Add an assistant message to the conversation history
  *
  * @param state - Current state
  * @param content - Message content
  * @param options - Optional parameters (type, visibility)
- * @returns New state (with new message)
+ * @returns New state with the assistant message appended
  */
 export function addAssistantMessage(
   state: AgentState,
@@ -105,11 +110,11 @@ export function addAssistantMessage(
 }
 
 /**
- * Add tool message
+ * Add a tool result message to the conversation history
  *
  * @param state - Current state
  * @param content - Tool return content
- * @returns New state (with new message)
+ * @returns New state with the tool message appended
  */
 export function addToolMessage(state: AgentState, content: string): AgentState {
   return updateState(state, (draft) => {
@@ -123,10 +128,10 @@ export function addToolMessage(state: AgentState, content: string): AgentState {
 }
 
 /**
- * Increment step counter
+ * Increment the step counter
  *
  * @param state - Current state
- * @returns New state (stepCount + 1)
+ * @returns New state with stepCount incremented by one
  */
 export function incrementStepCount(state: AgentState): AgentState {
   return updateState(state, (draft) => {
@@ -135,11 +140,11 @@ export function incrementStepCount(state: AgentState): AgentState {
 }
 
 /**
- * Set last tool result
+ * Set the last tool execution result in context
  *
  * @param state - Current state
  * @param result - Tool execution result
- * @returns New state
+ * @returns New state with lastToolResult set
  */
 export function setLastToolResult(state: AgentState, result: unknown): AgentState {
   return updateState(state, (draft) => {
@@ -178,10 +183,10 @@ export function loadSkill(state: AgentState, skillName: string, instructions: st
 }
 
 /**
- * Create state snapshot
+ * Create a state snapshot for time-travel or persistence
  *
  * @param state - Current state
- * @returns Snapshot object (serializable)
+ * @returns Snapshot object with checksum for integrity verification
  */
 export function createSnapshot(state: AgentState): Snapshot {
   return {
@@ -213,8 +218,8 @@ export function restoreSnapshot(snapshot: Snapshot): AgentState {
 /**
  * Serialize state to JSON
  *
- * @param state - AgentState
- * @returns JSON string
+ * @param state - AgentState to serialize
+ * @returns JSON string representation
  */
 export function serializeState(state: AgentState): string {
   return JSON.stringify(state);
@@ -224,7 +229,7 @@ export function serializeState(state: AgentState): string {
  * Deserialize state from JSON
  *
  * @param json - JSON string
- * @returns AgentState
+ * @returns Parsed AgentState
  */
 export function deserializeState(json: string): AgentState {
   return JSON.parse(json) as AgentState;

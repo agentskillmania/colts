@@ -77,6 +77,10 @@ export interface BuildMessagesOptions {
 
 /**
  * Build messages array for LLM call from current state
+ *
+ * @param state - Current agent state
+ * @param opts - Message building options
+ * @returns Array of messages formatted for pi-ai LLM calls
  */
 export function buildMessages(state: AgentState, opts: BuildMessagesOptions): PiAIMessage[] {
   const messages: PiAIMessage[] = [];
@@ -242,6 +246,9 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
 
 /**
  * Convert ToolRegistry schemas to pi-ai Tool format
+ *
+ * @param registry - Optional tool registry
+ * @returns Array of tools in pi-ai format, or undefined if no registry provided
  */
 export function getToolsForLLM(registry?: IToolRegistry): Tool[] | undefined {
   if (!registry) return undefined;

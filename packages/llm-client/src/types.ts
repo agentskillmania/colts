@@ -1,5 +1,5 @@
 /**
- * Type definitions for @agentskillmania/llm-client
+ * @fileoverview Type definitions for @agentskillmania/llm-client.
  *
  * This module contains all type definitions, interfaces, and enums
  * used throughout the LLM client library.

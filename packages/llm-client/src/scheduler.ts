@@ -1,5 +1,5 @@
 /**
- * Request scheduler with three-level semaphore and priority queue
+ * @fileoverview Request scheduler with three-level semaphore and priority queue.
  *
  * @module
  * @remarks
@@ -212,6 +212,7 @@ export class RequestScheduler extends EventEmitter {
    *
    * @param config - Provider configuration
    * @throws Error if provider with the same name is already registered
+   * @returns Nothing; the provider is registered as a side effect.
    *
    * @remarks
    * Providers must be registered before any API keys can be registered.
@@ -238,6 +239,7 @@ export class RequestScheduler extends EventEmitter {
    *
    * @param config - API key configuration
    * @throws Error if key is already registered or provider doesn't exist
+   * @returns Nothing; the API key is registered as a side effect.
    *
    * @remarks
    * The API key is associated with a previously registered provider.
@@ -501,6 +503,7 @@ export class RequestScheduler extends EventEmitter {
    * @param requestId - Request identifier
    * @param attempt - Retry attempt number (1-indexed)
    * @param error - Error that triggered the retry
+   * @returns Nothing; emits a state event as a side effect.
    *
    * @remarks
    * This method is called by the adapter when a request fails
@@ -561,6 +564,8 @@ export class RequestScheduler extends EventEmitter {
 
   /**
    * Clear all registrations.
+   *
+   * @returns Nothing; clears all registrations as a side effect.
    *
    * @remarks
    * Removes all providers, API keys, and semaphores. The scheduler

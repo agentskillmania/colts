@@ -1,5 +1,8 @@
 /**
  * @fileoverview colts - ReAct Agent Framework for Development and Debugging
+ *
+ * Main entry point exporting types, state operations, tools, runner,
+ * execution control, skills, and sub-agent capabilities.
  */
 
 // Types

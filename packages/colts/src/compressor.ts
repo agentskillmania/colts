@@ -37,6 +37,14 @@ export class DefaultContextCompressor {
   private readonly llmProvider?: ILLMProvider;
   private readonly model?: string;
 
+  /**
+   * Create a default context compressor
+   *
+   * @param config - Compression configuration
+   * @param llmProvider - LLM provider (required for summarize/hybrid strategies)
+   * @param model - Model identifier for LLM calls
+   * @throws Error if summarize or hybrid strategy is used without an LLM provider
+   */
   constructor(config?: CompressionConfig, llmProvider?: ILLMProvider, model?: string) {
     this.threshold = config?.threshold ?? 50;
     this.strategy = (config?.strategy ?? 'sliding-window') as Strategy;
@@ -55,6 +63,9 @@ export class DefaultContextCompressor {
 
   /**
    * Check if compression is needed based on message count threshold
+   *
+   * @param state - Current agent state
+   * @returns true if the message count exceeds the threshold
    */
   shouldCompress(state: AgentState): boolean {
     // Already compressed and still below double threshold — skip
@@ -68,6 +79,9 @@ export class DefaultContextCompressor {
 
   /**
    * Execute compression, returning metadata without modifying messages
+   *
+   * @param state - Current agent state
+   * @returns Compression result with summary and anchor index
    */
   async compress(state: AgentState): Promise<CompressResult> {
     const messages = state.context.messages;

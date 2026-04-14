@@ -136,7 +136,7 @@ function parseArguments(args: unknown): Record<string, unknown> {
 /**
  * Check if a parsed result requires tool execution
  *
- * @param result - Parse result
+ * @param result - Parse result from LLM response
  * @returns true if tool calls need to be executed
  */
 export function requiresToolExecution(result: ParseResult): boolean {
@@ -146,8 +146,8 @@ export function requiresToolExecution(result: ParseResult): boolean {
 /**
  * Format tool calls for display/logging
  *
- * @param toolCalls - Array of tool calls
- * @returns Formatted string
+ * @param toolCalls - Array of tool calls to format
+ * @returns Formatted string representation of the tool calls
  */
 export function formatToolCalls(toolCalls: ToolCall[]): string {
   if (toolCalls.length === 0) {

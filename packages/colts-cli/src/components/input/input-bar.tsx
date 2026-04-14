@@ -34,6 +34,11 @@ interface InputBarProps {
  * When paused (step/advance mode), shows a "Press Enter to continue" prompt.
  *
  * @param props - Component props
+ * @param props.onSubmit - Submit callback invoked when the user presses Enter
+ * @param props.mode - Current execution mode
+ * @param props.isRunning - Whether the agent is currently running
+ * @param props.isPaused - Whether the agent is paused and waiting for Enter to continue
+ * @returns Rendered input bar
  */
 export function InputBar({ onSubmit, mode, isRunning, isPaused }: InputBarProps) {
   const [inputKey, setInputKey] = useState(0);

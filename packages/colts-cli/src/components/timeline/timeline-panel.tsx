@@ -23,7 +23,10 @@ export interface TimelinePanelProps {
  *
  * Filters entries by detailLevel and renders them one by one.
  *
- * @param props - entries and detailLevel
+ * @param props - Component props
+ * @param props.entries - All timeline entries
+ * @param props.detailLevel - Display detail level
+ * @returns Rendered timeline panel or null if no visible entries
  */
 export function TimelinePanel({ entries, detailLevel }: TimelinePanelProps) {
   const visible = filterByDetailLevel(entries, detailLevel);

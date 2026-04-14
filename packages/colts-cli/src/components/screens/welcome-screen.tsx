@@ -20,6 +20,11 @@ interface WelcomeScreenProps {
  * Welcome screen component
  *
  * Displays welcome message, agent name, and model information.
+ *
+ * @param props - Component props
+ * @param props.agentName - Agent name
+ * @param props.model - Current model name
+ * @returns Rendered welcome screen
  */
 export function WelcomeScreen({ agentName, model }: WelcomeScreenProps) {
   return (

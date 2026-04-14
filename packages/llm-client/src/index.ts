@@ -1,4 +1,6 @@
 /**
+ * @fileoverview Package entry point for @agentskillmania/llm-client.
+ *
  * @agentskillmania/llm-client
  *
  * A unified LLM client with multi-provider support, concurrency control,

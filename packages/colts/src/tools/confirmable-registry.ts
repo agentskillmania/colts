@@ -61,6 +61,15 @@ export class ConfirmableRegistry implements IToolRegistry {
     this.options = options;
   }
 
+  /**
+   * Execute a tool with optional human confirmation
+   *
+   * @param name - Tool name
+   * @param args - Tool arguments
+   * @param options - Optional execution options including abort signal
+   * @returns Tool execution result
+   * @throws Error if execution is rejected by human
+   */
   async execute(name: string, args: unknown, options?: { signal?: AbortSignal }): Promise<unknown> {
     if (this.needsConfirm(name)) {
       const approved = await this.options.confirm(name, args as Record<string, unknown>);
@@ -71,30 +80,69 @@ export class ConfirmableRegistry implements IToolRegistry {
     return this.inner.execute(name, args, options);
   }
 
+  /**
+   * Get JSON schemas of all tools (for LLM)
+   *
+   * @returns Array of tool schemas
+   */
   toToolSchemas(): ToolSchema[] {
     return this.inner.toToolSchemas();
   }
 
+  /**
+   * Register a new tool
+   *
+   * @param tool - Tool definition
+   */
   register(tool: Parameters<IToolRegistry['register']>[0]): void {
     return this.inner.register(tool);
   }
 
+  /**
+   * Unregister a tool by name
+   *
+   * @param name - Tool name
+   * @returns true if the tool was removed
+   */
   unregister(name: string): boolean {
     return this.inner.unregister(name);
   }
 
+  /**
+   * Check if tool exists
+   *
+   * @param name - Tool name
+   * @returns true if the tool is registered
+   */
   has(name: string): boolean {
     return this.inner.has(name);
   }
 
+  /**
+   * Get all registered tool names
+   *
+   * @returns Array of registered tool names
+   */
   getToolNames(): string[] {
     return this.inner.getToolNames();
   }
 
+  /**
+   * Get a tool by name
+   *
+   * @param name - Tool name
+   * @returns Tool definition or undefined if not found
+   */
   get(name: string): ReturnType<IToolRegistry['get']> {
     return this.inner.get(name);
   }
 
+  /**
+   * Check if a tool requires confirmation
+   *
+   * @param name - Tool name
+   * @returns true if the tool is in the confirmTools list
+   */
   private needsConfirm(name: string): boolean {
     return this.options.confirmTools.includes(name);
   }

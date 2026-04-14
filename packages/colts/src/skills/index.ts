@@ -1,7 +1,8 @@
 /**
  * @fileoverview Skills module
  *
- * Skill system type definitions and provider implementations.
+ * Exports skill type definitions, the filesystem skill provider,
+ * and built-in tools for loading and returning from skills.
  */
 
 export {

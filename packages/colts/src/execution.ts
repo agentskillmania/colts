@@ -109,6 +109,8 @@ export interface ExecutionState {
 
 /**
  * Create initial execution state
+ *
+ * @returns New execution state starting at the 'idle' phase
  */
 export function createExecutionState(): ExecutionState {
   return {
@@ -118,6 +120,9 @@ export function createExecutionState(): ExecutionState {
 
 /**
  * Convert ToolCall to Action
+ *
+ * @param toolCall - Parsed tool call from LLM response
+ * @returns Action representation for execution control
  */
 export function toolCallToAction(toolCall: ToolCall): Action {
   return {
@@ -129,6 +134,9 @@ export function toolCallToAction(toolCall: ToolCall): Action {
 
 /**
  * Check if phase is terminal (completed or error)
+ *
+ * @param phase - Current execution phase
+ * @returns true if the phase represents a terminal state
  */
 export function isTerminalPhase(phase: Phase): boolean {
   return phase.type === 'completed' || phase.type === 'error';

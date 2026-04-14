@@ -1,7 +1,8 @@
 /**
- * Settings YAML main module
+ * @fileoverview Settings YAML main module.
  *
- * For reading and managing YAML configuration files
+ * Provides the {@link Settings} class for reading and managing YAML configuration files
+ * with support for default values, deep merging, and runtime overrides.
  */
 
 import * as fs from 'node:fs/promises';
@@ -11,18 +12,18 @@ import * as yaml from 'js-yaml';
 import { deepMerge } from './deepMerge.js';
 
 /**
- * Initialization options
+ * Initialization options for the {@link Settings} class.
  */
 export interface InitializeOptions<T extends Record<string, unknown>> {
   /**
-   * Object for overriding config (e.g., command line args)
-   * Highest priority
+   * Optional object for overriding configuration values (e.g., command line arguments).
+   * This takes the highest priority during merging.
    */
   override?: Partial<T>;
 
   /**
-   * Default configuration as YAML string
-   * Lowest priority
+   * Optional default configuration provided as a YAML string.
+   * This takes the lowest priority during merging.
    */
   defaultYaml?: string;
 }
@@ -54,9 +55,9 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   private values: T | null = null;
 
   /**
-   * Create Settings instance
+   * Create a Settings instance.
    *
-   * @param configPath - Absolute path, relative path, or ~-prefixed home directory path to config file
+   * @param configPath - Absolute path, relative path, or ~-prefixed home directory path to the config file.
    */
   constructor(configPath: string) {
     this.configPath = configPath.startsWith('~')
@@ -65,17 +66,19 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   }
 
   /**
-   * Initialize configuration
+   * Initialize configuration.
    *
-   * - If config file doesn't exist and has defaultYaml, create file with defaults
-   * - If config file doesn't exist and no defaultYaml, throw error
-   * - If config file exists, read and deep merge with defaults
-   * - If parent directories don't exist, create them recursively
-   * - Supports override parameter for temporary config overrides (highest priority)
+   * - If the config file doesn't exist and a defaultYaml is provided, the file is created with defaults.
+   * - If the config file doesn't exist and no defaultYaml is provided, an error is thrown.
+   * - If the config file exists, it is read and deep-merged with the defaults.
+   * - If parent directories don't exist, they are created recursively.
+   * - Supports an override parameter for temporary configuration overrides (highest priority).
    *
    * Merge priority: override > config file > defaultYaml
    *
-   * @param options - Initialization options
+   * @param options - Initialization options.
+   * @returns A promise that resolves when initialization is complete.
+   * @throws {Error} When the config file is not found and no defaultYaml is provided.
    */
   async initialize(options?: InitializeOptions<T>): Promise<void> {
     const { override, defaultYaml } = options || {};
@@ -128,10 +131,10 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   }
 
   /**
-   * Get configuration values
+   * Get configuration values.
    *
-   * @returns Frozen configuration object
-   * @throws Error if not initialized
+   * @returns {T} The frozen configuration object.
+   * @throws {Error} If the settings have not been initialized.
    */
   getValues(): T {
     if (this.values === null) {
@@ -141,11 +144,11 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   }
 
   /**
-   * Check if a nested key exists by dot-separated path
+   * Check if a nested key exists by dot-separated path.
    *
-   * @param keyPath - Dot-separated key path (e.g. "llm.provider")
-   * @returns True if the key exists in the config
-   * @throws Error if not initialized
+   * @param keyPath - Dot-separated key path (e.g. "llm.provider").
+   * @returns {boolean} `true` if the key exists in the configuration, otherwise `false`.
+   * @throws {Error} If the settings have not been initialized.
    *
    * @example
    * ```typescript
@@ -171,14 +174,15 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   }
 
   /**
-   * Update a nested configuration value by dot-separated path
+   * Update a nested configuration value by dot-separated path.
    *
    * Modifies the in-memory config. Call {@link save} to persist to disk.
    * The config object remains frozen between operations.
    *
-   * @param keyPath - Dot-separated key path (e.g. "llm.provider")
-   * @param value - New value to set
-   * @throws Error if not initialized
+   * @param keyPath - Dot-separated key path (e.g. "llm.provider").
+   * @param value - New value to set.
+   * @returns {void}
+   * @throws {Error} If the settings have not been initialized.
    *
    * @example
    * ```typescript
@@ -209,12 +213,12 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   }
 
   /**
-   * Return a mutable deep copy of the current configuration
+   * Return a mutable deep copy of the current configuration.
    *
    * Uses deep copy to ensure the returned object is fully isolated from internal state.
    *
-   * @returns A mutable copy of the configuration object
-   * @throws Error if not initialized
+   * @returns {Record<string, unknown>} A mutable copy of the configuration object.
+   * @throws {Error} If the settings have not been initialized.
    */
   toObject(): Record<string, unknown> {
     if (this.values === null) {
@@ -224,12 +228,13 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
   }
 
   /**
-   * Persist current configuration to the YAML file on disk
+   * Persist current configuration to the YAML file on disk.
    *
    * Creates parent directories if they don't exist.
    * The in-memory values remain frozen after save.
    *
-   * @throws Error if not initialized
+   * @returns {Promise<void>} A promise that resolves when the file has been written.
+   * @throws {Error} If the settings have not been initialized.
    *
    * @example
    * ```typescript

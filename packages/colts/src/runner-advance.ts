@@ -33,6 +33,13 @@ export interface RunnerContext {
 
 /**
  * Execute one phase advancement
+ *
+ * @param ctx - Runner context
+ * @param state - Current agent state
+ * @param execState - Execution state tracking current phase
+ * @param toolRegistry - Optional tool registry override
+ * @param options - Optional advance options
+ * @returns Updated state, current phase, and completion status
  */
 export async function executeAdvance(
   ctx: RunnerContext,
@@ -249,6 +256,10 @@ function advanceToCompleted(state: AgentState, execState: ExecutionState): Advan
 
 /**
  * Get RunnerContext-compatible message builder (for use by stream/run modules)
+ *
+ * @param ctx - Runner context
+ * @param state - Current agent state
+ * @returns Array of messages formatted for pi-ai LLM calls
  * @internal
  */
 export function buildMessagesFromCtx(

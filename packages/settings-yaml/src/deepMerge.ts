@@ -1,17 +1,21 @@
 /**
- * Deep merge utility function
+ * @fileoverview Deep merge utility module.
  *
- * For merging configuration objects with nested object support
+ * Provides functions for recursively merging configuration objects with nested object and array support.
  */
 
 /**
- * Recursively merge two arrays element by element
+ * Recursively merge two arrays element by element.
  *
  * Rules:
  * - Same index, both plain objects → recursively deepMerge
  * - Same index, both arrays → recursively deepMergeArrays
  * - Target has element, default doesn't → deep copy target's element
  * - Default has element, target doesn't → deep copy default's element
+ *
+ * @param targetArr - The target array (higher priority).
+ * @param defaultArr - The default array (lower priority).
+ * @returns {unknown[]} A new array containing the deeply merged elements.
  */
 function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[] {
   const maxLen = Math.max(targetArr.length, defaultArr.length);
@@ -57,7 +61,7 @@ function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[]
 }
 
 /**
- * Deep merge objects: prefer target values, fill missing from defaultValue
+ * Deep merge objects: prefer target values, fill missing from defaultValue.
  *
  * All values are deep copied — the result shares no references with inputs.
  *
@@ -67,9 +71,9 @@ function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[]
  * - Target has a value and default doesn't → deep copy target's value
  * - Target doesn't have a key → deep copy default's value
  *
- * @param target - Target object (user config, higher priority)
- * @param defaultValue - Default values object
- * @returns Deep-copied merged object
+ * @param target - Target object (user config, higher priority).
+ * @param defaultValue - Default values object.
+ * @returns {T} Deep-copied merged object.
  *
  * @example
  * ```typescript

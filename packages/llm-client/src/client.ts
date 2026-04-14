@@ -1,5 +1,5 @@
 /**
- * Main LLM Client implementation
+ * @fileoverview Main LLM Client implementation.
  *
  * @module
  */
@@ -144,6 +144,7 @@ export class LLMClient extends EventEmitter {
    *
    * @param config - Provider configuration including name and concurrency limit
    * @throws Error if a provider with the same name is already registered
+   * @returns Nothing; the provider is registered as a side effect.
    *
    * @remarks
    * Providers must be registered before any API keys can be registered for them.
@@ -166,6 +167,7 @@ export class LLMClient extends EventEmitter {
    *
    * @param config - API key configuration including key, provider, and supported models
    * @throws Error if the provider is not registered or key is already registered
+   * @returns Nothing; the API key is registered as a side effect.
    *
    * @remarks
    * The API key is associated with a previously registered provider.
@@ -364,6 +366,8 @@ export class LLMClient extends EventEmitter {
 
   /**
    * Clear all registered providers and API keys.
+   *
+   * @returns Nothing; clears all registrations as a side effect.
    *
    * @remarks
    * This method removes all registrations, effectively resetting the client
