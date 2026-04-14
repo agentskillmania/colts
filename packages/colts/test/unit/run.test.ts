@@ -783,15 +783,15 @@ describe('runStream()', () => {
     const state = createAgentState(defaultConfig);
 
     const events: string[] = [];
-    runner.on('compress:start', () => events.push('compress:start'));
-    runner.on('compress:end', () => events.push('compress:end'));
+    runner.on('compressing', () => events.push('compressing'));
+    runner.on('compressed', () => events.push('compressed'));
 
     for await (const _ of runner.runStream(state, { maxSteps: 1 })) {
       // consume stream
     }
 
-    expect(events).toContain('compress:start');
-    expect(events).toContain('compress:end');
+    expect(events).toContain('compressing');
+    expect(events).toContain('compressed');
   });
 
   it('should emit error event in runStream when error occurs', async () => {
@@ -808,9 +808,9 @@ describe('runStream()', () => {
     });
     const state = createAgentState(defaultConfig);
 
-    const errors: Array<{ phase: string; message: string }> = [];
+    const errors: Array<{ message: string }> = [];
     runner.on('error', (e) => {
-      errors.push({ phase: e.phase, message: e.error.message });
+      errors.push({ message: e.error.message });
     });
 
     let errorThrown = false;

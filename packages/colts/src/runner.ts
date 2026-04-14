@@ -29,6 +29,7 @@ import type {
   RunResult,
   RunStreamEvent,
   Phase,
+  Action,
 } from './execution.js';
 import type { AdvanceOptions } from './execution.js';
 import { createExecutionState, isTerminalPhase } from './execution.js';
@@ -40,42 +41,77 @@ import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './run
 import type { ISkillProvider } from './skills/types.js';
 import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
 import { createLoadSkillTool, createReturnSkillTool } from './skills/index.js';
-import type { SubAgentConfig } from './subagent/types.js';
+import type { SubAgentConfig, DelegateResult } from './subagent/types.js';
 import { createDelegateTool } from './subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
 
 /**
- * Runner event map - flat naming, no nesting
+ * Runner 事件映射 — 与 AsyncGenerator 的 StreamEvent / RunStreamEvent 完全对齐
+ *
+ * 以 yield 事件为 source of truth，EventEmitter 只是 bridge。
+ * run:start / run:end 是 EventEmitter 独有的生命周期事件（yield 体系无对应物）。
  */
 export interface RunnerEventMap {
-  /** Fired when a run starts */
+  // ── 生命周期（run 级，EventEmitter 独有） ──
+  /** run 开始 */
   'run:start': { state: AgentState };
-  /** Fired when a run ends */
+  /** run 结束 */
   'run:end': { state: AgentState; result: RunResult };
 
-  /** Fired when a step starts */
-  'step:start': { state: AgentState; stepNumber: number };
-  /** Fired when a step ends */
-  'step:end': { state: AgentState; stepNumber: number; result: StepResult };
+  // ── 生命周期（step 级，与 RunStreamEvent 对齐） ──
+  /** step 开始 */
+  'step:start': { step: number; state: AgentState };
+  /** step 结束 */
+  'step:end': { step: number; result: StepResult };
+  /** run 完成 */
+  complete: { result: RunResult };
 
-  /** Fired when the execution phase changes */
-  'advance:phase': { from: Phase; to: Phase; state: AgentState };
+  // ── 执行过程（与 StreamEvent 对齐） ──
+  /** 阶段转换 */
+  'phase-change': { from: Phase; to: Phase };
+  /** LLM token 流式输出 */
+  token: { token: string };
+  /** 工具开始执行 */
+  'tool:start': { action: Action };
+  /** 工具执行完成 */
+  'tool:end': { result: unknown };
+  /** 执行错误 */
+  error: { error: Error; context: { toolName?: string; step: number } };
 
-  /** Fired when an error occurs */
-  error: { state: AgentState; error: Error; phase: 'run' | 'step' | 'advance' };
+  // ── 上下文压缩（与 StreamEvent 对齐） ──
+  /** 开始压缩 */
+  compressing: Record<string, never>;
+  /** 压缩完成 */
+  compressed: { summary: string; removedCount: number };
 
-  /** Fired when LLM tokens are received */
-  'llm:tokens': { tokens: string[] };
-  /** Fired when a tool is called */
-  'tool:call': { tool: string; arguments: unknown };
-  /** Fired when a tool returns a result */
-  'tool:result': { tool: string; result: unknown };
-  /** Fired when a skill is loaded */
-  'skill:load': { name: string };
-  /** Fired when context compression starts */
-  'compress:start': { state: AgentState };
-  /** Fired when context compression ends */
-  'compress:end': { state: AgentState; summary: string; removedCount: number };
+  // ── Skill（与 StreamEvent 对齐） ──
+  /** Skill 加载中 */
+  'skill:loading': { name: string };
+  /** Skill 加载完成 */
+  'skill:loaded': { name: string; tokenCount: number };
+  /** Skill 开始执行 */
+  'skill:start': { name: string; task: string };
+  /** Skill 执行完成 */
+  'skill:end': { name: string; result: string };
+
+  // ── SubAgent（与 StreamEvent 对齐） ──
+  /** 子代理开始执行 */
+  'subagent:start': { name: string; task: string };
+  /** 子代理执行完成 */
+  'subagent:end': { name: string; result: DelegateResult };
+
+  // ── LLM 调用（与 StreamEvent 对齐） ──
+  /** LLM 请求发送前 */
+  'llm:request': {
+    messages: Array<{ role: string; content: string }>;
+    tools: string[];
+    skill: { current: string | null; stack: string[] } | null;
+  };
+  /** LLM 响应完成后 */
+  'llm:response': {
+    text: string;
+    toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
+  };
 }
 
 /**
@@ -636,11 +672,22 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     const from = execState.phase;
     try {
       const result = await executeAdvance(this.ctx, state, execState, toolRegistry, options);
-      this.emit('advance:phase', { from, to: result.phase, state: result.state });
+
+      // 根据 phase 类型补发对应的 StreamEvent
+      if (result.phase.type === 'executing-tool') {
+        this.emit('tool:start', { action: result.phase.action });
+      }
+      if (result.phase.type === 'tool-result') {
+        this.emit('tool:end', { result: result.phase.result });
+      }
+      if (result.phase.type === 'error') {
+        this.emit('error', { error: result.phase.error, context: { step: 0 } });
+      }
+      this.emit('phase-change', { from, to: result.phase });
       return result;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { state, error: err, phase: 'advance' });
+      this.emit('error', { error: err, context: { step: 0 } });
       throw error;
     }
   }
@@ -689,15 +736,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         if (done) {
           return value as AdvanceResult;
         }
-        // Emit phase changes from stream events
-        if (value.type === 'phase-change') {
-          this.emit('advance:phase', { from: value.from, to: value.to, state });
-        }
+        // 统一转发：直接用 yield 事件的 type 和 payload
+        this.emit(value.type as keyof RunnerEventMap, value as never);
         yield value;
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { state, error: err, phase: 'advance' });
+      this.emit('error', { error: err, context: { step: 0 } });
       throw error;
     }
   }
@@ -739,7 +784,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     const execState = createExecutionState();
     const stepIdx = stepNumber ?? 0;
 
-    this.emit('step:start', { state, stepNumber: stepIdx });
+    this.emit('step:start', { step: stepIdx, state });
 
     // Loop advance() until a natural stopping point
     let currentState = state;
@@ -757,27 +802,33 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         currentState = await maybeCompress(this.compressor, newState);
 
-        // Emit phase transition
-        this.emit('advance:phase', { from, to: phase, state: currentState });
+        // 根据 phase 类型补发对应的 StreamEvent
+        if (phase.type === 'executing-tool') {
+          this.emit('tool:start', { action: phase.action });
+        }
+        if (phase.type === 'tool-result') {
+          this.emit('tool:end', { result: phase.result });
+        }
+        this.emit('phase-change', { from, to: phase });
 
         // Terminal: completed (direct answer)
         if (done && phase.type === 'completed') {
           const result: StepResult = { type: 'done', answer: phase.answer };
-          this.emit('step:end', { state: currentState, stepNumber: stepIdx, result });
+          this.emit('step:end', { step: stepIdx, result });
           return { state: currentState, result };
         }
 
         // Terminal: error (LLM call failed)
         if (done && phase.type === 'error') {
           const result: StepResult = { type: 'error', error: phase.error };
-          this.emit('step:end', { state: currentState, stepNumber: stepIdx, result });
+          this.emit('step:end', { step: stepIdx, result });
           return { state: currentState, result };
         }
 
         // Non-terminal stopping point: tool-result
         if (phase.type === 'tool-result') {
           const result: StepResult = { type: 'continue', toolResult: phase.result };
-          this.emit('step:end', { state: currentState, stepNumber: stepIdx, result });
+          this.emit('step:end', { step: stepIdx, result });
           return { state: currentState, result };
         }
       }
@@ -786,7 +837,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       throw new Error('Unexpected: step loop exited without reaching terminal phase');
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { state: currentState, error: err, phase: 'step' });
+      this.emit('error', { error: err, context: { step: stepIdx } });
       throw error;
     }
   }
@@ -805,7 +856,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     stepNumber?: number
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
     const stepIdx = stepNumber ?? 0;
-    this.emit('step:start', { state, stepNumber: stepIdx });
+    this.emit('step:start', { step: stepIdx, state });
     try {
       const generator = executeStepStream(this.ctx, this.compressor, state, toolRegistry, options);
 
@@ -813,23 +864,16 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         const { done, value } = await generator.next();
         if (done) {
           const result = value as { state: AgentState; result: StepResult };
-          this.emit('step:end', {
-            state: result.state,
-            stepNumber: stepIdx,
-            result: result.result,
-          });
+          this.emit('step:end', { step: stepIdx, result: result.result });
           return result;
         }
-        // Forward stream events (including phase-change, token, tool events)
-        // and emit phase changes as advance:phase events
-        if (value.type === 'phase-change') {
-          this.emit('advance:phase', { from: value.from, to: value.to, state });
-        }
+        // 统一转发：直接用 yield 事件的 type 和 payload
+        this.emit(value.type as keyof RunnerEventMap, value as never);
         yield value;
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { state, error: err, phase: 'step' });
+      this.emit('error', { error: err, context: { step: stepIdx } });
       throw error;
     }
   }
@@ -888,20 +932,19 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         if (result.type === 'error') {
           const runResult: RunResult = { type: 'error', error: result.error, totalSteps };
-          this.emit('error', { state: currentState, error: result.error, phase: 'step' });
+          this.emit('error', { error: result.error, context: { step: totalSteps - 1 } });
           this.emit('run:end', { state: currentState, result: runResult });
           return { state: currentState, result: runResult };
         }
 
         // Auto-compress between steps
         if (this.compressor && this.compressor.shouldCompress(currentState)) {
-          this.emit('compress:start', { state: currentState });
+          this.emit('compressing', {});
           const prevAnchor = currentState.context.compression?.anchor ?? 0;
           currentState = await maybeCompress(this.compressor, currentState);
           const newAnchor = currentState.context.compression?.anchor ?? 0;
           if (currentState.context.compression) {
-            this.emit('compress:end', {
-              state: currentState,
+            this.emit('compressed', {
               summary: currentState.context.compression.summary,
               removedCount: newAnchor - prevAnchor,
             });
@@ -915,7 +958,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       return { state: currentState, result: runResult };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { state: currentState, error: err, phase: 'run' });
+      this.emit('error', { error: err, context: { step: totalSteps } });
       throw error;
     }
   }
@@ -955,7 +998,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         options?.signal?.throwIfAborted();
 
         // Step start
-        this.emit('step:start', { state: currentState, stepNumber: totalSteps });
+        this.emit('step:start', { step: totalSteps, state: currentState });
         yield { type: 'step:start', step: totalSteps, state: currentState };
 
         // Use stepStream to get real-time tokens and phase events
@@ -974,32 +1017,25 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             stepResult = value;
             break;
           }
-          // Forward phase changes as advance:phase events
-          if (value.type === 'phase-change') {
-            this.emit('advance:phase', { from: value.from, to: value.to, state: currentState });
-          }
+          // 统一转发：直接用 yield 事件的 type 和 payload
+          this.emit(value.type as keyof RunnerEventMap, value as never);
           yield value as RunStreamEvent;
         }
 
         currentState = stepResult.state;
-        this.emit('step:end', {
-          state: currentState,
-          stepNumber: totalSteps,
-          result: stepResult.result,
-        });
+        this.emit('step:end', { step: totalSteps, result: stepResult.result });
         yield { type: 'step:end', step: totalSteps, result: stepResult.result };
         totalSteps++;
 
         // Auto-compress between steps
         if (this.compressor && this.compressor.shouldCompress(currentState)) {
-          this.emit('compress:start', { state: currentState });
+          this.emit('compressing', {});
           yield { type: 'compressing' };
           const prevAnchor = stepResult.state.context.compression?.anchor ?? 0;
           currentState = await maybeCompress(this.compressor, currentState);
           const newAnchor = currentState.context.compression?.anchor ?? 0;
           if (currentState.context.compression) {
-            this.emit('compress:end', {
-              state: currentState,
+            this.emit('compressed', {
               summary: currentState.context.compression.summary,
               removedCount: newAnchor - prevAnchor,
             });
@@ -1029,9 +1065,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             totalSteps,
           };
           this.emit('error', {
-            state: currentState,
             error: stepResult.result.error,
-            phase: 'step',
+            context: { step: totalSteps - 1 },
           });
           this.emit('run:end', { state: currentState, result: runResult });
           yield { type: 'complete', result: runResult };
@@ -1046,7 +1081,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       return { state: currentState, result: runResult };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { state: currentState, error: err, phase: 'run' });
+      this.emit('error', { error: err, context: { step: totalSteps } });
       throw error;
     }
   }

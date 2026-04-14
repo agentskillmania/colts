@@ -12,8 +12,8 @@
  * Acceptance Criteria:
  * 1. Can observe run-level lifecycle events (run:start, run:end)
  * 2. Can observe step-level lifecycle events (step:start, step:end)
- * 3. Can observe advance-level phase transitions (advance:phase)
- * 4. Can observe execution details (tool:call, tool:result, compress:start/end)
+ * 3. Can observe advance-level phase transitions (phase-change)
+ * 4. Can observe execution details (tool:start, tool:end, compressing, compressed)
  * 5. Events are emitted hierarchically (run includes step includes advance)
  * 6. Both streaming and non-streaming modes emit the same EventEmitter events
  * 7. Error events are emitted with context when failures occur
@@ -120,12 +120,10 @@ describe('User Story: Event Observability', () => {
         });
 
         const state = createAgentState(defaultConfig);
-        const events: Array<{ type: string; stepNumber?: number }> = [];
+        const events: Array<{ type: string; step?: number }> = [];
 
-        runner.on('step:start', (e) =>
-          events.push({ type: 'step:start', stepNumber: e.stepNumber })
-        );
-        runner.on('step:end', (e) => events.push({ type: 'step:end', stepNumber: e.stepNumber }));
+        runner.on('step:start', (e) => events.push({ type: 'step:start', step: e.step }));
+        runner.on('step:end', (e) => events.push({ type: 'step:end', step: e.step }));
 
         await runner.step(state);
 
@@ -147,7 +145,7 @@ describe('User Story: Event Observability', () => {
         const state = createAgentState(defaultConfig);
         const stepStarts: number[] = [];
 
-        runner.on('step:start', (e) => stepStarts.push(e.stepNumber));
+        runner.on('step:start', (e) => stepStarts.push(e.step));
 
         await runner.run(state, { maxSteps: 1 });
 
@@ -161,7 +159,7 @@ describe('User Story: Event Observability', () => {
   // Scenario 3: Advance-level events
   describe('Scenario 3: Advance-level Phase Events', () => {
     itif(testConfig.enabled)(
-      'should emit advance:phase during step()',
+      'should emit phase-change during step()',
       async () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
@@ -171,7 +169,7 @@ describe('User Story: Event Observability', () => {
         const state = createAgentState(defaultConfig);
         const phases: Array<{ from: string; to: string }> = [];
 
-        runner.on('advance:phase', (e) => {
+        runner.on('phase-change', (e) => {
           phases.push({ from: e.from.type, to: e.to.type });
         });
 
@@ -185,7 +183,7 @@ describe('User Story: Event Observability', () => {
     );
 
     itif(testConfig.enabled)(
-      'should emit advance:phase during run()',
+      'should emit phase-change during run()',
       async () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
@@ -196,7 +194,7 @@ describe('User Story: Event Observability', () => {
         const state = createAgentState(defaultConfig);
         const phases: string[] = [];
 
-        runner.on('advance:phase', (e) => {
+        runner.on('phase-change', (e) => {
           phases.push(e.to.type);
         });
 
@@ -224,7 +222,7 @@ describe('User Story: Event Observability', () => {
 
         runner.on('run:start', () => events.push('run:start'));
         runner.on('step:start', () => events.push('step:start'));
-        runner.on('advance:phase', () => events.push('advance:phase'));
+        runner.on('phase-change', () => events.push('phase-change'));
         runner.on('step:end', () => events.push('step:end'));
         runner.on('run:end', () => events.push('run:end'));
 
@@ -233,7 +231,7 @@ describe('User Story: Event Observability', () => {
         // All levels should be represented
         expect(events).toContain('run:start');
         expect(events).toContain('step:start');
-        expect(events).toContain('advance:phase');
+        expect(events).toContain('phase-change');
         expect(events).toContain('step:end');
         expect(events).toContain('run:end');
 
@@ -274,8 +272,8 @@ describe('User Story: Event Observability', () => {
         });
 
         const events: string[] = [];
-        runner.on('tool:call', () => events.push('tool:call'));
-        runner.on('tool:result', () => events.push('tool:result'));
+        runner.on('tool:start', () => events.push('tool:start'));
+        runner.on('tool:end', () => events.push('tool:end'));
 
         // Ask a math question that might trigger tool use
         const stateWithMessage = {
@@ -306,10 +304,10 @@ describe('User Story: Event Observability', () => {
         });
 
         const state = createAgentState(defaultConfig);
-        const errors: Array<{ phase: string; message: string }> = [];
+        const errors: Array<{ message: string }> = [];
 
         runner.on('error', (e) => {
-          errors.push({ phase: e.phase, message: e.error.message });
+          errors.push({ message: e.error.message });
         });
 
         // Normal execution should not emit error
