@@ -70,6 +70,21 @@ describe('Step 11: ask_human Tool', () => {
         context: undefined,
       });
     });
+
+    it('should work with empty options object', async () => {
+      const handler = vi.fn().mockResolvedValue({});
+
+      const tool = createAskHumanTool(handler);
+
+      await tool.execute(
+        {
+          questions: [{ id: 'q1', question: 'OK?', type: 'text' }],
+        },
+        {}
+      );
+
+      expect(handler).toHaveBeenCalled();
+    });
   });
 
   describe('Question types', () => {
