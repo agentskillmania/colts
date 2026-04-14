@@ -43,7 +43,13 @@ describe('TimelinePanel', () => {
   it('detail mode additionally shows step-start, step-end, and compress', () => {
     const entries: TimelineEntry[] = [
       { type: 'step-start', id: 'ss1', step: 0, timestamp: 1000 },
-      { type: 'step-end', id: 'se1', step: 0, result: { type: 'done', answer: 'ok' }, timestamp: 1000 },
+      {
+        type: 'step-end',
+        id: 'se1',
+        step: 0,
+        result: { type: 'done', answer: 'ok' },
+        timestamp: 1000,
+      },
       { type: 'compress', id: 'c1', status: 'compressing', timestamp: 1000 },
       { type: 'phase', id: 'p1', from: 'idle', to: 'preparing', timestamp: 1000 },
     ];

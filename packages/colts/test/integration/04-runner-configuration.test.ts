@@ -9,47 +9,26 @@
  * 1. Can inject existing LLMClient and ToolRegistry (production mode)
  * 2. Can use quick initialization with llm config and tools array (prototyping mode)
  * 3. Can mix injection and quick initialization (hybrid mode)
- * 4. ConfigurationError is thrown for invalid configurations
- * 5. Can dynamically register and unregister tools at runtime
- * 6. maxSteps configuration follows the hierarchy: run param > RunnerOptions > default
+ * 4. Can dynamically register and unregister tools at runtime
+ * 5. maxSteps configuration follows the hierarchy: run param > RunnerOptions > default
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { LLMClient } from '@agentskillmania/llm-client';
 import { testConfig, itif } from './config.js';
-import { AgentRunner, ConfigurationError, ToolRegistry, calculatorTool } from '../../src/index.js';
+import { createRealLLMClient } from './helpers.js';
+import { AgentRunner, ToolRegistry, calculatorTool } from '../../src/index.js';
 import { createAgentState } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
 import { z } from 'zod';
 
 describe('User Story: Runner Configuration and Dependency Inversion', () => {
-  let existingClient: LLMClient;
+  let existingClient: ReturnType<typeof createRealLLMClient>;
   let existingRegistry: ToolRegistry;
 
   beforeAll(() => {
-    if (testConfig.enabled) {
-      existingClient = new LLMClient({
-        baseUrl: testConfig.baseUrl,
-      });
-      existingClient.registerProvider({
-        name: testConfig.provider,
-        maxConcurrency: 5,
-      });
-      existingClient.registerApiKey({
-        key: testConfig.apiKey,
-        provider: testConfig.provider,
-        maxConcurrency: 3,
-        models: [
-          {
-            modelId: testConfig.testModel,
-            maxConcurrency: 2,
-          },
-        ],
-      });
-
-      existingRegistry = new ToolRegistry();
-      existingRegistry.register(calculatorTool);
-    }
+    existingClient = createRealLLMClient();
+    existingRegistry = new ToolRegistry();
+    existingRegistry.register(calculatorTool);
   });
 
   const defaultConfig: AgentConfig = {
@@ -197,48 +176,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
     });
   });
 
-  describe('Scenario 4: Configuration Error Handling', () => {
-    it('should throw ConfigurationError when both llmClient and llm are provided', () => {
-      // Create an independent mock LLMClient that does not rely on integration test config
-      const mockClient = new LLMClient({ baseUrl: 'http://localhost:8080' });
-
-      expect(() => {
-        new AgentRunner({
-          model: 'gpt-4',
-          llmClient: mockClient,
-          llm: {
-            apiKey: 'test-key',
-          },
-        });
-      }).toThrow(ConfigurationError);
-
-      expect(() => {
-        new AgentRunner({
-          model: 'gpt-4',
-          llmClient: mockClient,
-          llm: {
-            apiKey: 'test-key',
-          },
-        });
-      }).toThrow('Cannot specify both llmClient and llm');
-    });
-
-    it('should throw ConfigurationError when neither llmClient nor llm is provided', () => {
-      expect(() => {
-        new AgentRunner({
-          model: 'gpt-4',
-        } as any);
-      }).toThrow(ConfigurationError);
-
-      expect(() => {
-        new AgentRunner({
-          model: 'gpt-4',
-        } as any);
-      }).toThrow('Must specify either llmClient or llm');
-    });
-  });
-
-  describe('Scenario 5: Runtime Tool Management', () => {
+  describe('Scenario 4: Runtime Tool Management', () => {
     itif(testConfig.enabled)('should register tools at runtime', async () => {
       const runner = new AgentRunner({
         model: testConfig.testModel,
@@ -290,7 +228,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
     );
   });
 
-  describe('Scenario 6: maxSteps Configuration Hierarchy', () => {
+  describe('Scenario 5: maxSteps Configuration Hierarchy', () => {
     itif(testConfig.enabled)(
       'should use run() parameter maxSteps over RunnerOptions',
       async () => {
@@ -346,7 +284,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
     );
   });
 
-  describe('Scenario 7: Interface Compliance', () => {
+  describe('Scenario 6: Interface Compliance', () => {
     itif(testConfig.enabled)('should expose LLM provider through getLLMProvider()', async () => {
       const runner = new AgentRunner({
         model: testConfig.testModel,

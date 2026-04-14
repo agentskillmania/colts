@@ -18,8 +18,8 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { LLMClient } from '@agentskillmania/llm-client';
-import { testConfig, itif, logProviderInfo } from './config.js';
+import { testConfig, itif } from './config.js';
+import { createRealLLMClient } from './helpers.js';
 import { AgentRunner } from '../../src/runner.js';
 import { createAgentState } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
@@ -32,33 +32,10 @@ import {
 import { z } from 'zod';
 
 describe('User Story: Human-in-the-Loop with Real LLM', () => {
-  let client: LLMClient;
+  let client: ReturnType<typeof createRealLLMClient>;
 
   beforeAll(() => {
-    logProviderInfo();
-
-    if (testConfig.enabled) {
-      client = new LLMClient({
-        baseUrl: testConfig.baseUrl,
-      });
-
-      client.registerProvider({
-        name: testConfig.provider,
-        maxConcurrency: 5,
-      });
-
-      client.registerApiKey({
-        key: testConfig.apiKey,
-        provider: testConfig.provider,
-        maxConcurrency: 3,
-        models: [
-          {
-            modelId: testConfig.testModel,
-            maxConcurrency: 2,
-          },
-        ],
-      });
-    }
+    client = createRealLLMClient();
   });
 
   // ============================================================

@@ -9,32 +9,44 @@ import { TimelineEntry } from '../../../src/components/timeline/timeline-entry.j
 import type { TimelineEntry as TimelineEntryType } from '../../../src/types/timeline.js';
 
 /** Factory: create a user entry */
-function makeUser(overrides?: Partial<Extract<TimelineEntryType, { type: 'user' }>>): TimelineEntryType {
+function makeUser(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'user' }>>
+): TimelineEntryType {
   return { type: 'user', id: 'u1', content: 'Hello', timestamp: 1000, ...overrides };
 }
 
 /** Factory: create an assistant entry */
-function makeAssistant(overrides?: Partial<Extract<TimelineEntryType, { type: 'assistant' }>>): TimelineEntryType {
+function makeAssistant(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'assistant' }>>
+): TimelineEntryType {
   return { type: 'assistant', id: 'a1', content: 'Hi there', timestamp: 1000, ...overrides };
 }
 
 /** Factory: create a tool entry */
-function makeTool(overrides?: Partial<Extract<TimelineEntryType, { type: 'tool' }>>): TimelineEntryType {
+function makeTool(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'tool' }>>
+): TimelineEntryType {
   return { type: 'tool', id: 't1', tool: 'read_file', timestamp: 1000, ...overrides };
 }
 
 /** Factory: create a phase entry */
-function makePhase(overrides?: Partial<Extract<TimelineEntryType, { type: 'phase' }>>): TimelineEntryType {
+function makePhase(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'phase' }>>
+): TimelineEntryType {
   return { type: 'phase', id: 'p1', from: 'idle', to: 'preparing', timestamp: 1000, ...overrides };
 }
 
 /** Factory: create a thought entry */
-function makeThought(overrides?: Partial<Extract<TimelineEntryType, { type: 'thought' }>>): TimelineEntryType {
+function makeThought(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'thought' }>>
+): TimelineEntryType {
   return { type: 'thought', id: 'th1', content: 'need to check', timestamp: 1000, ...overrides };
 }
 
 /** Factory: create a step-start entry */
-function makeStepStart(overrides?: Partial<Extract<TimelineEntryType, { type: 'step-start' }>>): TimelineEntryType {
+function makeStepStart(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'step-start' }>>
+): TimelineEntryType {
   return { type: 'step-start', id: 'ss1', step: 0, timestamp: 1000, ...overrides };
 }
 
@@ -91,12 +103,22 @@ function makeSubagent(
 }
 
 /** Factory: create a system entry */
-function makeSystem(overrides?: Partial<Extract<TimelineEntryType, { type: 'system' }>>): TimelineEntryType {
-  return { type: 'system', id: 'sy1', content: 'Switched to RUN mode', timestamp: 1000, ...overrides };
+function makeSystem(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'system' }>>
+): TimelineEntryType {
+  return {
+    type: 'system',
+    id: 'sy1',
+    content: 'Switched to RUN mode',
+    timestamp: 1000,
+    ...overrides,
+  };
 }
 
 /** Factory: create an error entry */
-function makeError(overrides?: Partial<Extract<TimelineEntryType, { type: 'error' }>>): TimelineEntryType {
+function makeError(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'error' }>>
+): TimelineEntryType {
   return { type: 'error', id: 'e1', message: 'something broke', timestamp: 1000, ...overrides };
 }
 
@@ -119,7 +141,9 @@ describe('TimelineEntry — user', () => {
 
 describe('TimelineEntry — assistant', () => {
   it('renders assistant reply content (non-streaming)', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeAssistant({ content: 'Hello!', isStreaming: false })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeAssistant({ content: 'Hello!', isStreaming: false })} />
+    );
     expect(lastFrame()).toContain('Hello!');
     expect(lastFrame()).toContain('Agent:');
     // non-streaming should not have a cursor
@@ -127,7 +151,9 @@ describe('TimelineEntry — assistant', () => {
   });
 
   it('shows cursor during streaming output', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeAssistant({ content: 'Hello', isStreaming: true })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeAssistant({ content: 'Hello', isStreaming: true })} />
+    );
     expect(lastFrame()).toContain('▌');
   });
 
@@ -143,7 +169,9 @@ describe('TimelineEntry — assistant', () => {
 
 describe('TimelineEntry — tool', () => {
   it('shows tool name and ellipsis while running', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: true })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: true })} />
+    );
     const frame = lastFrame();
     expect(frame).toContain('read_file');
     expect(frame).toContain('...');
@@ -151,7 +179,9 @@ describe('TimelineEntry — tool', () => {
 
   it('shows tool name and result when completed', () => {
     const { lastFrame } = render(
-      <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false, result: 'file content here' })} />
+      <TimelineEntry
+        entry={makeTool({ tool: 'read_file', isRunning: false, result: 'file content here' })}
+      />
     );
     const frame = lastFrame();
     expect(frame).toContain('read_file');
@@ -193,7 +223,9 @@ describe('TimelineEntry — tool', () => {
   it('truncates long results', () => {
     const longResult = 'a'.repeat(200);
     const { lastFrame } = render(
-      <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false, result: longResult })} />
+      <TimelineEntry
+        entry={makeTool({ tool: 'read_file', isRunning: false, result: longResult })}
+      />
     );
     expect(lastFrame()).toContain('...');
   });
@@ -247,7 +279,9 @@ describe('TimelineEntry — tool', () => {
 
 describe('TimelineEntry — phase', () => {
   it('shows phase transition', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makePhase({ from: 'idle', to: 'calling-llm' })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makePhase({ from: 'idle', to: 'calling-llm' })} />
+    );
     expect(lastFrame()).toContain('idle');
     expect(lastFrame()).toContain('calling-llm');
     expect(lastFrame()).toContain('→');
@@ -260,7 +294,9 @@ describe('TimelineEntry — phase', () => {
 
 describe('TimelineEntry — thought', () => {
   it('shows thought content', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeThought({ content: 'need to check file' })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeThought({ content: 'need to check file' })} />
+    );
     expect(lastFrame()).toContain('thought:');
     expect(lastFrame()).toContain('need to check file');
   });
@@ -335,7 +371,9 @@ describe('TimelineEntry — compress', () => {
   });
 
   it('shows removed count for compressed status', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeCompress('compressed', { removedCount: 5 })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeCompress('compressed', { removedCount: 5 })} />
+    );
     expect(lastFrame()).toContain('Compressed');
     expect(lastFrame()).toContain('5 messages removed');
   });
@@ -347,13 +385,17 @@ describe('TimelineEntry — compress', () => {
 
 describe('TimelineEntry — skill', () => {
   it('shows loading status', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeSkill('loading', { name: 'code-review' })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeSkill('loading', { name: 'code-review' })} />
+    );
     expect(lastFrame()).toContain('Loading skill');
     expect(lastFrame()).toContain('code-review');
   });
 
   it('shows loaded status and char count', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeSkill('loaded', { name: 'code-review', tokenCount: 1234 })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeSkill('loaded', { name: 'code-review', tokenCount: 1234 })} />
+    );
     expect(lastFrame()).toContain('Skill loaded');
     expect(lastFrame()).toContain('code-review');
     expect(lastFrame()).toContain('1234 chars');
@@ -375,7 +417,9 @@ describe('TimelineEntry — subagent', () => {
   });
 
   it('shows done for end status', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeSubagent('end', { name: 'researcher' })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeSubagent('end', { name: 'researcher' })} />
+    );
     expect(lastFrame()).toContain('researcher');
     expect(lastFrame()).toContain('Done');
   });
@@ -387,7 +431,9 @@ describe('TimelineEntry — subagent', () => {
 
 describe('TimelineEntry — system', () => {
   it('shows system message content', () => {
-    const { lastFrame } = render(<TimelineEntry entry={makeSystem({ content: 'Switched to RUN mode' })} />);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeSystem({ content: 'Switched to RUN mode' })} />
+    );
     expect(lastFrame()).toContain('Switched to RUN mode');
   });
 });
@@ -427,7 +473,9 @@ describe('TimelineEntry — tool arg truncation', () => {
   it('truncates long results to 80 chars', () => {
     const longResult = 'y'.repeat(200);
     const { lastFrame } = render(
-      <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false, result: longResult })} />
+      <TimelineEntry
+        entry={makeTool({ tool: 'read_file', isRunning: false, result: longResult })}
+      />
     );
     expect(lastFrame()).toContain('...');
   });

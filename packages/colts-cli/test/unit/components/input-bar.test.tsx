@@ -16,7 +16,13 @@ vi.mock('@inkjs/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@inkjs/ui')>();
   return {
     ...actual,
-    TextInput: ({ onSubmit, placeholder }: { onSubmit: (v: string) => void; placeholder?: string }) => {
+    TextInput: ({
+      onSubmit,
+      placeholder,
+    }: {
+      onSubmit: (v: string) => void;
+      placeholder?: string;
+    }) => {
       capturedOnSubmit = onSubmit;
       return React.createElement(Text, null, placeholder ?? '');
     },
@@ -100,41 +106,31 @@ describe('InputBar — handleSubmit (paused state)', () => {
 describe('InputBar — rendering state', () => {
   it('shows input box when idle', () => {
     const onSubmit = vi.fn();
-    const { lastFrame } = render(
-      <InputBar onSubmit={onSubmit} mode="run" isRunning={false} />
-    );
+    const { lastFrame } = render(<InputBar onSubmit={onSubmit} mode="run" isRunning={false} />);
     expect(lastFrame()).toContain('Type your message');
   });
 
   it('shows Spinner while running', () => {
     const onSubmit = vi.fn();
-    const { lastFrame } = render(
-      <InputBar onSubmit={onSubmit} mode="run" isRunning={true} />
-    );
+    const { lastFrame } = render(<InputBar onSubmit={onSubmit} mode="run" isRunning={true} />);
     expect(lastFrame()).toContain('Agent is thinking');
   });
 
   it('shows RUN mode label', () => {
     const onSubmit = vi.fn();
-    const { lastFrame } = render(
-      <InputBar onSubmit={onSubmit} mode="run" isRunning={false} />
-    );
+    const { lastFrame } = render(<InputBar onSubmit={onSubmit} mode="run" isRunning={false} />);
     expect(lastFrame()).toContain('RUN');
   });
 
   it('shows STEP mode label', () => {
     const onSubmit = vi.fn();
-    const { lastFrame } = render(
-      <InputBar onSubmit={onSubmit} mode="step" isRunning={false} />
-    );
+    const { lastFrame } = render(<InputBar onSubmit={onSubmit} mode="step" isRunning={false} />);
     expect(lastFrame()).toContain('STEP');
   });
 
   it('shows ADV mode label', () => {
     const onSubmit = vi.fn();
-    const { lastFrame } = render(
-      <InputBar onSubmit={onSubmit} mode="advance" isRunning={false} />
-    );
+    const { lastFrame } = render(<InputBar onSubmit={onSubmit} mode="advance" isRunning={false} />);
     expect(lastFrame()).toContain('ADV');
   });
 });

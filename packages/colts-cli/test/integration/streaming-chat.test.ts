@@ -21,7 +21,6 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { LLMClient } from '@agentskillmania/llm-client';
 import {
   AgentRunner,
   createAgentState,
@@ -29,7 +28,8 @@ import {
   deserializeState,
 } from '@agentskillmania/colts';
 import type { AgentState, AgentConfig } from '@agentskillmania/colts';
-import { testConfig, itif, logProviderInfo } from './config.js';
+import { testConfig, itif } from './config.js';
+import { createRealLLMClient } from './helpers.js';
 import { saveSession, loadSession, listSessions } from '../../src/session.js';
 
 describe('Integration: Real LLM streaming chat', () => {
@@ -43,29 +43,9 @@ describe('Integration: Real LLM streaming chat', () => {
   };
 
   beforeAll(() => {
-    logProviderInfo();
-    client = new LLMClient({
-      baseUrl: testConfig.baseUrl,
-    });
+    client = createRealLLMClient();
 
     if (testConfig.enabled) {
-      client.registerProvider({
-        name: testConfig.provider,
-        maxConcurrency: 5,
-      });
-
-      client.registerApiKey({
-        key: testConfig.apiKey,
-        provider: testConfig.provider,
-        maxConcurrency: 3,
-        models: [
-          {
-            modelId: testConfig.testModel,
-            maxConcurrency: 2,
-          },
-        ],
-      });
-
       runner = new AgentRunner({
         model: testConfig.testModel,
         llmClient: client,
@@ -349,11 +329,4 @@ describe('Integration: Real LLM streaming chat', () => {
       30000
     );
   });
-
-  // Message when integration tests are disabled
-  if (!testConfig.enabled) {
-    it('Integration tests are disabled (set ENABLE_INTEGRATION_TESTS=true to enable)', () => {
-      expect(true).toBe(true);
-    });
-  }
 });

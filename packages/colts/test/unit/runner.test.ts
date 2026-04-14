@@ -48,6 +48,44 @@ describe('AgentRunner', () => {
 
       expect(runner).toBeDefined();
     });
+
+    it('should throw ConfigurationError when both llmClient and llm are provided', () => {
+      const client = createMockClient();
+
+      expect(() => {
+        new AgentRunner({
+          model: 'gpt-4',
+          llmClient: client,
+          llm: {
+            apiKey: 'test-key',
+          },
+        });
+      }).toThrow();
+
+      expect(() => {
+        new AgentRunner({
+          model: 'gpt-4',
+          llmClient: client,
+          llm: {
+            apiKey: 'test-key',
+          },
+        });
+      }).toThrow('Cannot specify both llmClient and llm');
+    });
+
+    it('should throw ConfigurationError when neither llmClient nor llm is provided', () => {
+      expect(() => {
+        new AgentRunner({
+          model: 'gpt-4',
+        } as any);
+      }).toThrow();
+
+      expect(() => {
+        new AgentRunner({
+          model: 'gpt-4',
+        } as any);
+      }).toThrow('Must specify either llmClient or llm');
+    });
   });
 
   describe('chat', () => {

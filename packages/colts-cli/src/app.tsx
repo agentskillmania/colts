@@ -27,6 +27,8 @@ interface AppProps {
   runner: AgentRunner | null;
   /** Initial AgentState (may be null) */
   initialState?: AgentState | null;
+  /** Optional custom session base directory (for test isolation) */
+  sessionBaseDir?: string;
 }
 
 /**
@@ -40,11 +42,16 @@ interface AppProps {
  * @param props.initialState - Initial AgentState (may be null)
  * @returns Rendered app root
  */
-export function App({ config, runner, initialState }: AppProps) {
+export function App({ config, runner, initialState, sessionBaseDir }: AppProps) {
   return (
     <ThemeProvider theme={coltsTheme}>
       {config.hasValidConfig && runner ? (
-        <MainTUI config={config} runner={runner} initialState={initialState ?? null} />
+        <MainTUI
+          config={config}
+          runner={runner}
+          initialState={initialState ?? null}
+          sessionBaseDir={sessionBaseDir}
+        />
       ) : (
         <ConfigPrompt configPath={config.configPath} />
       )}
@@ -57,11 +64,21 @@ export function App({ config, runner, initialState }: AppProps) {
  *
  * Single-canvas layout: HeaderBar + TimelinePanel + InputBar.
  */
-function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: AgentRunner; initialState: AgentState | null }) {
+function MainTUI({
+  config,
+  runner,
+  initialState,
+  sessionBaseDir,
+}: {
+  config: AppConfig;
+  runner: AgentRunner;
+  initialState: AgentState | null;
+  sessionBaseDir?: string;
+}) {
   const { exit } = useApp();
 
   // Session persistence
-  const { save, restoreLatest, setSessionId } = useSession();
+  const { save, restoreLatest, setSessionId } = useSession(sessionBaseDir);
   const lastSavedRef = useRef<AgentState | null>(null);
 
   // Agent interaction
@@ -160,7 +177,11 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
         )}
       </Box>
       <InputBar onSubmit={handleSubmit} mode={mode} isRunning={isRunning} isPaused={isPaused} />
-      <HeaderBar model={model} status={isRunning ? 'running' : runStatus} skillState={state?.context?.skillState} />
+      <HeaderBar
+        model={model}
+        status={isRunning ? 'running' : runStatus}
+        skillState={state?.context?.skillState}
+      />
     </Box>
   );
 }
@@ -185,19 +206,13 @@ function ConfigPrompt({ configPath }: { configPath?: string }) {
         AI Key Configuration Required
       </Text>
       <Box marginTop={1}>
-        <Text>
-          Please configure your LLM provider and API key.
-        </Text>
+        <Text>Please configure your LLM provider and API key.</Text>
       </Box>
       <Box marginTop={1}>
-        <Text color={theme.dim}>
-          Config file: {configPath ?? 'N/A'}
-        </Text>
+        <Text color={theme.dim}>Config file: {configPath ?? 'N/A'}</Text>
       </Box>
       <Box marginTop={1}>
-        <Text color={theme.dim}>
-          Example:
-        </Text>
+        <Text color={theme.dim}>Example:</Text>
       </Box>
       <Box marginLeft={2}>
         <Text color={theme.dim}>

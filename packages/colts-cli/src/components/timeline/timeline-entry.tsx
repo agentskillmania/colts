@@ -69,7 +69,9 @@ export function TimelineEntry({ entry }: TimelineEntryProps) {
 function UserEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'user' }> }) {
   return (
     <Box>
-      <Text color={theme.user} bold>You: </Text>
+      <Text color={theme.user} bold>
+        You:{' '}
+      </Text>
       <Text>{entry.content}</Text>
     </Box>
   );
@@ -80,8 +82,13 @@ function AssistantEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'assi
   const cursor = entry.isStreaming ? '▌' : '';
   return (
     <Box>
-      <Text color={theme.assistant} bold>Agent: </Text>
-      <Text>{entry.content}{cursor}</Text>
+      <Text color={theme.assistant} bold>
+        Agent:{' '}
+      </Text>
+      <Text>
+        {entry.content}
+        {cursor}
+      </Text>
     </Box>
   );
 }
@@ -91,7 +98,7 @@ function ToolEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'tool' }> 
   if (entry.isRunning) {
     return (
       <Box marginLeft={2}>
-        <Text color={theme.tool}>  ⚙ {entry.tool}...</Text>
+        <Text color={theme.tool}> ⚙ {entry.tool}...</Text>
       </Box>
     );
   }
@@ -99,7 +106,7 @@ function ToolEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'tool' }> 
   const resultSummary = formatResult(entry.result);
   return (
     <Box marginLeft={2} flexDirection="column">
-      <Text color={theme.tool}>  ⚙ {entry.tool}</Text>
+      <Text color={theme.tool}> ⚙ {entry.tool}</Text>
       {entry.args !== undefined && (
         <Box marginLeft={4}>
           <Text color={theme.dim}>{formatArgs(entry.args)}</Text>
@@ -120,7 +127,9 @@ function ToolEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'tool' }> 
 function PhaseEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'phase' }> }) {
   return (
     <Box marginLeft={1}>
-      <StatusMessage variant="info">{entry.from} → {entry.to}</StatusMessage>
+      <StatusMessage variant="info">
+        {entry.from} → {entry.to}
+      </StatusMessage>
     </Box>
   );
 }
@@ -149,7 +158,9 @@ function StepEndEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'step-e
   const label = entry.result.type === 'done' ? 'done (final)' : 'done (continue)';
   return (
     <Box marginLeft={1}>
-      <StatusMessage variant={variant}>Step {entry.step} {label}</StatusMessage>
+      <StatusMessage variant={variant}>
+        Step {entry.step} {label}
+      </StatusMessage>
     </Box>
   );
 }
@@ -177,7 +188,9 @@ function CompressEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'compr
   }
   return (
     <Box marginLeft={1}>
-      <StatusMessage variant="success">Compressed: {entry.removedCount} messages removed</StatusMessage>
+      <StatusMessage variant="success">
+        Compressed: {entry.removedCount} messages removed
+      </StatusMessage>
     </Box>
   );
 }
@@ -193,7 +206,9 @@ function SkillEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'skill' }
   }
   return (
     <Box marginLeft={1}>
-      <StatusMessage variant="success">Skill loaded: {entry.name} ({entry.tokenCount} chars)</StatusMessage>
+      <StatusMessage variant="success">
+        Skill loaded: {entry.name} ({entry.tokenCount} chars)
+      </StatusMessage>
     </Box>
   );
 }
@@ -203,7 +218,9 @@ function SubagentEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'subag
   if (entry.status === 'start') {
     return (
       <Box marginLeft={1}>
-        <StatusMessage variant="info">[{entry.name}] Starting: {entry.task}</StatusMessage>
+        <StatusMessage variant="info">
+          [{entry.name}] Starting: {entry.task}
+        </StatusMessage>
       </Box>
     );
   }

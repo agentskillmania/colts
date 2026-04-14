@@ -85,9 +85,7 @@ export function HeaderBar({ model, status, skillState }: HeaderBarProps) {
         )}
       </Box>
       <Box>
-        <Text color={theme.dim}>
-          Ctrl+C: {status === 'running' ? 'interrupt' : 'exit'}
-        </Text>
+        <Text color={theme.dim}>Ctrl+C: {status === 'running' ? 'interrupt' : 'exit'}</Text>
       </Box>
     </Box>
   );

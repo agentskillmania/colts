@@ -17,39 +17,17 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { LLMClient } from '@agentskillmania/llm-client';
-import { testConfig, itif, logProviderInfo } from './config.js';
+import { testConfig, itif } from './config.js';
+import { createRealLLMClient } from './helpers.js';
 import { AgentRunner } from '../../src/runner.js';
 import { createAgentState } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
 
 describe('Integration: Basic LLM Chat', () => {
-  let client: LLMClient;
+  let client: ReturnType<typeof createRealLLMClient>;
 
   beforeAll(() => {
-    logProviderInfo();
-    client = new LLMClient({
-      baseUrl: testConfig.baseUrl,
-    });
-
-    if (testConfig.enabled) {
-      client.registerProvider({
-        name: testConfig.provider,
-        maxConcurrency: 5,
-      });
-
-      client.registerApiKey({
-        key: testConfig.apiKey,
-        provider: testConfig.provider,
-        maxConcurrency: 3,
-        models: [
-          {
-            modelId: testConfig.testModel,
-            maxConcurrency: 2,
-          },
-        ],
-      });
-    }
+    client = createRealLLMClient();
   });
 
   const defaultConfig: AgentConfig = {
@@ -311,12 +289,4 @@ describe('Integration: Basic LLM Chat', () => {
       30000
     );
   });
-
-  // Info about skipped tests
-  if (!testConfig.enabled) {
-    it('Integration tests are disabled', () => {
-      console.log('Integration tests skipped. Set ENABLE_INTEGRATION_TESTS=true to run.');
-      expect(true).toBe(true);
-    });
-  }
 });
