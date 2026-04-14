@@ -18,6 +18,7 @@ import {
   loadSkill,
 } from '@agentskillmania/colts';
 import type { TimelineEntry, DetailLevel } from '../types/timeline.js';
+import { TraceWriter } from '../trace-writer.js';
 
 /**
  * Execution mode
@@ -490,6 +491,9 @@ async function executeRun(
 ): Promise<void> {
   const stateWithMsg = addUserMessage(currentState, userInput);
 
+  // 创建追踪写入器，记录执行过程
+  const tracer = new TraceWriter(stateWithMsg.id);
+
   // Create initial assistant entry
   let assistantId = uid();
   let accumulatedContent = '';
@@ -520,6 +524,9 @@ async function executeRun(
 
     while (!iterResult.done) {
       const event = iterResult.value;
+
+      // 追踪记录执行事件
+      tracer.consume(event);
 
       switch (event.type) {
         // Token streaming output (throttled)
@@ -789,6 +796,8 @@ async function executeRun(
           : e
       )
     );
+  } finally {
+    await tracer.flush();
   }
 }
 
@@ -822,6 +831,9 @@ async function executeStep(
     runningState = addUserMessage(runningState, userInput);
   }
 
+  // 创建追踪写入器
+  const tracer = new TraceWriter(runningState.id);
+
   while (continueLoop) {
     if (signal.aborted) return;
 
@@ -853,6 +865,9 @@ async function executeStep(
 
       while (!iterResult.done) {
         const event = iterResult.value;
+
+        // 追踪记录执行事件
+        tracer.consume(event);
 
         switch (event.type) {
           case 'token': {
@@ -1072,9 +1087,10 @@ async function executeStep(
         )
       );
       continueLoop = false;
-      return;
     }
   }
+
+  await tracer.flush();
 }
 
 /**
@@ -1106,6 +1122,9 @@ async function executeAdvance(
     effectiveState = addUserMessage(effectiveState, userInput);
   }
 
+  // 创建追踪写入器
+  const tracer = new TraceWriter(effectiveState.id);
+
   let assistantId = uid();
   let accumulatedContent = '';
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1134,6 +1153,9 @@ async function executeAdvance(
 
     while (!iterResult.done) {
       const event = iterResult.value;
+
+      // 追踪记录执行事件
+      tracer.consume(event);
 
       switch (event.type) {
         case 'token': {
@@ -1329,5 +1351,7 @@ async function executeAdvance(
           : e
       )
     );
+  } finally {
+    await tracer.flush();
   }
 }

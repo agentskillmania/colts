@@ -60,7 +60,18 @@ export type StreamEvent =
   | { type: 'skill:start'; name: string; task: string }
   | { type: 'skill:end'; name: string; result: string }
   | { type: 'subagent:start'; name: string; task: string }
-  | { type: 'subagent:end'; name: string; result: DelegateResult };
+  | { type: 'subagent:end'; name: string; result: DelegateResult }
+  | {
+      type: 'llm:request';
+      messages: Array<{ role: string; content: string }>;
+      tools: string[];
+      skill: { current: string | null; stack: string[] } | null;
+    }
+  | {
+      type: 'llm:response';
+      text: string;
+      toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
+    };
 
 /**
  * Options for advance execution

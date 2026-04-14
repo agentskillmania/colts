@@ -152,7 +152,6 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
 
   return (
     <Box flexDirection="column" height="100%">
-      <HeaderBar model={model} status={isRunning ? 'running' : runStatus} />
       <Box flexGrow={1} flexDirection="column">
         {hasEntries ? (
           <TimelinePanel entries={entries} detailLevel={detailLevel} />
@@ -161,6 +160,7 @@ function MainTUI({ config, runner, initialState }: { config: AppConfig; runner: 
         )}
       </Box>
       <InputBar onSubmit={handleSubmit} mode={mode} isRunning={isRunning} isPaused={isPaused} />
+      <HeaderBar model={model} status={isRunning ? 'running' : runStatus} skillState={state?.context?.skillState} />
     </Box>
   );
 }
