@@ -18,7 +18,7 @@ import type {
 } from './types.js';
 import { ConfigurationError } from './types.js';
 import { DefaultContextCompressor } from './compressor.js';
-import { addUserMessage, addAssistantMessage, incrementStepCount } from './state.js';
+import { addUserMessage, addAssistantMessage, incrementStepCount, updateState } from './state.js';
 import { ToolRegistry } from './tools/registry.js';
 import type { Tool as ColtsTool } from './tools/registry.js';
 import type {
@@ -923,6 +923,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         totalSteps++;
 
         if (result.type === 'done') {
+          // 防御性清理：顶层 skill 直接回复（未调用 return_skill）时清空 skillState
+          currentState = this.cleanupStaleSkillState(currentState);
           const runResult: RunResult = { type: 'success', answer: result.answer, totalSteps };
           this.emit('run:end', { state: currentState, result: runResult });
           return { state: currentState, result: runResult };
@@ -1046,6 +1048,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         }
 
         if (stepResult.result.type === 'done') {
+          // 防御性清理：顶层 skill 直接回复（未调用 return_skill）时清空 skillState
+          currentState = this.cleanupStaleSkillState(currentState);
           const runResult: RunResult = {
             type: 'success',
             answer: stepResult.result.answer,
@@ -1103,5 +1107,23 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       throw new Error('No compressor configured. Pass compressor in RunnerOptions.');
     }
     return compressState(this.compressor, state);
+  }
+
+  /**
+   * 防御性清理：当 run 成功结束时，如果顶层 skill 仍然活跃（未调用 return_skill），
+   * 自动清空 skillState，防止面包屑残留。
+   *
+   * @param state - 当前 AgentState
+   * @returns 清理后的 AgentState（如果需要清理）
+   */
+  private cleanupStaleSkillState(state: AgentState): AgentState {
+    const ss = state.context.skillState;
+    if (!ss || !ss.current) return state;
+    // 只清理顶层 skill（栈为空），嵌套 skill 的清理由 return_skill 负责
+    if (ss.stack.length > 0) return state;
+    return updateState(state, (draft) => {
+      draft.context.skillState!.current = null;
+      draft.context.skillState!.loadedInstructions = undefined;
+    });
   }
 }
