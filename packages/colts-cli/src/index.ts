@@ -26,7 +26,6 @@ async function main() {
         provider: config.llm.provider,
         baseUrl: config.llm.baseUrl,
       },
-      systemPrompt: config.agent?.instructions,
       maxSteps: config.maxSteps,
       requestTimeout: config.requestTimeout,
       skillDirectories: config.skills,

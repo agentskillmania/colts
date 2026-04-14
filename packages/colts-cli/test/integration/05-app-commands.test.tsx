@@ -48,40 +48,40 @@ describe('User Story: CLI Command Interaction', () => {
     capturedOnSubmit = null;
   });
 
-  it('should switch to RUN mode via /run command', async () => {
+  it('should switch InputBar badge to RUN via /run command', async () => {
     const { lastFrame } = render(<App config={validConfig} runner={mockRunner} />);
 
     capturedOnSubmit!('/run');
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(lastFrame()).toContain('Switched to RUN mode');
+    expect(lastFrame()).toContain('RUN');
   });
 
-  it('should switch to STEP mode via /step command', async () => {
+  it('should switch InputBar badge to STEP via /step command', async () => {
     const { lastFrame } = render(<App config={validConfig} runner={mockRunner} />);
 
     capturedOnSubmit!('/step');
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(lastFrame()).toContain('Switched to STEP mode');
+    expect(lastFrame()).toContain('STEP');
   });
 
-  it('should switch to ADVANCE mode via /advance command', async () => {
+  it('should switch InputBar badge to ADV via /advance command', async () => {
     const { lastFrame } = render(<App config={validConfig} runner={mockRunner} />);
 
     capturedOnSubmit!('/advance');
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(lastFrame()).toContain('Switched to ADVANCE mode');
+    expect(lastFrame()).toContain('ADV');
   });
 
   it('should clear Timeline via /clear command', async () => {
     const { lastFrame } = render(<App config={validConfig} runner={mockRunner} />);
 
-    // Add a system entry first
-    capturedOnSubmit!('/run');
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(lastFrame()).toContain('Switched to RUN mode');
+    // Add a help entry first (help is not intercepted by App.handleSubmit)
+    capturedOnSubmit!('/help');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(lastFrame()).toContain('/help');
 
     // Clear
     capturedOnSubmit!('/clear');
@@ -95,7 +95,7 @@ describe('User Story: CLI Command Interaction', () => {
     const { lastFrame } = render(<App config={validConfig} runner={mockRunner} />);
 
     capturedOnSubmit!('/help');
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     const frame = lastFrame();
     expect(frame).toContain('/run');

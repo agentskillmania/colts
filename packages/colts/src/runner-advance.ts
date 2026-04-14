@@ -149,6 +149,10 @@ async function advanceToLLMResponse(
     const toolCall = response.toolCalls[0];
     execState.action = toolCallToAction(toolCall);
     execState.allActions = response.toolCalls.map(toolCallToAction);
+  } else {
+    // 新响应没有 toolCalls，清除上一次残留的 action，防止重用过期工具调用
+    execState.action = undefined;
+    execState.allActions = undefined;
   }
 
   execState.phase = { type: 'llm-response', response: responseText };

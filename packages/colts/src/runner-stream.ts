@@ -118,6 +118,10 @@ export async function* streamCallingLLM(
       tool: tc.name,
       arguments: tc.arguments,
     }));
+  } else {
+    // 新响应没有 toolCalls，清除上一次残留的 action，防止重用过期工具调用
+    execState.action = undefined;
+    execState.allActions = undefined;
   }
   execState.phase = { type: 'llm-response', response: responseContent };
 }
