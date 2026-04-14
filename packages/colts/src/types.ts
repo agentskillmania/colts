@@ -18,18 +18,24 @@ export type MessageType = 'text' | 'thought' | 'action' | 'tool-result' | 'final
  * Conversation message
  */
 export interface Message {
-  /** Role */
+  /** 角色 */
   role: MessageRole;
-  /** Content */
+  /** 消息内容 */
   content: string;
-  /** Message type */
+  /** 消息类型 */
   type?: MessageType;
-  /** Whether visible externally (thought defaults to false) */
-  visible?: boolean;
-  /** Timestamp */
+  /** 时间戳 */
   timestamp?: number;
-  /** Tool call ID (only used when role='tool') */
+  /** 工具调用 ID（role='tool' 时关联到 assistant 的 toolCall） */
   toolCallId?: string;
+  /** 工具名称（role='tool' 时标识来源工具） */
+  toolName?: string;
+  /** 工具调用元数据（role='assistant' 时携带 LLM 发起的工具调用） */
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+  }>;
 }
 
 /**
