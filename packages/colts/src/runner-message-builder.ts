@@ -5,7 +5,7 @@
  * Extracted from AgentRunner for maintainability.
  */
 
-import type { Message as PiAIMessage, TextContent, Tool } from '@mariozechner/pi-ai';
+import type { Message as PiAIMessage, TextContent, Tool, ToolCall } from '@mariozechner/pi-ai';
 import type { AgentState, IToolRegistry, SkillState } from './types.js';
 import type { ISkillProvider } from './skills/types.js';
 import type { SubAgentConfig } from './subagent/types.js';
@@ -221,36 +221,43 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
         break;
 
       case 'assistant': {
-        // Only include visible messages in LLM context
-        if (msg.visible !== false) {
-          const content: TextContent[] = [{ type: 'text', text: msg.content }];
-          messages.push({
-            role: 'assistant',
-            content,
-            api: 'openai-completions',
-            provider: 'openai',
-            model: opts.model,
-            usage: {
-              input: 0,
-              output: 0,
-              cacheRead: 0,
-              cacheWrite: 0,
-              totalTokens: 0,
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-            },
-            stopReason: 'stop',
-            timestamp: now,
-          });
+        const content: (TextContent | ToolCall)[] = [{ type: 'text', text: msg.content }];
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          for (const tc of msg.toolCalls) {
+            content.push({
+              type: 'toolCall',
+              id: tc.id,
+              name: tc.name,
+              arguments: tc.arguments,
+            });
+          }
         }
+        messages.push({
+          role: 'assistant',
+          content,
+          api: 'openai-completions',
+          provider: 'openai',
+          model: opts.model,
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: msg.toolCalls && msg.toolCalls.length > 0 ? 'toolUse' : 'stop',
+          timestamp: now,
+        });
         break;
       }
 
       case 'tool':
-        // Tool results use 'toolResult' role in pi-ai
+        // 工具结果使用 pi-ai 的 toolResult role
         messages.push({
           role: 'toolResult',
           toolCallId: msg.toolCallId ?? 'unknown',
-          toolName: 'unknown',
+          toolName: msg.toolName ?? 'unknown',
           content: [{ type: 'text', text: msg.content }],
           isError: false,
           timestamp: now,
