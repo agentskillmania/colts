@@ -4,7 +4,7 @@
  * Phase-based execution state machine for fine-grained control.
  */
 
-import type { Message } from './types.js';
+import type { AgentState, Message } from './types.js';
 import type { ToolCall } from './parser.js';
 import type { DelegateResult } from './subagent/types.js';
 
@@ -57,8 +57,8 @@ export type StreamEvent =
   | { type: 'compressed'; summary: string; removedCount: number }
   | { type: 'skill:loading'; name: string }
   | { type: 'skill:loaded'; name: string; tokenCount: number }
-  | { type: 'skill:start'; name: string; task: string }
-  | { type: 'skill:end'; name: string; result: string }
+  | { type: 'skill:start'; name: string; task: string; state?: AgentState }
+  | { type: 'skill:end'; name: string; result: string; state?: AgentState }
   | { type: 'subagent:start'; name: string; task: string }
   | { type: 'subagent:end'; name: string; result: DelegateResult }
   | {

@@ -245,6 +245,7 @@ export async function* executeStepStream(
               type: 'skill:start',
               name: sigResult.skillName,
               task: (phase.result as SkillSignal & { task: string }).task ?? '',
+              state: currentState,
             };
             yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
             execState.phase = { type: 'idle' };
@@ -256,6 +257,7 @@ export async function* executeStepStream(
               type: 'skill:end',
               name: sigResult.parentName,
               result: (phase.result as SkillSignal & { result: string }).result,
+              state: currentState,
             };
             yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
             execState.phase = { type: 'idle' };
@@ -267,6 +269,7 @@ export async function* executeStepStream(
               type: 'skill:end',
               name: sigResult.skillName,
               result: (phase.result as SkillSignal & { result: string }).result,
+              state: currentState,
             };
             yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
             return {
