@@ -13,14 +13,18 @@ import type { ToolSchema } from './tools/registry.js';
 
 /**
  * Build skill mode guide based on current skill state
+ *
+ * Three states:
+ * 1. No skill active → no guide (skill list injected separately by buildMessages)
+ * 2. Top-level skill active → ACTIVE mode: respond directly when done, do NOT use return_skill
+ * 3. Sub-skill active → SUB-SKILL mode: must call return_skill when done
  */
 function buildSkillGuide(skillState: SkillState | undefined): string | null {
-  if (!skillState) return null;
+  if (!skillState || !skillState.current) return null;
 
-  const isInSubSkill = skillState.current && skillState.stack.length > 0;
+  const isInSubSkill = skillState.stack.length > 0;
 
   if (isInSubSkill) {
-    // Sub-skill mode: teach return_skill
     const parent = skillState.stack[skillState.stack.length - 1].skillName;
     return `=== SKILL MODE: SUB-SKILL ===
 You are currently executing as a sub-skill.
@@ -34,18 +38,22 @@ When you COMPLETE your assigned task, you MUST call the \`return_skill\` tool:
   "status": "success"
 }
 
-⚠️ IMPORTANT: Do not just say "I'm done" — always use return_skill!
+Rules:
+- ALWAYS use return_skill when done — do NOT just say "I'm done"
+- Do NOT call load_skill (you are a sub-skill, not a coordinator)
 =============================`.trim();
   }
 
-  // Top-level mode: teach load_skill
+  // Top-level skill active: can load sub-skills, responds directly when done
   if (skillState.availableSkills?.length) {
     const skillLines = skillState.availableSkills
       .map((s) => `- ${s.name}: ${s.description}`)
       .join('\n');
 
-    return `=== SKILL MODE: TOP-LEVEL ===
-You have access to specialized skills. When you need expertise beyond your base knowledge:
+    return `=== SKILL MODE: ACTIVE ===
+You are currently executing the '${skillState.current}' skill.
+
+You can delegate to sub-skills when needed:
 
 Use the \`load_skill\` tool:
 {
@@ -53,12 +61,22 @@ Use the \`load_skill\` tool:
   "task": "Describe what you need done"
 }
 
-Available skills:
+Available sub-skills:
 ${skillLines}
+
+Rules:
+- When your task is complete, respond DIRECTLY to the user — do NOT call return_skill
+- You may call load_skill to delegate sub-tasks to specialized skills
 =============================`.trim();
   }
 
-  return null;
+  // Top-level skill without available sub-skills list
+  return `=== SKILL MODE: ACTIVE ===
+You are currently executing the '${skillState.current}' skill.
+
+Rules:
+- When your task is complete, respond DIRECTLY to the user — do NOT call return_skill
+=============================`.trim();
 }
 
 /**

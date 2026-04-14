@@ -6,7 +6,6 @@
  */
 
 import type { AgentState, IToolRegistry } from './types.js';
-import { updateState } from './state.js';
 import type {
   AdvanceResult,
   ExecutionState,
@@ -22,6 +21,11 @@ import { getToolsForLLM } from './runner-message-builder.js';
 import { maybeCompress } from './runner-compression.js';
 import type { IContextCompressor } from './types.js';
 import { isSkillSignal, type SkillSignal } from './skills/types.js';
+import {
+  applySkillSignal,
+  formatSkillToolResult,
+  formatSkillAnswer,
+} from './skills/signal-handler.js';
 
 /**
  * Stream LLM response during calling-llm phase.
@@ -44,6 +48,24 @@ export async function* streamCallingLLM(
   signal?: AbortSignal
 ): AsyncGenerator<StreamEvent> {
   const tools = getToolsForLLM(registry);
+  const messages = execState.preparedMessages ?? buildMessagesFromCtx(ctx, state);
+
+  // 在 LLM 调用前 yield llm:request 事件，携带完整输入
+  yield {
+    type: 'llm:request',
+    messages: messages.map((m) => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+    })),
+    tools: tools?.map((t) => t.name) ?? [],
+    skill: state.context.skillState
+      ? {
+          current: state.context.skillState.current,
+          stack: state.context.skillState.stack.map((f) => f.skillName),
+        }
+      : null,
+  };
+
   let accumulatedContent = '';
   let responseContent = '';
   let responseToolCalls:
@@ -52,7 +74,7 @@ export async function* streamCallingLLM(
 
   for await (const event of ctx.llmProvider.stream({
     model: ctx.options.model,
-    messages: execState.preparedMessages ?? buildMessagesFromCtx(ctx, state),
+    messages,
     tools,
     priority: 0,
     requestTimeout: ctx.options.requestTimeout,
@@ -74,6 +96,13 @@ export async function* streamCallingLLM(
       responseContent = accumulatedContent;
     }
   }
+
+  // LLM 响应完成后 yield llm:response 事件，携带完整输出
+  yield {
+    type: 'llm:response',
+    text: responseContent,
+    toolCalls: responseToolCalls ?? null,
+  };
 
   // Store complete response
   execState.llmResponse = responseContent;
@@ -200,67 +229,66 @@ export async function* executeStepStream(
     yield { type: 'phase-change', from: fromPhase, to: phase };
 
     if (phase.type === 'tool-result') {
-      // Handle skill signals for nested skill calling
+      // Handle skill signals via centralized handler
       if (isSkillSignal(phase.result)) {
-        const signal = phase.result as SkillSignal;
-        const skillState = currentState.context.skillState;
+        const [newState, sigResult] = applySkillSignal(currentState, phase.result as SkillSignal);
+        currentState = newState;
 
-        if (signal.type === 'SWITCH_SKILL' && skillState) {
-          // Use updateState to safely modify even when Immer has frozen the object
-          currentState = updateState(currentState, (draft) => {
-            const ss = draft.context.skillState!;
-            if (ss.current) {
-              ss.stack.push({
-                skillName: ss.current,
-                loadedAt: Date.now(),
-                taskContext: signal.task,
-                savedInstructions: ss.loadedInstructions,
-              });
-            }
-            ss.current = signal.to;
-            ss.loadedInstructions = signal.instructions;
-          });
-
-          // Yield skill event and continue execution
-          yield { type: 'skill:start', name: signal.to, task: signal.task };
-
-          // Reset phase to idle to continue with new skill
-          execState.phase = { type: 'idle' };
-          continue;
-        }
-
-        if (signal.type === 'RETURN_SKILL' && skillState) {
-          const stackLen = skillState.stack.length;
-          if (stackLen === 0) {
-            // Top-level skill has no parent to return to; silently ignore
+        switch (sigResult.action) {
+          case 'loaded':
+            // Skill loaded (first time or nested)
+            yield {
+              type: 'skill:start',
+              name: sigResult.skillName,
+              task: (phase.result as SkillSignal & { task: string }).task ?? '',
+            };
+            yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
             execState.phase = { type: 'idle' };
             continue;
-          }
 
-          // Use updateState to safely modify even when Immer has frozen the object
-          let parentSkillName: string;
-          currentState = updateState(currentState, (draft) => {
-            const ss = draft.context.skillState!;
-            const parent = ss.stack.pop()!;
-            parentSkillName = parent.skillName;
-            ss.current = parentSkillName;
-            ss.loadedInstructions = parent.savedInstructions;
-          });
+          case 'returned':
+            // Sub-skill finished, returned to parent
+            yield {
+              type: 'skill:end',
+              name: sigResult.parentName,
+              result: (phase.result as SkillSignal & { result: string }).result,
+            };
+            yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
+            execState.phase = { type: 'idle' };
+            continue;
 
-          // Yield skill event
-          yield { type: 'skill:end', name: parentSkillName!, result: signal.result };
+          case 'top-level-return':
+            // Top-level skill finished: yield skill:end for event symmetry, then end step
+            yield {
+              type: 'skill:end',
+              name: sigResult.skillName,
+              result: (phase.result as SkillSignal & { result: string }).result,
+            };
+            yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
+            return {
+              state: currentState,
+              result: { type: 'done', answer: formatSkillAnswer(phase.result) },
+            };
 
-          // Reset phase to idle to continue with parent skill
-          execState.phase = { type: 'idle' };
-          continue;
-        }
+          case 'same-skill':
+            // Already active — communicate clearly to LLM and TUI
+            yield {
+              type: 'tool:end',
+              result: `Skill '${sigResult.currentSkill}' is already active`,
+            };
+            return { state: currentState, result: { type: 'continue', toolResult: phase.result } };
 
-        if (signal.type === 'SKILL_NOT_FOUND') {
-          const error = new Error(
-            `Skill '${signal.requested}' not found. Available: ${signal.available.join(', ')}`
-          );
-          yield { type: 'error', error, context: { step: 0 } };
-          return { state: currentState, result: { type: 'error', error } };
+          case 'cyclic':
+            // Would cause cycle — communicate clearly to LLM and TUI
+            yield {
+              type: 'tool:end',
+              result: `Cannot load Skill '${sigResult.currentSkill}': already in the call stack`,
+            };
+            return { state: currentState, result: { type: 'continue', toolResult: phase.result } };
+
+          case 'not-found':
+            yield { type: 'error', error: sigResult.error, context: { step: 0 } };
+            return { state: currentState, result: { type: 'error', error: sigResult.error } };
         }
       }
 

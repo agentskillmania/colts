@@ -25,10 +25,11 @@ function createMockState(skillState?: SkillState): AgentState {
 
 describe('buildMessages', () => {
   describe('Skill mode guides', () => {
-    it('should include top-level guide when availableSkills is set', () => {
+    it('should include ACTIVE guide when top-level skill is active with availableSkills', () => {
       const state = createMockState({
         stack: [],
-        current: null,
+        current: 'greeting',
+        loadedInstructions: 'Greet the user warmly.',
         availableSkills: [
           { name: 'code-review', description: 'Review code' },
           { name: 'testing', description: 'Write tests' },
@@ -40,13 +41,31 @@ describe('buildMessages', () => {
         (m) => m.role === 'user' && typeof m.content === 'string'
       );
 
-      expect(systemMessage?.content).toContain('SKILL MODE: TOP-LEVEL');
+      expect(systemMessage?.content).toContain('SKILL MODE: ACTIVE');
       expect(systemMessage?.content).toContain('code-review: Review code');
       expect(systemMessage?.content).toContain('testing: Write tests');
       expect(systemMessage?.content).toContain('load_skill');
+      // Top-level guide should prohibit return_skill (contain "NOT call return_skill")
+      expect(systemMessage?.content).toContain('NOT call return_skill');
     });
 
-    it('should include sub-skill guide when in sub-skill mode', () => {
+    it('should include ACTIVE guide without sub-skill list when no availableSkills', () => {
+      const state = createMockState({
+        stack: [],
+        current: 'greeting',
+        loadedInstructions: 'Greet the user.',
+      });
+
+      const messages = buildMessages(state, { model: 'gpt-4' });
+      const systemMessage = messages.find(
+        (m) => m.role === 'user' && typeof m.content === 'string'
+      );
+
+      expect(systemMessage?.content).toContain('SKILL MODE: ACTIVE');
+      expect(systemMessage?.content).toContain('respond DIRECTLY to the user');
+    });
+
+    it('should include SUB-SKILL guide when in sub-skill mode', () => {
       const state = createMockState({
         stack: [{ skillName: 'data-analysis', loadedAt: Date.now() }],
         current: 'data-cleaning',
@@ -76,7 +95,21 @@ describe('buildMessages', () => {
       expect(systemMessage?.content).not.toContain('SKILL MODE');
     });
 
-    it('should not duplicate skill list when in sub-skill mode', () => {
+    it('should not include skill guide when skillState has no current', () => {
+      const state = createMockState({
+        stack: [],
+        current: null,
+      });
+
+      const messages = buildMessages(state, { model: 'gpt-4' });
+      const systemMessage = messages.find(
+        (m) => m.role === 'user' && typeof m.content === 'string'
+      );
+
+      expect(systemMessage?.content).not.toContain('SKILL MODE');
+    });
+
+    it('should show SUB-SKILL mode in nested scenario, not ACTIVE', () => {
       const state = createMockState({
         stack: [{ skillName: 'parent', loadedAt: Date.now() }],
         current: 'child',
@@ -88,11 +121,9 @@ describe('buildMessages', () => {
         (m) => m.role === 'user' && typeof m.content === 'string'
       );
 
-      // Should show sub-skill mode, not top-level
+      // Should show sub-skill mode, not active
       expect(systemMessage?.content).toContain('SUB-SKILL');
-      expect(systemMessage?.content).not.toContain('TOP-LEVEL');
-      // Should not show "Available skills" from provider section
-      expect(systemMessage?.content).not.toContain('Available skills:');
+      expect(systemMessage?.content).not.toContain('ACTIVE');
     });
   });
 

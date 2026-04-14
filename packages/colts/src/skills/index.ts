@@ -19,3 +19,10 @@ export { FilesystemSkillProvider } from './filesystem-provider.js';
 
 export { createLoadSkillTool } from './load-skill-tool.js';
 export { createReturnSkillTool } from './return-skill-tool.js';
+
+export {
+  applySkillSignal,
+  formatSkillToolResult,
+  formatSkillAnswer,
+  type SkillSignalResult,
+} from './signal-handler.js';

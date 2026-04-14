@@ -218,9 +218,18 @@ async function advanceToToolResult(
   if (isSkillSignal(result)) {
     const sig = result as SkillSignal;
     switch (sig.type) {
-      case 'SWITCH_SKILL':
-        toolResultContent = `Skill '${sig.to}' loaded. You are now in sub-skill mode. Follow its instructions, then call return_skill when done.`;
+      case 'SWITCH_SKILL': {
+        // Validate transition before writing optimistic message
+        const ss = state.context.skillState;
+        if (ss?.current === sig.to) {
+          toolResultContent = `Skill '${sig.to}' is already active. Continue with current instructions.`;
+        } else if (ss?.stack.some((f) => f.skillName === sig.to)) {
+          toolResultContent = `Cannot load Skill '${sig.to}': already in the call stack. Continue with current task.`;
+        } else {
+          toolResultContent = `Skill '${sig.to}' loaded. Follow its instructions.`;
+        }
         break;
+      }
       case 'RETURN_SKILL':
         toolResultContent =
           typeof sig.result === 'string' ? sig.result : JSON.stringify(sig.result);

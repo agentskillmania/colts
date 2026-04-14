@@ -15,6 +15,9 @@ export type {
   MessageType,
   ToolDefinition,
   Snapshot,
+  // Skill state
+  SkillState,
+  SkillStackFrame,
   // Configuration interfaces
   ILLMProvider,
   IToolRegistry,
