@@ -671,6 +671,38 @@ async function executeRun(
           break;
         }
 
+        // Skill lifecycle
+        case 'skill:start': {
+          if (event.state) setState(event.state);
+          setEntries((prev) => [
+            ...prev,
+            {
+              type: 'skill',
+              id: uid(),
+              name: event.name,
+              status: 'active',
+              timestamp: Date.now(),
+            },
+          ]);
+          break;
+        }
+
+        case 'skill:end': {
+          if (event.state) setState(event.state);
+          setEntries((prev) => [
+            ...prev,
+            {
+              type: 'skill',
+              id: uid(),
+              name: event.name,
+              status: 'completed',
+              result: event.result,
+              timestamp: Date.now(),
+            },
+          ]);
+          break;
+        }
+
         // Skill loading
         case 'skill:loading': {
           setEntries((prev) => [
@@ -976,6 +1008,37 @@ async function executeStep(
             break;
           }
 
+          case 'skill:start': {
+            if (event.state) setState(event.state);
+            setEntries((prev) => [
+              ...prev,
+              {
+                type: 'skill',
+                id: uid(),
+                name: event.name,
+                status: 'active',
+                timestamp: Date.now(),
+              },
+            ]);
+            break;
+          }
+
+          case 'skill:end': {
+            if (event.state) setState(event.state);
+            setEntries((prev) => [
+              ...prev,
+              {
+                type: 'skill',
+                id: uid(),
+                name: event.name,
+                status: 'completed',
+                result: event.result,
+                timestamp: Date.now(),
+              },
+            ]);
+            break;
+          }
+
           case 'skill:loading': {
             setEntries((prev) => [
               ...prev,
@@ -1261,6 +1324,37 @@ async function executeAdvance(
               e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
             ),
             { type: 'error', id: uid(), message: errMsg, timestamp: Date.now() },
+          ]);
+          break;
+        }
+
+        case 'skill:start': {
+          if (event.state) setState(event.state);
+          setEntries((prev) => [
+            ...prev,
+            {
+              type: 'skill',
+              id: uid(),
+              name: event.name,
+              status: 'active',
+              timestamp: Date.now(),
+            },
+          ]);
+          break;
+        }
+
+        case 'skill:end': {
+          if (event.state) setState(event.state);
+          setEntries((prev) => [
+            ...prev,
+            {
+              type: 'skill',
+              id: uid(),
+              name: event.name,
+              status: 'completed',
+              result: event.result,
+              timestamp: Date.now(),
+            },
           ]);
           break;
         }
