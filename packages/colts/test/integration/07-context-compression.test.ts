@@ -35,7 +35,6 @@ function createStateWithHistory(count: number): ReturnType<typeof createAgentSta
     state = addUserMessage(state, `User message ${i}`);
     state = addAssistantMessage(state, `Assistant response ${i}`, {
       type: 'final',
-      visible: true,
     });
   }
   return state;
@@ -77,9 +76,9 @@ describe('User Story: Context Compression with Real LLM', () => {
           let state = createAgentState(config);
           // 2 user + 2 assistant = 4 messages → at threshold
           state = addUserMessage(state, 'msg1');
-          state = addAssistantMessage(state, 'resp1', { type: 'final', visible: true });
+          state = addAssistantMessage(state, 'resp1', { type: 'final' });
           state = addUserMessage(state, 'msg2');
-          state = addAssistantMessage(state, 'resp2', { type: 'final', visible: true });
+          state = addAssistantMessage(state, 'resp2', { type: 'final' });
 
           // When: Run a step (which triggers compression)
           const { state: finalState, result } = await runner.run(state);

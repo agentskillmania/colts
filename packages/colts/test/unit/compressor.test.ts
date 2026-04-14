@@ -24,7 +24,6 @@ function createStateWithMessages(count: number): AgentState {
       role: 'user',
       content: `Message ${i}`,
       type: 'text',
-      visible: true,
       timestamp: Date.now(),
     });
   }
@@ -407,7 +406,7 @@ describe('DefaultContextCompressor - message type formatting', () => {
 
     state.context.messages.push(
       { role: 'user', content: 'User message', type: 'text' },
-      { role: 'assistant', content: 'Thought process', type: 'thought', visible: false },
+      { role: 'assistant', content: 'Thought process', type: 'thought' },
       { role: 'assistant', content: 'Final answer', type: 'final' },
       { role: 'tool', content: 'Tool output', type: 'tool-result', toolCallId: 'tc1' },
       { role: 'user', content: 'Follow up', type: 'text' }

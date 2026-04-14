@@ -487,11 +487,17 @@ describe('advance()', () => {
     result = await runner.advance(result.state, execState, registry); // executing-tool -> tool-result
 
     // Verify tool result message is LLM-friendly, not raw JSON
-    const lastMsg = result.state.context.messages[result.state.context.messages.length - 1];
-    expect(lastMsg.role).toBe('tool');
-    expect(lastMsg.content).toContain("Skill 'tell-time' loaded");
-    expect(lastMsg.content).not.toContain('SWITCH_SKILL');
-    expect(lastMsg.content).not.toContain('"type"');
+    const messages = result.state.context.messages;
+    // skill 切换后会注入 task user 消息，所以 tool 消息是倒数第二条
+    const toolMsg = messages[messages.length - 2];
+    expect(toolMsg.role).toBe('tool');
+    expect(toolMsg.content).toContain("Skill 'tell-time' loaded");
+    expect(toolMsg.content).not.toContain('SWITCH_SKILL');
+    expect(toolMsg.content).not.toContain('"type"');
+    // 最后一跳是注入的 task user 消息
+    const taskMsg = messages[messages.length - 1];
+    expect(taskMsg.role).toBe('user');
+    expect(taskMsg.content).toBe('Get time');
   });
 
   it('should format RETURN_SKILL signal with actual result text', async () => {

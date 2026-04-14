@@ -126,33 +126,28 @@ describe('Step 0: AgentState', () => {
         role: 'assistant',
         content: 'Hi there',
         type: 'text',
-        visible: true,
       });
     });
 
-    it('should support thought type (invisible)', () => {
+    it('should support thought type', () => {
       const state = createAgentState(baseConfig);
       const newState = addAssistantMessage(state, 'Let me think...', {
         type: 'thought',
-        visible: false,
       });
 
       expect(newState.context.messages[0]).toMatchObject({
         type: 'thought',
-        visible: false,
       });
     });
 
-    it('should support final type (visible)', () => {
+    it('should support final type', () => {
       const state = createAgentState(baseConfig);
       const newState = addAssistantMessage(state, 'Final answer', {
         type: 'final',
-        visible: true,
       });
 
       expect(newState.context.messages[0]).toMatchObject({
         type: 'final',
-        visible: true,
       });
     });
   });

@@ -471,7 +471,7 @@ describe('AgentRunner', () => {
   });
 
   describe('message building', () => {
-    it('should filter out invisible messages from LLM context', async () => {
+    it('should include all assistant messages in LLM context', async () => {
       const client = createMockClient();
       vi.mocked(client.call).mockResolvedValue({
         content: 'Response',
@@ -484,7 +484,7 @@ describe('AgentRunner', () => {
         llmClient: client,
       });
 
-      // Create state with invisible assistant message
+      // Create state with thought and final assistant messages
       let state = createAgentState(defaultConfig);
       state = {
         ...state,
@@ -492,8 +492,8 @@ describe('AgentRunner', () => {
           ...state.context,
           messages: [
             { role: 'user', content: 'Hello' },
-            { role: 'assistant', content: 'Hidden thought', type: 'thought', visible: false },
-            { role: 'assistant', content: 'Visible response', type: 'final', visible: true },
+            { role: 'assistant', content: 'Thinking about it', type: 'thought' },
+            { role: 'assistant', content: 'Final response', type: 'final' },
           ],
         },
       };
@@ -511,10 +511,9 @@ describe('AgentRunner', () => {
 
       // Should include user messages
       expect(userMsgs.some((m: { content: string }) => m.content === 'Hello')).toBe(true);
-      // Should include visible assistant message
-      expect(assistantContents).toContain('Visible response');
-      // Should NOT include invisible message
-      expect(assistantContents).not.toContain('Hidden thought');
+      // Should include ALL assistant messages (both thought and final)
+      expect(assistantContents).toContain('Thinking about it');
+      expect(assistantContents).toContain('Final response');
     });
 
     it('should include tool results in context', async () => {
@@ -537,7 +536,7 @@ describe('AgentRunner', () => {
           ...state.context,
           messages: [
             { role: 'user', content: 'Calculate' },
-            { role: 'assistant', content: 'Action: calculate', type: 'action', visible: false },
+            { role: 'assistant', content: 'Action: calculate', type: 'action' },
             { role: 'tool', content: '42', toolCallId: 'calc-1' },
           ],
         },
@@ -681,11 +680,11 @@ describe('AgentRunner', () => {
       // Create state with compression metadata
       let state = createAgentState(defaultConfig);
       state = addUserMessage(state, 'Old message 1');
-      state = addAssistantMessage(state, 'Old response 1', { type: 'final', visible: true });
+      state = addAssistantMessage(state, 'Old response 1', { type: 'final' });
       state = addUserMessage(state, 'Old message 2');
-      state = addAssistantMessage(state, 'Old response 2', { type: 'final', visible: true });
+      state = addAssistantMessage(state, 'Old response 2', { type: 'final' });
       state = addUserMessage(state, 'Recent message');
-      state = addAssistantMessage(state, 'Recent response', { type: 'final', visible: true });
+      state = addAssistantMessage(state, 'Recent response', { type: 'final' });
 
       // Set compression: anchor=4, meaning messages[0..3] are compressed
       state = {
