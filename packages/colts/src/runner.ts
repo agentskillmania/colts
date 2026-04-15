@@ -46,68 +46,68 @@ import { createDelegateTool } from './subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
 
 /**
- * Runner 事件映射 — 与 AsyncGenerator 的 StreamEvent / RunStreamEvent 完全对齐
+ * Runner event map — fully aligned with AsyncGenerator StreamEvent / RunStreamEvent.
  *
- * 以 yield 事件为 source of truth，EventEmitter 只是 bridge。
- * run:start / run:end 是 EventEmitter 独有的生命周期事件（yield 体系无对应物）。
+ * Yield events are the source of truth; EventEmitter acts as a bridge.
+ * run:start / run:end are EventEmitter-only lifecycle events (no yield equivalents).
  */
 export interface RunnerEventMap {
-  // ── 生命周期（run 级，EventEmitter 独有） ──
-  /** run 开始 */
+  // ── Lifecycle (run-level, EventEmitter-only) ──
+  /** Run started */
   'run:start': { state: AgentState };
-  /** run 结束 */
+  /** Run ended */
   'run:end': { state: AgentState; result: RunResult };
 
-  // ── 生命周期（step 级，与 RunStreamEvent 对齐） ──
-  /** step 开始 */
+  // ── Lifecycle (step-level, aligned with RunStreamEvent) ──
+  /** Step started */
   'step:start': { step: number; state: AgentState };
-  /** step 结束 */
+  /** Step ended */
   'step:end': { step: number; result: StepResult };
-  /** run 完成 */
+  /** Run completed */
   complete: { result: RunResult };
 
-  // ── 执行过程（与 StreamEvent 对齐） ──
-  /** 阶段转换 */
+  // ── Execution process (aligned with StreamEvent) ──
+  /** Phase transition */
   'phase-change': { from: Phase; to: Phase };
-  /** LLM token 流式输出 */
+  /** LLM token streaming output */
   token: { token: string };
-  /** 工具开始执行 */
+  /** Tool execution started */
   'tool:start': { action: Action };
-  /** 工具执行完成 */
+  /** Tool execution completed */
   'tool:end': { result: unknown };
-  /** 执行错误 */
+  /** Execution error */
   error: { error: Error; context: { toolName?: string; step: number } };
 
-  // ── 上下文压缩（与 StreamEvent 对齐） ──
-  /** 开始压缩 */
+  // ── Context compression (aligned with StreamEvent) ──
+  /** Compression started */
   compressing: Record<string, never>;
-  /** 压缩完成 */
+  /** Compression completed */
   compressed: { summary: string; removedCount: number };
 
-  // ── Skill（与 StreamEvent 对齐） ──
-  /** Skill 加载中 */
+  // ── Skill (aligned with StreamEvent) ──
+  /** Skill loading */
   'skill:loading': { name: string };
-  /** Skill 加载完成 */
+  /** Skill loaded */
   'skill:loaded': { name: string; tokenCount: number };
-  /** Skill 开始执行 */
+  /** Skill execution started */
   'skill:start': { name: string; task: string };
-  /** Skill 执行完成 */
+  /** Skill execution completed */
   'skill:end': { name: string; result: string };
 
-  // ── SubAgent（与 StreamEvent 对齐） ──
-  /** 子代理开始执行 */
+  // ── SubAgent (aligned with StreamEvent) ──
+  /** Sub-agent started */
   'subagent:start': { name: string; task: string };
-  /** 子代理执行完成 */
+  /** Sub-agent completed */
   'subagent:end': { name: string; result: DelegateResult };
 
-  // ── LLM 调用（与 StreamEvent 对齐） ──
-  /** LLM 请求发送前 */
+  // ── LLM call (aligned with StreamEvent) ──
+  /** Before LLM request is sent */
   'llm:request': {
     messages: Array<{ role: string; content: string }>;
     tools: string[];
     skill: { current: string | null; stack: string[] } | null;
   };
-  /** LLM 响应完成后 */
+  /** After LLM response is received */
   'llm:response': {
     text: string;
     toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
@@ -671,7 +671,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     try {
       const result = await executeAdvance(this.ctx, state, execState, toolRegistry, options);
 
-      // 根据 phase 类型补发对应的 StreamEvent
+      // Emit corresponding StreamEvent based on phase type
       if (result.phase.type === 'executing-tool') {
         this.emit('tool:start', { action: result.phase.action });
       }
@@ -734,7 +734,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         if (done) {
           return value as AdvanceResult;
         }
-        // 统一转发：直接用 yield 事件的 type 和 payload
+        // Uniform forwarding: emit using the yield event's type and payload
         this.emit(value.type as keyof RunnerEventMap, value as never);
         yield value;
       }
@@ -800,7 +800,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         currentState = await maybeCompress(this.compressor, newState);
 
-        // 根据 phase 类型补发对应的 StreamEvent
+        // Emit corresponding StreamEvent based on phase type
         if (phase.type === 'executing-tool') {
           this.emit('tool:start', { action: phase.action });
         }
@@ -865,7 +865,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           this.emit('step:end', { step: stepIdx, result: result.result });
           return result;
         }
-        // 统一转发：直接用 yield 事件的 type 和 payload
+        // Uniform forwarding: emit using the yield event's type and payload
         this.emit(value.type as keyof RunnerEventMap, value as never);
         yield value;
       }
@@ -923,7 +923,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         totalSteps++;
 
         if (result.type === 'done') {
-          // 防御性清理：顶层 skill 直接回复（未调用 return_skill）时清空 skillState
+          // Defensive cleanup: clear skillState when top-level skill replies directly (without return_skill)
           currentState = this.cleanupStaleSkillState(currentState);
           const runResult: RunResult = { type: 'success', answer: result.answer, totalSteps };
           this.emit('run:end', { state: currentState, result: runResult });
@@ -1017,7 +1017,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             stepResult = value;
             break;
           }
-          // 统一转发：直接用 yield 事件的 type 和 payload
+          // Uniform forwarding: emit using the yield event's type and payload
           this.emit(value.type as keyof RunnerEventMap, value as never);
           yield value as RunStreamEvent;
         }
@@ -1048,7 +1048,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         }
 
         if (stepResult.result.type === 'done') {
-          // 防御性清理：顶层 skill 直接回复（未调用 return_skill）时清空 skillState
+          // Defensive cleanup: clear skillState when top-level skill replies directly (without return_skill)
           currentState = this.cleanupStaleSkillState(currentState);
           const runResult: RunResult = {
             type: 'success',
@@ -1110,16 +1110,16 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   }
 
   /**
-   * 防御性清理：当 run 成功结束时，如果顶层 skill 仍然活跃（未调用 return_skill），
-   * 自动清空 skillState，防止面包屑残留。
+   * Defensive cleanup: when a run ends successfully, if the top-level skill is still active
+   * (return_skill was not called), automatically clear skillState to prevent stale breadcrumbs.
    *
-   * @param state - 当前 AgentState
-   * @returns 清理后的 AgentState（如果需要清理）
+   * @param state - Current AgentState
+   * @returns Cleaned AgentState (if cleanup was needed)
    */
   private cleanupStaleSkillState(state: AgentState): AgentState {
     const ss = state.context.skillState;
     if (!ss || !ss.current) return state;
-    // 只清理顶层 skill（栈为空），嵌套 skill 的清理由 return_skill 负责
+    // Only clean up top-level skill (empty stack); nested skill cleanup is handled by return_skill
     if (ss.stack.length > 0) return state;
     return updateState(state, (draft) => {
       draft.context.skillState!.current = null;

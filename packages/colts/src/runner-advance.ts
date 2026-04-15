@@ -155,7 +155,7 @@ async function advanceToLLMResponse(
     execState.action = toolCallToAction(toolCall);
     execState.allActions = response.toolCalls.map(toolCallToAction);
   } else {
-    // 新响应没有 toolCalls，清除上一次残留的 action，防止重用过期工具调用
+    // New response has no toolCalls; clear stale action to prevent reusing expired tool calls
     execState.action = undefined;
     execState.allActions = undefined;
   }
@@ -264,7 +264,7 @@ async function advanceToToolResult(
     })
   );
 
-  // skill 切换时注入任务指令 user 消息（始终注入）
+  // Inject task instruction as a user message on skill switch (always injected)
   if (isSkillSignal(result)) {
     const sig = result as SkillSignal;
     if (sig.type === 'SWITCH_SKILL') {

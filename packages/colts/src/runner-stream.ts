@@ -50,7 +50,7 @@ export async function* streamCallingLLM(
   const tools = getToolsForLLM(registry);
   const messages = execState.preparedMessages ?? buildMessagesFromCtx(ctx, state);
 
-  // 在 LLM 调用前 yield llm:request 事件，携带完整输入
+  // Yield llm:request event before LLM call, carrying the full input
   yield {
     type: 'llm:request',
     messages: messages.map((m) => ({
@@ -97,7 +97,7 @@ export async function* streamCallingLLM(
     }
   }
 
-  // LLM 响应完成后 yield llm:response 事件，携带完整输出
+  // Yield llm:response event after LLM response, carrying the full output
   yield {
     type: 'llm:response',
     text: responseContent,
@@ -119,7 +119,7 @@ export async function* streamCallingLLM(
       arguments: tc.arguments,
     }));
   } else {
-    // 新响应没有 toolCalls，清除上一次残留的 action，防止重用过期工具调用
+    // New response has no toolCalls; clear stale action to prevent reusing expired tool calls
     execState.action = undefined;
     execState.allActions = undefined;
   }

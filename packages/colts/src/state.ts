@@ -83,12 +83,12 @@ export function addUserMessage(state: AgentState, content: string): AgentState {
 }
 
 /**
- * 添加 assistant 消息到会话历史
+ * Add an assistant message to the conversation history.
  *
- * @param state - 当前状态
- * @param content - 消息内容
- * @param options - 可选参数（type, toolCalls）
- * @returns 追加了 assistant 消息的新状态
+ * @param state - Current state
+ * @param content - Message content
+ * @param options - Optional parameters (type, toolCalls)
+ * @returns New state with the assistant message appended
  */
 export function addAssistantMessage(
   state: AgentState,
@@ -113,12 +113,12 @@ export function addAssistantMessage(
 }
 
 /**
- * 添加工具结果消息到会话历史
+ * Add a tool result message to the conversation history.
  *
- * @param state - 当前状态
- * @param content - 工具返回内容
- * @param options - 可选参数（toolCallId, toolName）
- * @returns 追加了工具消息的新状态
+ * @param state - Current state
+ * @param content - Tool return content
+ * @param options - Optional parameters (toolCallId, toolName)
+ * @returns New state with the tool message appended
  */
 export function addToolMessage(
   state: AgentState,

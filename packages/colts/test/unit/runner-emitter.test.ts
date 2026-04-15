@@ -1,8 +1,8 @@
 /**
- * @fileoverview AgentRunner EventEmitter 测试
+ * @fileoverview AgentRunner EventEmitter tests
  *
- * 验证 EventEmitter 事件与 AsyncGenerator yield 事件的对齐：
- * 命名、payload 结构完全一致。
+ * Verify alignment between EventEmitter events and AsyncGenerator yield events:
+ * names and payload structures are fully consistent.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { AgentRunner } from '../../src/runner.js';
@@ -51,8 +51,8 @@ function createMockLLMClient(responses: LLMResponse[]): ILLMProvider {
 }
 
 describe('AgentRunner EventEmitter', () => {
-  describe('生命周期事件', () => {
-    it('应该在 run() 中发出 run:start 和 run:end', async () => {
+  describe('Lifecycle events', () => {
+    it('should emit run:start and run:end during run()', async () => {
       const mockResponse: LLMResponse = {
         content: 'Final answer',
         toolCalls: [],
@@ -74,7 +74,7 @@ describe('AgentRunner EventEmitter', () => {
       expect(events).toContain('run:end');
     });
 
-    it('应该在 step() 中发出 step:start 和 step:end', async () => {
+    it('should emit step:start and step:end during step()', async () => {
       const mockResponse: LLMResponse = {
         content: 'Step answer',
         toolCalls: [],
@@ -96,7 +96,7 @@ describe('AgentRunner EventEmitter', () => {
       expect(events).toContain('step:end');
     });
 
-    it('应该在 step() 中发出 phase-change 事件', async () => {
+    it('should emit phase-change events during step()', async () => {
       const mockResponse: LLMResponse = {
         content: 'Step answer',
         toolCalls: [],
@@ -118,7 +118,7 @@ describe('AgentRunner EventEmitter', () => {
       expect(phases.length).toBeGreaterThan(0);
     });
 
-    it('应该在 run() 中发出层次化事件（与 yield 对齐）', async () => {
+    it('should emit hierarchical events during run() (aligned with yield)', async () => {
       const mockResponse: LLMResponse = {
         content: 'Final answer',
         toolCalls: [],
@@ -147,8 +147,8 @@ describe('AgentRunner EventEmitter', () => {
     });
   });
 
-  describe('payload 对齐', () => {
-    it('run:end payload 应包含 state 和 result', async () => {
+  describe('Payload alignment', () => {
+    it('run:end payload should contain state and result', async () => {
       const mockResponse: LLMResponse = {
         content: 'Success answer',
         toolCalls: [],
@@ -172,7 +172,7 @@ describe('AgentRunner EventEmitter', () => {
       expect(endResult!.result.answer).toBe('Success answer');
     });
 
-    it('step:end payload 应包含 step 和 result（与 RunStreamEvent 对齐）', async () => {
+    it('step:end payload should contain step and result (aligned with RunStreamEvent)', async () => {
       const mockResponse: LLMResponse = {
         content: 'Step done',
         toolCalls: [],
@@ -196,7 +196,7 @@ describe('AgentRunner EventEmitter', () => {
       expect(endResult!.step).toBe(0);
     });
 
-    it('step:start payload 应包含 step 和 state（与 RunStreamEvent 对齐）', async () => {
+    it('step:start payload should contain step and state (aligned with RunStreamEvent)', async () => {
       const mockResponse: LLMResponse = {
         content: 'Step answer',
         toolCalls: [],
@@ -220,7 +220,7 @@ describe('AgentRunner EventEmitter', () => {
       expect(startPayload!.state).toBeDefined();
     });
 
-    it('phase-change payload 应包含 from 和 to（无 state，与 StreamEvent 对齐）', async () => {
+    it('phase-change payload should contain from and to (no state, aligned with StreamEvent)', async () => {
       const mockResponse: LLMResponse = {
         content: 'Test',
         toolCalls: [],
@@ -240,7 +240,7 @@ describe('AgentRunner EventEmitter', () => {
       await runner.step(state);
 
       expect(payloads.length).toBeGreaterThan(0);
-      // payload 只包含 from 和 to，不包含 state
+      // payload contains only from and to, not state
       for (const p of payloads) {
         expect(p).toHaveProperty('from');
         expect(p).toHaveProperty('to');
@@ -248,7 +248,7 @@ describe('AgentRunner EventEmitter', () => {
       }
     });
 
-    it('error payload 应包含 error 和 context（与 StreamEvent 对齐）', async () => {
+    it('error payload should contain error and context (aligned with StreamEvent)', async () => {
       const client: ILLMProvider = {
         call: vi.fn(async () => {
           throw new Error('LLM Error');
@@ -278,8 +278,8 @@ describe('AgentRunner EventEmitter', () => {
     });
   });
 
-  describe('多监听器和多 step', () => {
-    it('应该支持多个并发监听器', async () => {
+  describe('Multiple listeners and multiple steps', () => {
+    it('should support multiple concurrent listeners', async () => {
       const mockResponse: LLMResponse = {
         content: 'Test',
         toolCalls: [],
@@ -303,7 +303,7 @@ describe('AgentRunner EventEmitter', () => {
       expect(events2).toContain('run:start');
     });
 
-    it('应该在 run() 的多个 step 中发出 step 事件', async () => {
+    it('should emit step events across multiple steps in run()', async () => {
       const responses: LLMResponse[] = [
         {
           content: '<tool>{"tool": "mock_tool", "arguments": {"value": "test"}}</tool>',

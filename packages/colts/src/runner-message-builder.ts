@@ -44,7 +44,7 @@ Rules:
 =============================`.trim();
   }
 
-  // 顶层 skill：可加载子技能，完成后必须 return_skill
+  // Top-level skill: can load sub-skills, must return_skill when done
   if (skillState.availableSkills?.length) {
     const skillLines = skillState.availableSkills
       .map((s) => `- ${s.name}: ${s.description}`)
@@ -76,7 +76,7 @@ Rules:
 =============================`.trim();
   }
 
-  // 顶层 skill 无子技能
+  // Top-level skill with no sub-skills
   return `=== SKILL MODE: ACTIVE ===
 You are currently executing the '${skillState.current}' skill.
 
@@ -265,7 +265,7 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
       }
 
       case 'tool':
-        // 工具结果使用 pi-ai 的 toolResult role
+        // Tool results use pi-ai's toolResult role
         messages.push({
           role: 'toolResult',
           toolCallId: msg.toolCallId ?? 'unknown',
