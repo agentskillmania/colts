@@ -14,10 +14,41 @@ import type { AppConfig } from '../../src/config.js';
 import type { AgentRunner, AgentState } from '@agentskillmania/colts';
 import { createAgentState } from '@agentskillmania/colts';
 
+// ── mock runner-setup（createRunnerFromConfig / createInitialStateFromConfig）──
+// vi.mock factory 会被 hoist，不能引用外部变量，所以 factory 内部自包含
+
+vi.mock('../../src/runner-setup.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/runner-setup.js')>();
+  const { createAgentState: createState } = await import('@agentskillmania/colts');
+  const { vi: viModule } = await import('vitest');
+
+  // 空 async generator
+  async function* emptyStream() { return; }
+
+  const mockRunner = {
+    runStream: viModule.fn().mockReturnValue(emptyStream()),
+    stepStream: viModule.fn().mockReturnValue(emptyStream()),
+    advanceStream: viModule.fn().mockReturnValue(emptyStream()),
+    chatStream: viModule.fn().mockReturnValue(emptyStream()),
+    skillProvider: undefined,
+    registerTool: viModule.fn(),
+  };
+
+  return {
+    ...actual,
+    interactionCallbacks: { askHuman: null, confirm: null },
+    createRunnerFromConfig: viModule.fn().mockReturnValue(mockRunner),
+    createInitialStateFromConfig: viModule.fn().mockReturnValue(
+      createState({ name: 'test-agent', instructions: 'Test', tools: [] })
+    ),
+  };
+});
+
 // ── mock setup ──
 
 // mock @inkjs/ui 的 TextInput，捕获 onSubmit
 let capturedOnSubmit: ((value: string) => void) | null = null;
+let capturedSelectOnChange: ((value: string) => void) | null = null;
 
 vi.mock('@inkjs/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@inkjs/ui')>();
@@ -26,6 +57,10 @@ vi.mock('@inkjs/ui', async (importOriginal) => {
     TextInput: ({ onSubmit }: { onSubmit: (v: string) => void }) => {
       capturedOnSubmit = onSubmit;
       return React.createElement('text-input-mock');
+    },
+    Select: ({ onChange }: { onChange: (v: string) => void }) => {
+      capturedSelectOnChange = onChange;
+      return React.createElement('select-mock');
     },
   };
 });
@@ -75,6 +110,7 @@ const invalidConfig: AppConfig = {
 describe('App', () => {
   beforeEach(() => {
     capturedOnSubmit = null;
+    capturedSelectOnChange = null;
   });
 
   // ── 路由逻辑 ──
@@ -88,9 +124,9 @@ describe('App', () => {
       expect(frame).not.toContain('RUN');
     });
 
-    it('显示 Provider 选择', () => {
+    it('显示 Provider 选择提示', () => {
       const { lastFrame } = render(<App config={invalidConfig} runner={null} />);
-      expect(lastFrame()).toContain('OpenAI');
+      expect(lastFrame()).toContain('Select your LLM provider');
     });
   });
 
@@ -259,6 +295,50 @@ describe('App', () => {
       }
 
       expect(lastFrame()).toContain('RUN');
+    });
+  });
+
+  // ── SetupWizard 自动切换到 MainTUI ──
+
+  describe('SetupWizard 自动切换 MainTUI', () => {
+    it('SetupWizard 完成后切换到 MainTUI 显示 WelcomeScreen', async () => {
+      const { lastFrame } = render(
+        <App config={invalidConfig} runner={null} />
+      );
+
+      // 初始显示 SetupWizard
+      expect(lastFrame()).toContain('colts-cli Setup');
+
+      // Step 1: 选择 provider
+      await vi.waitFor(() => {
+        expect(capturedSelectOnChange).not.toBeNull();
+      });
+      capturedSelectOnChange!('openai');
+
+      // 等待 step 2，TextInput 出现
+      await vi.waitFor(() => {
+        expect(capturedOnSubmit).not.toBeNull();
+      });
+
+      // Step 2: 输入 API key
+      capturedOnSubmit!('sk-test-key');
+
+      // 等待 step 3，新的 TextInput 出现
+      await vi.waitFor(() => {
+        expect(lastFrame()).toContain('Step 3/3');
+        expect(capturedOnSubmit).not.toBeNull();
+      });
+
+      // Step 3: 输入 model（触发 onComplete → handleSetupComplete → 切换到 MainTUI）
+      capturedOnSubmit!('gpt-4o');
+
+      // 等待状态切换完成，应该显示 MainTUI 的 WelcomeScreen
+      await vi.waitFor(() => {
+        expect(lastFrame()).toContain('Welcome to colts-cli');
+      }, { timeout: 5000 });
+
+      // 不应再包含 SetupWizard
+      expect(lastFrame()).not.toContain('colts-cli Setup');
     });
   });
 });
