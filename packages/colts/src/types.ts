@@ -99,11 +99,6 @@ export interface SkillState {
   current: string | null;
   /** Cached instructions of current skill (to avoid re-loading) */
   loadedInstructions?: string;
-  /** Available skills at top level (for load_skill tool) */
-  availableSkills?: Array<{
-    name: string;
-    description: string;
-  }>;
 }
 
 /**

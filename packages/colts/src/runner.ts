@@ -33,7 +33,9 @@ import type {
 } from './execution.js';
 import type { AdvanceOptions } from './execution.js';
 import { createExecutionState, isTerminalPhase } from './execution.js';
-import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
+import { getToolsForLLM } from './tools/llm-format.js';
+import { DefaultMessageAssembler } from './message-assembler/index.js';
+import type { IMessageAssembler } from './message-assembler/types.js';
 import { compressState, maybeCompress } from './runner-compression.js';
 import { executeAdvance } from './runner-advance.js';
 import type { RunnerContext } from './runner-advance.js';
@@ -252,6 +254,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private compressor?: IContextCompressor;
   private _skillProvider?: ISkillProvider;
   private subAgentConfigs?: Map<string, SubAgentConfig>;
+  private messageAssembler: IMessageAssembler;
   private options: RunnerOptions;
 
   /** Get the Skill provider (used by the CLI layer for the /skill command) */
@@ -300,6 +303,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       ...options,
       maxSteps: options.maxSteps ?? 10,
     };
+
+    // Initialize message assembler (default implementation)
+    this.messageAssembler = new DefaultMessageAssembler();
 
     // Initialize compressor
     if (options.compressor) {
@@ -407,6 +413,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     return {
       llmProvider: this.llmProvider,
       toolRegistry: this.toolRegistry,
+      messageAssembler: this.messageAssembler,
       skillProvider: this._skillProvider,
       subAgentConfigs: this.subAgentConfigs,
       options: {
@@ -601,7 +608,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    * @private
    */
   private buildMessages(state: AgentState): Message[] {
-    return buildMessages(state, {
+    return this.messageAssembler.build(state, {
       systemPrompt: this.options.systemPrompt,
       model: this.options.model,
       skillProvider: this._skillProvider,
@@ -639,10 +646,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       draft.context.skillState = {
         stack: [],
         current: null,
-        availableSkills: this._skillProvider!.listSkills().map((s) => ({
-          name: s.name,
-          description: s.description,
-        })),
       };
     });
   }
