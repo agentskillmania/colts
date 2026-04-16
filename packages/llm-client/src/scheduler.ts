@@ -487,7 +487,7 @@ export class RequestScheduler extends EventEmitter {
           }
         }
       },
-      { priority }
+      { priority, throwOnTimeout: true }
     );
 
     if (result === undefined) {
