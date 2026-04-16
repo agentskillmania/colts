@@ -14,40 +14,16 @@ import type { ToolSchema } from './tools/registry.js';
 /**
  * Build skill mode guide based on current skill state
  *
- * Three states:
- * 1. No skill active → no guide (skill list injected separately by buildMessages)
- * 2. Top-level skill active → ACTIVE mode: respond directly when done, do NOT use return_skill
- * 3. Sub-skill active → SUB-SKILL mode: must call return_skill when done
+ * Unified guide for all skill levels. Every active skill must call
+ * return_skill when done, and may call load_skill to delegate.
  */
 function buildSkillGuide(skillState: SkillState | undefined): string | null {
   if (!skillState || !skillState.current) return null;
 
-  const isInSubSkill = skillState.stack.length > 0;
-
-  if (isInSubSkill) {
-    const parent = skillState.stack[skillState.stack.length - 1].skillName;
-    return `=== SKILL MODE: SUB-SKILL ===
-You are currently executing as a sub-skill.
-
-Parent skill: ${parent}
-Current skill: ${skillState.current}
-
-When you COMPLETE your assigned task, you MUST call the \`return_skill\` tool:
-{
-  "result": "Your specific answer here (be detailed)",
-  "status": "success"
-}
-
-Rules:
-- ALWAYS use return_skill when done — do NOT just say "I'm done"
-- Do NOT call load_skill (you are a sub-skill, not a coordinator)
-=============================`.trim();
-  }
-
-  // Top-level skill: can load sub-skills, must return_skill when done
-  return `=== SKILL MODE: ACTIVE ===
+  return `=== SKILL MODE ===
 You are currently executing the '${skillState.current}' skill.
 
+You may switch to another skill at any time using the \`load_skill\` tool.
 When you COMPLETE your task, you MUST call the \`return_skill\` tool:
 {
   "result": "Your final answer here (be detailed)",
@@ -109,8 +85,8 @@ export function buildMessages(state: AgentState, opts: BuildMessagesOptions): Pi
     systemParts.push(skillGuide);
   }
 
-  // Inject top-level skill list only when not in sub-skill mode
-  if (opts.skillProvider && !state.context.skillState?.current) {
+  // Always inject global skill list when a skill provider is configured
+  if (opts.skillProvider) {
     const skills = opts.skillProvider.listSkills();
     if (skills.length > 0) {
       const skillLines = skills.map((s) => `- ${s.name}: ${s.description}`);

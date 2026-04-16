@@ -1,7 +1,7 @@
 /**
  * @fileoverview Runner Message Builder unit tests
  *
- * Tests dynamic prompt injection and Skill mode switching.
+ * Tests dynamic prompt injection and unified Skill mode guide.
  */
 import { describe, it, expect } from 'vitest';
 import { buildMessages } from '../../src/runner-message-builder.js';
@@ -25,7 +25,7 @@ function createMockState(skillState?: SkillState): AgentState {
 
 describe('buildMessages', () => {
   describe('Skill mode guides', () => {
-    it('should include ACTIVE guide when top-level skill is active', () => {
+    it('should include unified SKILL MODE guide when a skill is active', () => {
       const state = createMockState({
         stack: [],
         current: 'greeting',
@@ -37,28 +37,14 @@ describe('buildMessages', () => {
         (m) => m.role === 'user' && typeof m.content === 'string'
       );
 
-      expect(systemMessage?.content).toContain('SKILL MODE: ACTIVE');
+      expect(systemMessage?.content).toContain('SKILL MODE');
+      expect(systemMessage?.content).toContain("executing the 'greeting' skill");
       expect(systemMessage?.content).toContain('return_skill');
       expect(systemMessage?.content).toContain('ALWAYS use return_skill when done');
+      expect(systemMessage?.content).toContain('load_skill');
     });
 
-    it('should include ACTIVE guide for top-level skill with no sub-skills', () => {
-      const state = createMockState({
-        stack: [],
-        current: 'greeting',
-        loadedInstructions: 'Greet the user.',
-      });
-
-      const messages = buildMessages(state, { model: 'gpt-4' });
-      const systemMessage = messages.find(
-        (m) => m.role === 'user' && typeof m.content === 'string'
-      );
-
-      expect(systemMessage?.content).toContain('SKILL MODE: ACTIVE');
-      expect(systemMessage?.content).toContain('ALWAYS use return_skill when done');
-    });
-
-    it('should include SUB-SKILL guide when in sub-skill mode', () => {
+    it('should include unified guide for nested skill (sub-skill)', () => {
       const state = createMockState({
         stack: [{ skillName: 'data-analysis', loadedAt: Date.now() }],
         current: 'data-cleaning',
@@ -70,9 +56,9 @@ describe('buildMessages', () => {
         (m) => m.role === 'user' && typeof m.content === 'string'
       );
 
-      expect(systemMessage?.content).toContain('SKILL MODE: SUB-SKILL');
-      expect(systemMessage?.content).toContain('Parent skill: data-analysis');
-      expect(systemMessage?.content).toContain('Current skill: data-cleaning');
+      // Unified guide: same SKILL MODE regardless of nesting level
+      expect(systemMessage?.content).toContain('SKILL MODE');
+      expect(systemMessage?.content).toContain("executing the 'data-cleaning' skill");
       expect(systemMessage?.content).toContain('return_skill');
       expect(systemMessage?.content).toContain('Data Cleaning Skill');
     });
@@ -102,9 +88,12 @@ describe('buildMessages', () => {
       expect(systemMessage?.content).not.toContain('SKILL MODE');
     });
 
-    it('should show SUB-SKILL mode in nested scenario, not ACTIVE', () => {
+    it('should use unified guide for deeply nested skills', () => {
       const state = createMockState({
-        stack: [{ skillName: 'parent', loadedAt: Date.now() }],
+        stack: [
+          { skillName: 'grandparent', loadedAt: Date.now() - 2000 },
+          { skillName: 'parent', loadedAt: Date.now() - 1000 },
+        ],
         current: 'child',
       });
 
@@ -113,14 +102,33 @@ describe('buildMessages', () => {
         (m) => m.role === 'user' && typeof m.content === 'string'
       );
 
-      // Should show sub-skill mode, not active
-      expect(systemMessage?.content).toContain('SUB-SKILL');
-      expect(systemMessage?.content).not.toContain('ACTIVE');
+      // Unified guide shows the active skill name
+      expect(systemMessage?.content).toContain('SKILL MODE');
+      expect(systemMessage?.content).toContain("executing the 'child' skill");
+    });
+  });
+
+  describe('Prompt contract', () => {
+    it('buildSkillGuide must instruct return_skill and not contain contradictory instructions', () => {
+      const state = createMockState({
+        stack: [],
+        current: 'poet',
+      });
+
+      const messages = buildMessages(state, { model: 'gpt-4' });
+      const systemMessage = messages.find(
+        (m) => m.role === 'user' && typeof m.content === 'string'
+      );
+
+      expect(systemMessage?.content).toContain('return_skill');
+      expect(systemMessage?.content).not.toContain('do NOT call return_skill');
+      // Unified guide allows load_skill at all levels
+      expect(systemMessage?.content).toContain('load_skill');
     });
   });
 
   describe('Skill instructions loading', () => {
-    it('should include loadedInstructions in sub-skill mode', () => {
+    it('should include loadedInstructions in skill mode', () => {
       const state = createMockState({
         stack: [{ skillName: 'parent', loadedAt: Date.now() }],
         current: 'child',
@@ -153,27 +161,6 @@ describe('buildMessages', () => {
       const baseIndex = content.indexOf('You are a helpful assistant.');
       const skillIndex = content.indexOf('# Child Skill');
       expect(baseIndex).toBeLessThan(skillIndex);
-    });
-  });
-
-  describe('Multi-level nesting', () => {
-    it('should show correct parent in deep nesting', () => {
-      const state = createMockState({
-        stack: [
-          { skillName: 'grandparent', loadedAt: Date.now() - 2000 },
-          { skillName: 'parent', loadedAt: Date.now() - 1000 },
-        ],
-        current: 'child',
-      });
-
-      const messages = buildMessages(state, { model: 'gpt-4' });
-      const systemMessage = messages.find(
-        (m) => m.role === 'user' && typeof m.content === 'string'
-      );
-
-      // Should show immediate parent (top of stack)
-      expect(systemMessage?.content).toContain('Parent skill: parent');
-      expect(systemMessage?.content).toContain('Current skill: child');
     });
   });
 });
