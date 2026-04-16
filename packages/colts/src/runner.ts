@@ -639,10 +639,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       draft.context.skillState = {
         stack: [],
         current: null,
-        availableSkills: this._skillProvider!.listSkills().map((s) => ({
-          name: s.name,
-          description: s.description,
-        })),
       };
     });
   }

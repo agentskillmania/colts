@@ -45,38 +45,6 @@ Rules:
   }
 
   // Top-level skill: can load sub-skills, must return_skill when done
-  if (skillState.availableSkills?.length) {
-    const skillLines = skillState.availableSkills
-      .map((s) => `- ${s.name}: ${s.description}`)
-      .join('\n');
-
-    return `=== SKILL MODE: ACTIVE ===
-You are currently executing the '${skillState.current}' skill.
-
-You can delegate to sub-skills when needed:
-
-Use the \`load_skill\` tool:
-{
-  "name": "skill-name",
-  "task": "Describe what you need done"
-}
-
-Available sub-skills:
-${skillLines}
-
-When you COMPLETE your task, you MUST call the \`return_skill\` tool:
-{
-  "result": "Your final answer here (be detailed)",
-  "status": "success"
-}
-
-Rules:
-- ALWAYS use return_skill when done — do NOT just respond with text
-- You may call load_skill to delegate sub-tasks to specialized skills
-=============================`.trim();
-  }
-
-  // Top-level skill with no sub-skills
   return `=== SKILL MODE: ACTIVE ===
 You are currently executing the '${skillState.current}' skill.
 
@@ -88,6 +56,7 @@ When you COMPLETE your task, you MUST call the \`return_skill\` tool:
 
 Rules:
 - ALWAYS use return_skill when done — do NOT just respond with text
+- You may call load_skill to delegate sub-tasks to specialized skills
 =============================`.trim();
 }
 

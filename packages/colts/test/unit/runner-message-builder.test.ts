@@ -25,15 +25,11 @@ function createMockState(skillState?: SkillState): AgentState {
 
 describe('buildMessages', () => {
   describe('Skill mode guides', () => {
-    it('should include ACTIVE guide when top-level skill is active with availableSkills', () => {
+    it('should include ACTIVE guide when top-level skill is active', () => {
       const state = createMockState({
         stack: [],
         current: 'greeting',
         loadedInstructions: 'Greet the user warmly.',
-        availableSkills: [
-          { name: 'code-review', description: 'Review code' },
-          { name: 'testing', description: 'Write tests' },
-        ],
       });
 
       const messages = buildMessages(state, { model: 'gpt-4' });
@@ -42,14 +38,11 @@ describe('buildMessages', () => {
       );
 
       expect(systemMessage?.content).toContain('SKILL MODE: ACTIVE');
-      expect(systemMessage?.content).toContain('code-review: Review code');
-      expect(systemMessage?.content).toContain('testing: Write tests');
-      expect(systemMessage?.content).toContain('load_skill');
-      // Top-level guide should require return_skill
+      expect(systemMessage?.content).toContain('return_skill');
       expect(systemMessage?.content).toContain('ALWAYS use return_skill when done');
     });
 
-    it('should include ACTIVE guide without sub-skill list when no availableSkills', () => {
+    it('should include ACTIVE guide for top-level skill with no sub-skills', () => {
       const state = createMockState({
         stack: [],
         current: 'greeting',
@@ -113,7 +106,6 @@ describe('buildMessages', () => {
       const state = createMockState({
         stack: [{ skillName: 'parent', loadedAt: Date.now() }],
         current: 'child',
-        availableSkills: [{ name: 'other', description: 'Other skill' }],
       });
 
       const messages = buildMessages(state, { model: 'gpt-4' });
