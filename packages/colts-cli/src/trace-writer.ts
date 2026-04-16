@@ -292,9 +292,18 @@ export class TraceWriter {
       }
 
       case 'tool:end': {
-        // 从 tool:start 配对获取 durationMs 和 tool/callId 信息
-        const info = this.getFirstToolStartInfo();
-        const durationMs = info !== null ? Date.now() - info.startTime : null;
+        // 优先用 callId 精确匹配，fallback 到 FIFO
+        const info = event.callId
+          ? this.toolStartInfos.get(event.callId)
+          : this.getFirstToolStartInfo();
+        if (event.callId && info) {
+          this.toolStartInfos.delete(event.callId);
+        } else if (!event.callId && info) {
+          // FIFO 匹配：从 map 中移除
+          const firstKey = this.toolStartInfos.keys().next().value;
+          if (firstKey !== undefined) this.toolStartInfos.delete(firstKey);
+        }
+        const durationMs = info !== null && info !== undefined ? Date.now() - info.startTime : null;
         return {
           event: 'tool.end',
           ts,
@@ -302,7 +311,7 @@ export class TraceWriter {
           tool: info?.tool ?? '',
           result: truncate(event.result),
           durationMs,
-          callId: info?.callId ?? '',
+          callId: info?.callId ?? event.callId ?? '',
         };
       }
 

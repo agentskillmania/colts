@@ -51,7 +51,7 @@ export type StreamEvent =
   | { type: 'phase-change'; from: Phase; to: Phase }
   | { type: 'token'; token: string }
   | { type: 'tool:start'; action: Action }
-  | { type: 'tool:end'; result: unknown }
+  | { type: 'tool:end'; result: unknown; callId?: string }
   | { type: 'tools:start'; actions: Action[] }
   | { type: 'tools:end'; results: Record<string, unknown> }
   | { type: 'error'; error: Error; context: { toolName?: string; step: number } }

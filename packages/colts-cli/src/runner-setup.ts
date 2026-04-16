@@ -48,7 +48,7 @@ export function createRunnerFromConfig(config: AppConfig): AgentRunner | null {
   const registry = new ConfirmableRegistry(innerRegistry, {
     confirmTools,
     confirm: async (toolName, args) => {
-      if (!interactionCallbacks.confirm) return true;
+      if (!interactionCallbacks.confirm) return false;
       return interactionCallbacks.confirm(toolName, args);
     },
   });

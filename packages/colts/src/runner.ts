@@ -377,6 +377,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       const delegateTool = createDelegateTool({
         subAgentConfigs: this.subAgentConfigs,
         llmProvider: this.llmProvider,
+        model: this.options.model,
         parentToolRegistry: this.toolRegistry,
         subAgentFactory: this.subAgentFactory,
       });
@@ -746,7 +747,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       if (result.phase.type === 'tool-result') {
         const keys = Object.keys(result.phase.results);
         if (keys.length === 1) {
-          this.emit('tool:end', { result: result.phase.results[keys[0]] });
+          this.emit('tool:end', {
+            result: result.phase.results[keys[0]],
+            callId: keys[0],
+          });
         } else {
           this.emit('tools:end', { results: result.phase.results });
         }
