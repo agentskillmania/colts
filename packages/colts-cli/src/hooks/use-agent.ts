@@ -578,7 +578,7 @@ async function executeRun(
  * @param signal - AbortSignal for cancellation
  * @param pauseFn - Async function that pauses execution until resumed
  */
-async function executeStep(
+export async function executeStep(
   runner: AgentRunner,
   currentState: AgentState,
   userInput: string,
@@ -673,7 +673,7 @@ async function executeStep(
  * @param signal - AbortSignal for cancellation
  * @param pauseFn - Async function that pauses execution until resumed
  */
-async function executeAdvance(
+export async function executeAdvance(
   runner: AgentRunner,
   currentState: AgentState,
   userInput: string,
