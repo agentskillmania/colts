@@ -21,7 +21,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { createRealLLMClient } from './helpers.js';
 import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
+import { createAgentState, addUserMessage } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
 import {
   ToolRegistry,
@@ -50,15 +50,13 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
           // Given: A runner with ask_human tool
           const handlerResponse = { name: { type: 'direct' as const, value: 'Alice' } };
 
-          const askHuman = createAskHumanTool({
-            handler: async ({ questions }) => {
-              // Simulate user answering all questions
-              const answers: Record<string, { type: 'direct'; value: string }> = {};
-              for (const q of questions) {
-                answers[q.id] = handlerResponse[q.id] ?? { type: 'direct', value: 'Test Answer' };
-              }
-              return answers;
-            },
+          const askHuman = createAskHumanTool(async ({ questions }) => {
+            // Simulate user answering all questions
+            const answers: Record<string, { type: 'direct'; value: string }> = {};
+            for (const q of questions) {
+              answers[q.id] = handlerResponse[q.id] ?? { type: 'direct', value: 'Test Answer' };
+            }
+            return answers;
           });
 
           const registry = new ToolRegistry();
@@ -85,8 +83,11 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
 
           const state = createAgentState(config);
 
+          // Provide a user message to trigger LLM interaction
+          const stateWithMsg = addUserMessage(state, 'Hello! I would like to talk to you.');
+
           // When: Run to completion
-          const { state: finalState, result } = await runner.run(state);
+          const { state: finalState, result } = await runner.run(stateWithMsg);
 
           // Then: Should succeed
           expect(result.type).toBe('success');
@@ -113,14 +114,10 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
         'should ask for preferences and give recommendation',
         async () => {
           // Given: A runner with ask_human tool that provides multiple answers
-          const askHuman = createAskHumanTool({
-            handler: async ({ questions }) => {
-              return {
-                cuisine: { type: 'direct' as const, value: 'Italian' },
-                budget: { type: 'direct' as const, value: 'mid-range' },
-              };
-            },
-          });
+          const askHuman = createAskHumanTool(async () => ({
+            cuisine: { type: 'direct' as const, value: 'Italian' },
+            budget: { type: 'direct' as const, value: 'mid-range' },
+          }));
 
           const registry = new ToolRegistry();
           registry.register(askHuman);
@@ -146,8 +143,11 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
 
           const state = createAgentState(config);
 
+          // Provide a user message to trigger LLM interaction
+          const stateWithMsg = addUserMessage(state, 'I need a restaurant recommendation.');
+
           // When: Run to completion
-          const { result } = await runner.run(state);
+          const { result } = await runner.run(stateWithMsg);
 
           // Then: Should succeed
           expect(result.type).toBe('success');
@@ -172,11 +172,9 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
         'should work with streaming execution',
         async () => {
           // Given: A runner with ask_human tool
-          const askHuman = createAskHumanTool({
-            handler: async () => ({
-              topic: { type: 'direct' as const, value: 'TypeScript' },
-            }),
-          });
+          const askHuman = createAskHumanTool(async () => ({
+            topic: { type: 'direct' as const, value: 'TypeScript' },
+          }));
 
           const registry = new ToolRegistry();
           registry.register(askHuman);

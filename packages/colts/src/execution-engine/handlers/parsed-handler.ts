@@ -35,11 +35,9 @@ export class ParsedHandler implements IPhaseHandler {
         toolCalls,
       });
       execState.phase = { type: 'parsed', thought, action: execState.action };
-      // After parsed, go to executing-tool
-      // Note: the actual phase set here is 'parsed' for observability,
-      // then the runner loop will call advance again for executing-tool
-      // But in the original code, advanceFromParsed directly returns executing-tool phase
-      execState.phase = { type: 'executing-tool', action: execState.action };
+      // Pass all actions to executing-tool phase for parallel execution
+      const actions = execState.allActions ?? [execState.action];
+      execState.phase = { type: 'executing-tool', actions };
       return { state: newState, phase: execState.phase, done: false };
     } else {
       // No action: go to completed with final answer

@@ -420,7 +420,7 @@ describe('ExecutingToolHandler', () => {
   it('should execute tool and transition to tool-result', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.phase = { type: 'executing-tool', action: createAction() };
+    execState.phase = { type: 'executing-tool', actions: [createAction()] };
     execState.action = createAction();
     const registry = createMockToolRegistry('42');
     const ctx = createMockCtx();
@@ -437,20 +437,20 @@ describe('ExecutingToolHandler', () => {
   it('should throw when no action set', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.phase = { type: 'executing-tool', action: createAction() };
-    // No action set
+    execState.phase = { type: 'executing-tool', actions: [] };
+    // No actions set
     const registry = createMockToolRegistry();
     const ctx = createMockCtx();
 
     await expect(handler.execute(ctx, state, execState, registry)).rejects.toThrow(
-      'No action to execute'
+      'No actions to execute'
     );
   });
 
   it('should throw when no tool registry provided', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction();
+    execState.phase = { type: 'executing-tool', actions: [createAction()] };
     const ctx = createMockCtx();
 
     await expect(handler.execute(ctx, state, execState)).rejects.toThrow(
@@ -461,7 +461,7 @@ describe('ExecutingToolHandler', () => {
   it('should handle tool execution error gracefully', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction();
+    execState.phase = { type: 'executing-tool', actions: [createAction()] };
     const registry = createMockToolRegistry();
     (registry.execute as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Tool crashed'));
 
@@ -477,7 +477,7 @@ describe('ExecutingToolHandler', () => {
   it('should handle non-Error thrown value from tool', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction();
+    execState.phase = { type: 'executing-tool', actions: [createAction()] };
     const registry = createMockToolRegistry();
     (registry.execute as ReturnType<typeof vi.fn>).mockRejectedValue('string error');
 
@@ -491,7 +491,7 @@ describe('ExecutingToolHandler', () => {
   it('should format SWITCH_SKILL signal as LLM-friendly text', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction({ tool: 'load_skill' });
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
     const switchSignal = {
       type: 'SWITCH_SKILL' as const,
       to: 'my-skill',
@@ -519,7 +519,7 @@ describe('ExecutingToolHandler', () => {
       stack: [],
     };
     const execState = createExecutionState();
-    execState.action = createAction({ tool: 'load_skill' });
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
     const switchSignal = {
       type: 'SWITCH_SKILL' as const,
       to: 'my-skill',
@@ -531,8 +531,9 @@ describe('ExecutingToolHandler', () => {
 
     const result = await handler.execute(ctx, state, execState, registry);
 
+    // Handler formats SWITCH_SKILL generically; same-skill detection is in processToolResult
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain('already active');
+    expect(toolMsg?.content).toContain("Skill 'my-skill' loaded");
   });
 
   it('should handle SWITCH_SKILL to skill already in stack', async () => {
@@ -542,7 +543,7 @@ describe('ExecutingToolHandler', () => {
       stack: [{ skillName: 'my-skill', loadedAt: Date.now() }],
     };
     const execState = createExecutionState();
-    execState.action = createAction({ tool: 'load_skill' });
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
     const switchSignal = {
       type: 'SWITCH_SKILL' as const,
       to: 'my-skill',
@@ -554,14 +555,15 @@ describe('ExecutingToolHandler', () => {
 
     const result = await handler.execute(ctx, state, execState, registry);
 
+    // Handler formats SWITCH_SKILL generically; cyclic detection is in processToolResult
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain('already in the call stack');
+    expect(toolMsg?.content).toContain("Skill 'my-skill' loaded");
   });
 
   it('should format RETURN_SKILL signal', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction({ tool: 'return_skill' });
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'return_skill' })] };
     const returnSignal = {
       type: 'RETURN_SKILL' as const,
       result: 'Task completed',
@@ -579,7 +581,7 @@ describe('ExecutingToolHandler', () => {
   it('should format RETURN_SKILL with non-string result as JSON', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction({ tool: 'return_skill' });
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'return_skill' })] };
     const returnSignal = {
       type: 'RETURN_SKILL' as const,
       result: { key: 'value' },
@@ -597,7 +599,7 @@ describe('ExecutingToolHandler', () => {
   it('should format SKILL_NOT_FOUND signal', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction({ tool: 'load_skill' });
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
     const notFoundSignal = {
       type: 'SKILL_NOT_FOUND' as const,
       requested: 'missing-skill',
@@ -616,7 +618,7 @@ describe('ExecutingToolHandler', () => {
   it('should format non-signal result as JSON when not a string', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction();
+    execState.phase = { type: 'executing-tool', actions: [createAction()] };
     const registry = createMockToolRegistry({ count: 42 });
     const ctx = createMockCtx();
 
@@ -629,7 +631,7 @@ describe('ExecutingToolHandler', () => {
   it('should use default task instruction when task is default text', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction({ tool: 'load_skill' });
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
     const switchSignal = {
       type: 'SWITCH_SKILL' as const,
       to: 'new-skill',
@@ -651,7 +653,7 @@ describe('ExecutingToolHandler', () => {
   it('should pass abort signal to tool execution', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction();
+    execState.phase = { type: 'executing-tool', actions: [createAction()] };
     const registry = createMockToolRegistry('ok');
     const ctx = createMockCtx();
     const signal = new AbortController().signal;
@@ -664,7 +666,7 @@ describe('ExecutingToolHandler', () => {
   it('should increment step count in result state', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction();
+    execState.phase = { type: 'executing-tool', actions: [createAction()] };
     const registry = createMockToolRegistry('ok');
     const ctx = createMockCtx();
 
@@ -676,7 +678,7 @@ describe('ExecutingToolHandler', () => {
   it('should handle unknown skill signal type (default JSON)', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.action = createAction();
+    execState.phase = { type: 'executing-tool', actions: [createAction()] };
     const unknownSignal = { type: 'UNKNOWN_SIGNAL', data: 123 };
     const registry = createMockToolRegistry(unknownSignal);
     const ctx = createMockCtx();
@@ -685,6 +687,98 @@ describe('ExecutingToolHandler', () => {
 
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
     expect(toolMsg?.content).toContain('UNKNOWN_SIGNAL');
+  });
+
+  // =========================================================================
+  // Parallel tool calling tests
+  // =========================================================================
+
+  it('should execute multiple actions in parallel via Promise.all', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const action1 = createAction({ tool: 'weather', id: 'tc-1' });
+    const action2 = createAction({ tool: 'weather', id: 'tc-2' });
+    const action3 = createAction({ tool: 'weather', id: 'tc-3' });
+    execState.phase = { type: 'executing-tool', actions: [action1, action2, action3] };
+
+    // Each call returns a different result based on arguments
+    const registry = createMockToolRegistry();
+    (registry.execute as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce('Beijing: 25°C')
+      .mockResolvedValueOnce('Shanghai: 28°C')
+      .mockResolvedValueOnce('Guangzhou: 30°C');
+
+    const ctx = createMockCtx();
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    // Phase should be tool-result with aggregated results
+    expect(result.phase.type).toBe('tool-result');
+    if (result.phase.type === 'tool-result') {
+      expect(result.phase.results).toEqual({
+        'tc-1': 'Beijing: 25°C',
+        'tc-2': 'Shanghai: 28°C',
+        'tc-3': 'Guangzhou: 30°C',
+      });
+    }
+
+    // Tool messages: one per action
+    const toolMsgs = result.state.context.messages.filter((m) => m.role === 'tool');
+    expect(toolMsgs.length).toBe(3);
+    expect(toolMsgs[0].content).toBe('Beijing: 25°C');
+    expect(toolMsgs[1].content).toBe('Shanghai: 28°C');
+    expect(toolMsgs[2].content).toBe('Guangzhou: 30°C');
+
+    // Step count incremented once (not per action)
+    expect(result.state.context.stepCount).toBe(1);
+  });
+
+  it('should handle partial errors in parallel tool execution', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const action1 = createAction({ tool: 'search', id: 'tc-a' });
+    const action2 = createAction({ tool: 'search', id: 'tc-b' });
+    execState.phase = { type: 'executing-tool', actions: [action1, action2] };
+
+    const registry = createMockToolRegistry();
+    (registry.execute as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce('result A')
+      .mockRejectedValueOnce(new Error('Tool B failed'));
+
+    const ctx = createMockCtx();
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    expect(result.phase.type).toBe('tool-result');
+    if (result.phase.type === 'tool-result') {
+      expect(result.phase.results['tc-a']).toBe('result A');
+      expect(result.phase.results['tc-b']).toBe('Error: Tool B failed');
+    }
+  });
+
+  it('should only check skill signal on first result in parallel execution', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const action1 = createAction({ tool: 'load_skill', id: 'tc-s1' });
+    const action2 = createAction({ tool: 'calculator', id: 'tc-s2' });
+    execState.phase = { type: 'executing-tool', actions: [action1, action2] };
+
+    const switchSignal = {
+      type: 'SWITCH_SKILL' as const,
+      to: 'research',
+      instructions: 'Research well',
+      task: 'Do research',
+    };
+    const registry = createMockToolRegistry();
+    (registry.execute as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(switchSignal)
+      .mockResolvedValueOnce('42');
+
+    const ctx = createMockCtx();
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    // Should inject task message (skill signal on first result)
+    const taskMsg = result.state.context.messages[result.state.context.messages.length - 1];
+    expect(taskMsg.role).toBe('user');
+    expect(taskMsg.content).toBe('Do research');
   });
 });
 
@@ -703,7 +797,7 @@ describe('ToolResultHandler', () => {
     const state = createMockState();
     const execState = createExecutionState();
     execState.thought = 'Processing result';
-    execState.phase = { type: 'tool-result', result: 'some result' };
+    execState.phase = { type: 'tool-result', results: { tc1: 'some result' } };
     const ctx = createMockCtx();
 
     const result = handler.execute(ctx, state, execState);

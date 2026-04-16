@@ -48,6 +48,7 @@ export type ToolPostEffect =
   | { type: 'subagent:end'; name: string; result: unknown }
   // Tool completion
   | { type: 'tool:end'; result: unknown }
+  | { type: 'tools:end'; results: Record<string, unknown> }
   // Error
   | { type: 'error'; error: Error; context: { step: number } }
   // Step control
@@ -104,7 +105,10 @@ export async function processToolResult(
     throw new Error('processToolResult expects phase type "tool-result"');
   }
 
-  const result = phase.result;
+  const results = phase.results;
+  const resultKeys = Object.keys(results);
+  // Take the first result for skill signal detection and backward compat
+  const result = resultKeys.length > 0 ? results[resultKeys[0]] : undefined;
   const action = execState.action;
   let currentState = state;
 
@@ -200,7 +204,11 @@ export async function processToolResult(
   }
 
   // 3. Plain tool result (not a skill signal)
-  effects.push({ type: 'tool:end', result });
+  if (resultKeys.length <= 1) {
+    effects.push({ type: 'tool:end', result });
+  } else {
+    effects.push({ type: 'tools:end', results });
+  }
 
   if (isDelegate) {
     const agentName = String(action!.arguments.agent ?? '');

@@ -31,8 +31,8 @@ export type Phase =
   | { type: 'llm-response'; response: string }
   | { type: 'parsing' }
   | { type: 'parsed'; thought: string; action?: Action }
-  | { type: 'executing-tool'; action: Action }
-  | { type: 'tool-result'; result: unknown }
+  | { type: 'executing-tool'; actions: Action[] }
+  | { type: 'tool-result'; results: Record<string, unknown> }
   | { type: 'completed'; answer: string }
   | { type: 'error'; error: Error };
 
@@ -52,6 +52,8 @@ export type StreamEvent =
   | { type: 'token'; token: string }
   | { type: 'tool:start'; action: Action }
   | { type: 'tool:end'; result: unknown }
+  | { type: 'tools:start'; actions: Action[] }
+  | { type: 'tools:end'; results: Record<string, unknown> }
   | { type: 'error'; error: Error; context: { toolName?: string; step: number } }
   | { type: 'compressing' }
   | { type: 'compressed'; summary: string; removedCount: number }

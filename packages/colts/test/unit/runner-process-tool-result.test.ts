@@ -117,7 +117,7 @@ describe('processToolResult', () => {
   it('should return tool:end + step:continue-return for a plain tool result', async () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
-    execState.phase = { type: 'tool-result', result: 'plain result' };
+    execState.phase = { type: 'tool-result', results: { tc1: 'plain result' } };
     execState.action = { id: 'tc1', tool: 'calculator', arguments: { expr: '1+1' } };
 
     const outcome = await processToolResult(state, execState);
@@ -349,7 +349,7 @@ describe('processToolResult - skill signals', () => {
       instructions: 'Research thoroughly',
       task: 'Find sources about X',
     };
-    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.phase = { type: 'tool-result', results: { tc1: switchSignal } };
     execState.action = {
       id: 'tc1',
       tool: 'load_skill',
@@ -401,7 +401,7 @@ describe('processToolResult - skill signals', () => {
       instructions: 'Edit carefully',
       task: 'Review the draft',
     };
-    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.phase = { type: 'tool-result', results: { tc2: switchSignal } };
     execState.action = {
       id: 'tc2',
       tool: 'load_skill',
@@ -445,7 +445,7 @@ describe('processToolResult - skill signals', () => {
       instructions: 'Research thoroughly',
       task: 'Do it again',
     };
-    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.phase = { type: 'tool-result', results: { tc3: switchSignal } };
     execState.action = {
       id: 'tc3',
       tool: 'load_skill',
@@ -477,7 +477,7 @@ describe('processToolResult - skill signals', () => {
       instructions: 'Research thoroughly',
       task: 'Cycle attempt',
     };
-    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.phase = { type: 'tool-result', results: { tc4: switchSignal } };
     execState.action = {
       id: 'tc4',
       tool: 'load_skill',
@@ -508,7 +508,7 @@ describe('processToolResult - skill signals', () => {
       result: 'Found 3 relevant papers',
       status: 'success' as const,
     };
-    execState.phase = { type: 'tool-result', result: returnSignal };
+    execState.phase = { type: 'tool-result', results: { tc5: returnSignal } };
     execState.action = {
       id: 'tc5',
       tool: 'return_skill',
@@ -556,7 +556,7 @@ describe('processToolResult - skill signals', () => {
       result: 'Draft completed',
       status: 'success' as const,
     };
-    execState.phase = { type: 'tool-result', result: returnSignal };
+    execState.phase = { type: 'tool-result', results: { tc6: returnSignal } };
     execState.action = {
       id: 'tc6',
       tool: 'return_skill',
@@ -593,7 +593,7 @@ describe('processToolResult - skill signals', () => {
       requested: 'nonexistent',
       available: ['research', 'writer'],
     };
-    execState.phase = { type: 'tool-result', result: notFoundSignal };
+    execState.phase = { type: 'tool-result', results: { tc7: notFoundSignal } };
     execState.action = {
       id: 'tc7',
       tool: 'load_skill',
@@ -624,7 +624,7 @@ describe('processToolResult - delegate tools', () => {
   it('should emit subagent:start + tool:end + subagent:end + step:continue-return for delegate + plain result', async () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
-    execState.phase = { type: 'tool-result', result: 'delegated task completed' };
+    execState.phase = { type: 'tool-result', results: { tc8: 'delegated task completed' } };
     execState.action = {
       id: 'tc8',
       tool: 'delegate',
@@ -666,7 +666,7 @@ describe('processToolResult - delegate tools', () => {
       instructions: 'Research thoroughly',
       task: 'Find sources',
     };
-    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.phase = { type: 'tool-result', results: { tc9: switchSignal } };
     execState.action = {
       id: 'tc9',
       tool: 'delegate',
@@ -705,5 +705,64 @@ describe('processToolResult - delegate tools', () => {
       result: unknown;
     };
     expect(subEnd.name).toBe('research-agent');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// processToolResult - multi-result (parallel tool calling) tests
+// ---------------------------------------------------------------------------
+
+describe('processToolResult - multi-result parallel tools', () => {
+  it('should emit tools:end for multiple plain tool results', async () => {
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+    const multiResults = {
+      'tc-1': 'Beijing: 25°C',
+      'tc-2': 'Shanghai: 28°C',
+      'tc-3': 'Guangzhou: 30°C',
+    };
+    execState.phase = { type: 'tool-result', results: multiResults };
+    execState.action = {
+      id: 'tc-1',
+      tool: 'weather',
+      arguments: { city: 'Beijing' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    // Multiple plain results → tools:end + step:continue-return
+    expect(outcome.effects.map((e) => e.type)).toEqual(['tools:end', 'step:continue-return']);
+
+    const toolsEnd = outcome.effects[0] as {
+      type: 'tools:end';
+      results: Record<string, unknown>;
+    };
+    expect(toolsEnd.results).toEqual(multiResults);
+
+    const stepContinue = outcome.effects[1] as {
+      type: 'step:continue-return';
+      toolResult: unknown;
+    };
+    // toolResult should be the first result for backward compat
+    expect(stepContinue.toolResult).toBe('Beijing: 25°C');
+  });
+
+  it('should emit tool:end for single result even with results map', async () => {
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+    execState.phase = { type: 'tool-result', results: { 'tc-1': '42' } };
+    execState.action = {
+      id: 'tc-1',
+      tool: 'calculator',
+      arguments: { expr: '6*7' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    // Single result → tool:end (not tools:end)
+    expect(outcome.effects.map((e) => e.type)).toEqual(['tool:end', 'step:continue-return']);
+
+    const toolEnd = outcome.effects[0] as { type: 'tool:end'; result: unknown };
+    expect(toolEnd.result).toBe('42');
   });
 });
