@@ -61,6 +61,8 @@ export interface ColtsConfig extends Record<string, unknown> {
     /** Whether delegation is allowed */
     allowDelegation?: boolean;
   }>;
+  /** 需要用户确认的工具列表 */
+  confirmTools?: string[];
 }
 
 /**
@@ -91,6 +93,8 @@ export interface AppConfig {
   skills?: string[];
   /** SubAgent configuration list */
   subAgents?: ColtsConfig['subAgents'];
+  /** 需要用户确认的工具列表 */
+  confirmTools?: string[];
 }
 
 /** Default maximum number of steps */
@@ -220,6 +224,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
       requestTimeout: config.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT,
       skills: config.skills,
       subAgents: config.subAgents,
+      confirmTools: config.confirmTools,
     };
   } catch {
     return { hasValidConfig: false, configPath };
@@ -244,6 +249,29 @@ export async function saveConfig(
   const settings = new Settings<ColtsConfig>(configPath);
   await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
   settings.set(keyPath, value);
+  await settings.save();
+}
+
+/**
+ * 首次配置向导保存
+ *
+ * 将 provider、apiKey、model 写入配置文件。
+ *
+ * @param setup - 向导收集的配置
+ * @param options - 保存选项
+ */
+export async function saveSetup(
+  setup: { provider: string; apiKey: string; model: string },
+  options?: { globalDir?: string }
+): Promise<void> {
+  const configPath = getGlobalConfigPath(options?.globalDir);
+  await fs.mkdir(path.dirname(configPath), { recursive: true });
+
+  const settings = new Settings<ColtsConfig>(configPath);
+  await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
+  settings.set('llm.provider', setup.provider);
+  settings.set('llm.apiKey', setup.apiKey);
+  settings.set('llm.model', setup.model);
   await settings.save();
 }
 

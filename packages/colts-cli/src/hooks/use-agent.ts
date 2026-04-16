@@ -15,10 +15,12 @@ import {
   createAgentState,
   addUserMessage,
   createExecutionState,
+  isTerminalPhase,
   loadSkill,
 } from '@agentskillmania/colts';
 import type { TimelineEntry, DetailLevel } from '../types/timeline.js';
 import { TraceWriter } from '../trace-writer.js';
+import { StreamEventConsumer } from './stream-event-consumer.js';
 
 /**
  * Execution mode
@@ -143,6 +145,17 @@ export function useAgent(
   skillProvider?: ISkillProvider
 ): UseAgentReturn {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
+
+  /** 条目数量上限，超过时裁剪最老的条目，防止长对话导致渲染卡顿 */
+  const MAX_ENTRIES = 200;
+
+  /** setEntries 包装：自动裁剪超出上限的条目 */
+  const trimEntries = useCallback((action: React.SetStateAction<TimelineEntry[]>) => {
+    setEntries((prev) => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      return next.length > MAX_ENTRIES ? next.slice(-MAX_ENTRIES) : next;
+    });
+  }, []);
   const [mode, setMode] = useState<ExecutionMode>('run');
   const [detailLevel, setDetailLevelState] = useState<DetailLevel>('compact');
   const [isRunning, setIsRunning] = useState(false);
@@ -169,12 +182,12 @@ export function useAgent(
 
   /** Add a system entry */
   const addSystemEntry = useCallback((content: string) => {
-    setEntries((prev) => [...prev, { type: 'system', id: uid(), content, timestamp: Date.now() }]);
+    trimEntries((prev) => [...prev, { type: 'system', id: uid(), content, timestamp: Date.now() }]);
   }, []);
 
   /** Add an error entry */
   const addErrorEntry = useCallback((message: string) => {
-    setEntries((prev) => [...prev, { type: 'error', id: uid(), message, timestamp: Date.now() }]);
+    trimEntries((prev) => [...prev, { type: 'error', id: uid(), message, timestamp: Date.now() }]);
   }, []);
 
   /**
@@ -280,7 +293,7 @@ export function useAgent(
             const userMsg = command.skillMessage || `Execute skill: ${skillName}`;
 
             // Add user message entry
-            setEntries((prev) => [
+            trimEntries((prev) => [
               ...prev,
               { type: 'user', id: uid(), content: userMsg, timestamp: Date.now() },
             ]);
@@ -292,13 +305,20 @@ export function useAgent(
 
             try {
               if (mode === 'run') {
-                await executeRun(runner, skillInjectedState, userMsg, setEntries, setState, signal);
+                await executeRun(
+                  runner,
+                  skillInjectedState,
+                  userMsg,
+                  trimEntries,
+                  setState,
+                  signal
+                );
               } else if (mode === 'step') {
                 await executeStep(
                   runner,
                   skillInjectedState,
                   userMsg,
-                  setEntries,
+                  trimEntries,
                   setState,
                   signal,
                   () =>
@@ -312,7 +332,7 @@ export function useAgent(
                   runner,
                   skillInjectedState,
                   userMsg,
-                  setEntries,
+                  trimEntries,
                   setState,
                   signal,
                   () =>
@@ -358,7 +378,7 @@ export function useAgent(
         });
 
       // Add user message entry
-      setEntries((prev) => [
+      trimEntries((prev) => [
         ...prev,
         { type: 'user', id: uid(), content: input.trim(), timestamp: Date.now() },
       ]);
@@ -371,13 +391,13 @@ export function useAgent(
 
       try {
         if (mode === 'run') {
-          await executeRun(runner, currentState, input.trim(), setEntries, setState, signal);
+          await executeRun(runner, currentState, input.trim(), trimEntries, setState, signal);
         } else if (mode === 'step') {
           await executeStep(
             runner,
             currentState,
             input.trim(),
-            setEntries,
+            trimEntries,
             setState,
             signal,
             () =>
@@ -391,7 +411,7 @@ export function useAgent(
             runner,
             currentState,
             input.trim(),
-            setEntries,
+            trimEntries,
             setState,
             signal,
             () =>
@@ -459,16 +479,6 @@ type SetEntries = React.Dispatch<React.SetStateAction<TimelineEntry[]>>;
 type SetState = React.Dispatch<React.SetStateAction<AgentState | null>>;
 
 /**
- * Throttled render interval (ms)
- *
- * LLM tokens arrive in bursts of 3-5 at a rate of ~50ms intervals,
- * but within each burst setEntries is triggered 3-5 times in 1-5ms.
- * React 18 automatic batching merges them into a single render.
- * Using setTimeout to throttle to ~50ms ensures Ink renders every frame.
- */
-const RENDER_INTERVAL = 50;
-
-/**
  * Run mode streaming execution
  *
  * Uses runStream for a full ReAct loop (including tool calls).
@@ -477,7 +487,7 @@ const RENDER_INTERVAL = 50;
  * @param runner - AgentRunner instance
  * @param currentState - Current AgentState
  * @param userInput - User message text
- * @param setEntries - Setter for timeline entries
+ * @param setEntries - Setter for timeline entries（自动裁剪）
  * @param setState - Setter for AgentState
  * @param signal - AbortSignal for cancellation
  */
@@ -490,329 +500,38 @@ async function executeRun(
   signal: AbortSignal
 ): Promise<void> {
   const stateWithMsg = addUserMessage(currentState, userInput);
-
-  // 创建追踪写入器，记录执行过程
   const tracer = new TraceWriter(stateWithMsg.id);
 
-  // Create initial assistant entry
-  let assistantId = uid();
-  let accumulatedContent = '';
-  // Throttle rendering: avoid triggering setEntries for every token
-  let renderTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** Flush assistant content to the UI */
-  const flushContent = () => {
-    if (renderTimer) {
-      clearTimeout(renderTimer);
-      renderTimer = null;
-    }
-    const content = accumulatedContent;
-    const id = assistantId;
-    setEntries((prev) =>
-      prev.map((e) => (e.type === 'assistant' && e.id === id ? { ...e, content } : e))
-    );
-  };
-
-  setEntries((prev) => [
-    ...prev,
-    { type: 'assistant', id: assistantId, content: '', timestamp: Date.now(), isStreaming: true },
-  ]);
+  // 创建事件消费者，run 模式在 tool:end 后自动创建新 assistant entry
+  const consumer = new StreamEventConsumer(setEntries, setState, {
+    onToolEnd: () => consumer.resetAssistant(),
+  });
+  consumer.resetAssistant();
 
   try {
     const gen = runner.runStream(stateWithMsg, { signal });
     let iterResult = await gen.next();
 
     while (!iterResult.done) {
-      const event = iterResult.value;
-
-      // 追踪记录执行事件
-      tracer.consume(event);
-
-      switch (event.type) {
-        // Token streaming output (throttled)
-        case 'token': {
-          if (event.token) {
-            accumulatedContent += event.token;
-            if (!renderTimer) {
-              renderTimer = setTimeout(() => {
-                renderTimer = null;
-                flushContent();
-              }, RENDER_INTERVAL);
-            }
-          }
-          break;
-        }
-
-        // Tool call started
-        case 'tool:start': {
-          // Flush remaining tokens first, then switch to tool entry
-          flushContent();
-          // Stop current assistant streaming
-          setEntries((prev) =>
-            prev.map((e) =>
-              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-            )
-          );
-          // Add tool entry
-          const toolId = uid();
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'tool',
-              id: toolId,
-              tool: event.action.tool,
-              args: event.action.arguments,
-              isRunning: true,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        // Tool call ended
-        case 'tool:end': {
-          // Update the most recent running tool entry, add a new assistant entry for the next round
-          setEntries((prev) => {
-            // Find the most recent isRunning tool from the end backwards
-            let idx = -1;
-            for (let i = prev.length - 1; i >= 0; i--) {
-              const entry = prev[i];
-              if (entry.type === 'tool' && entry.isRunning) {
-                idx = i;
-                break;
-              }
-            }
-            if (idx >= 0) {
-              const updated = [...prev];
-              updated[idx] = {
-                ...updated[idx],
-                result: event.result,
-                isRunning: false,
-              } as TimelineEntry;
-              return updated;
-            }
-            return prev;
-          });
-          // New assistant entry (for the next round of LLM output)
-          assistantId = uid();
-          accumulatedContent = '';
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'assistant',
-              id: assistantId,
-              content: '',
-              timestamp: Date.now(),
-              isStreaming: true,
-            },
-          ]);
-          break;
-        }
-
-        // Step boundary
-        case 'step:start': {
-          setEntries((prev) => [
-            ...prev,
-            { type: 'step-start', id: uid(), step: event.step, timestamp: Date.now() },
-          ]);
-          break;
-        }
-
-        case 'step:end': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'step-end',
-              id: uid(),
-              step: event.step,
-              result: event.result,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        // Context compression
-        case 'compressing': {
-          setEntries((prev) => [
-            ...prev,
-            { type: 'compress', id: uid(), status: 'compressing', timestamp: Date.now() },
-          ]);
-          break;
-        }
-
-        case 'compressed': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'compress',
-              id: uid(),
-              status: 'compressed',
-              summary: event.summary,
-              removedCount: event.removedCount,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        // Phase change
-        case 'phase-change': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'phase',
-              id: uid(),
-              from: event.from.type,
-              to: event.to.type,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        // Skill lifecycle
-        case 'skill:start': {
-          if (event.state) setState(event.state);
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'skill',
-              id: uid(),
-              name: event.name,
-              status: 'active',
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'skill:end': {
-          if (event.state) setState(event.state);
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'skill',
-              id: uid(),
-              name: event.name,
-              status: 'completed',
-              result: event.result,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        // Skill loading
-        case 'skill:loading': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'skill',
-              id: uid(),
-              name: event.name,
-              status: 'loading',
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'skill:loaded': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'skill',
-              id: uid(),
-              name: event.name,
-              status: 'loaded',
-              tokenCount: event.tokenCount,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        // SubAgent
-        case 'subagent:start': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'subagent',
-              id: uid(),
-              name: event.name,
-              task: event.task,
-              status: 'start',
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'subagent:end': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'subagent',
-              id: uid(),
-              name: event.name,
-              result: event.result,
-              status: 'end',
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        // Error
-        case 'error': {
-          const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
-          setEntries((prev) => [
-            ...prev.map((e) =>
-              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-            ),
-            { type: 'error', id: uid(), message: errMsg, timestamp: Date.now() },
-          ]);
-          break;
-        }
-
-        // complete event — stream ended
-        case 'complete': {
-          // handled after the loop
-          break;
-        }
-      }
-
+      tracer.consume(iterResult.value);
+      consumer.consume(iterResult.value);
       iterResult = await gen.next();
     }
 
-    // Final result
+    // 处理最终结果
     if (iterResult.done && iterResult.value) {
       const { state: finalState, result: runResult } = iterResult.value;
       setState(finalState);
-      // Flush residual tokens
-      flushContent();
 
       if (runResult.type === 'success') {
-        setEntries((prev) =>
-          prev.map((e) =>
-            e.type === 'assistant' && e.id === assistantId
-              ? { ...e, content: accumulatedContent || runResult.answer, isStreaming: false }
-              : e
-          )
-        );
-      } else if (runResult.type === 'max_steps') {
-        setEntries((prev) => [
-          ...prev.map((e) =>
-            e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-          ),
-          { type: 'run-complete', id: uid(), result: runResult, timestamp: Date.now() },
-        ]);
+        consumer.finalizeAssistant(consumer.getAccumulatedContent() || runResult.answer);
       } else {
-        // error result
+        // max_steps 或 error
+        consumer.flush();
+        const id = consumer.getAssistantId();
         setEntries((prev) => [
           ...prev.map((e) =>
-            e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+            e.type === 'assistant' && e.id === id ? { ...e, isStreaming: false } : e
           ),
           { type: 'run-complete', id: uid(), result: runResult, timestamp: Date.now() },
         ]);
@@ -823,7 +542,7 @@ async function executeRun(
     const msg = error instanceof Error ? error.message : String(error);
     setEntries((prev) =>
       prev.map((e) =>
-        e.type === 'assistant' && e.id === assistantId
+        e.type === 'assistant' && e.id === consumer.getAssistantId()
           ? { ...e, content: `Error: ${msg}`, isStreaming: false }
           : e
       )
@@ -856,277 +575,50 @@ async function executeStep(
   pauseFn: () => Promise<void>
 ): Promise<void> {
   let runningState = currentState;
-  let continueLoop = true;
 
-  // Add user message to state for the first time
   if (userInput) {
     runningState = addUserMessage(runningState, userInput);
   }
 
-  // 创建追踪写入器
   const tracer = new TraceWriter(runningState.id);
+  // step 模式不设 onToolEnd：一个 step 内不重置 assistant，step 结束后整体处理
+  const consumer = new StreamEventConsumer(setEntries, setState);
+
+  let continueLoop = true;
 
   while (continueLoop) {
     if (signal.aborted) return;
 
-    const assistantId = uid();
-    let accumulatedContent = '';
-    let renderTimer: ReturnType<typeof setTimeout> | null = null;
-
-    /** Flush assistant content to the UI */
-    const flushContent = () => {
-      if (renderTimer) {
-        clearTimeout(renderTimer);
-        renderTimer = null;
-      }
-      const content = accumulatedContent;
-      const id = assistantId;
-      setEntries((prev) =>
-        prev.map((e) => (e.type === 'assistant' && e.id === id ? { ...e, content } : e))
-      );
-    };
-
-    setEntries((prev) => [
-      ...prev,
-      { type: 'assistant', id: assistantId, content: '', timestamp: Date.now(), isStreaming: true },
-    ]);
+    consumer.resetAssistant();
 
     try {
       const gen = runner.stepStream(runningState, undefined, { signal });
       let iterResult = await gen.next();
 
       while (!iterResult.done) {
-        const event = iterResult.value;
-
-        // 追踪记录执行事件
-        tracer.consume(event);
-
-        switch (event.type) {
-          case 'token': {
-            if (event.token) {
-              accumulatedContent += event.token;
-              if (!renderTimer) {
-                renderTimer = setTimeout(() => {
-                  renderTimer = null;
-                  flushContent();
-                }, RENDER_INTERVAL);
-              }
-            }
-            break;
-          }
-
-          case 'tool:start': {
-            flushContent();
-            setEntries((prev) =>
-              prev.map((e) =>
-                e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-              )
-            );
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'tool',
-                id: uid(),
-                tool: event.action.tool,
-                args: event.action.arguments,
-                isRunning: true,
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-
-          case 'tool:end': {
-            setEntries((prev) => {
-              let idx = -1;
-              for (let i = prev.length - 1; i >= 0; i--) {
-                const e = prev[i];
-                if (e.type === 'tool' && e.isRunning) {
-                  idx = i;
-                  break;
-                }
-              }
-              if (idx >= 0) {
-                const updated = [...prev];
-                updated[idx] = {
-                  ...updated[idx],
-                  result: event.result,
-                  isRunning: false,
-                } as TimelineEntry;
-                return updated;
-              }
-              return prev;
-            });
-            break;
-          }
-
-          case 'phase-change': {
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'phase',
-                id: uid(),
-                from: event.from.type,
-                to: event.to.type,
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-
-          case 'error': {
-            const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
-            setEntries((prev) => [
-              ...prev.map((e) =>
-                e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-              ),
-              { type: 'error', id: uid(), message: errMsg, timestamp: Date.now() },
-            ]);
-            break;
-          }
-
-          case 'compressing': {
-            setEntries((prev) => [
-              ...prev,
-              { type: 'compress', id: uid(), status: 'compressing', timestamp: Date.now() },
-            ]);
-            break;
-          }
-
-          case 'compressed': {
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'compress',
-                id: uid(),
-                status: 'compressed',
-                summary: event.summary,
-                removedCount: event.removedCount,
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-
-          case 'skill:start': {
-            if (event.state) setState(event.state);
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'skill',
-                id: uid(),
-                name: event.name,
-                status: 'active',
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-
-          case 'skill:end': {
-            if (event.state) setState(event.state);
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'skill',
-                id: uid(),
-                name: event.name,
-                status: 'completed',
-                result: event.result,
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-
-          case 'skill:loading': {
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'skill',
-                id: uid(),
-                name: event.name,
-                status: 'loading',
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-
-          case 'skill:loaded': {
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'skill',
-                id: uid(),
-                name: event.name,
-                status: 'loaded',
-                tokenCount: event.tokenCount,
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-
-          case 'subagent:start': {
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'subagent',
-                id: uid(),
-                name: event.name,
-                task: event.task,
-                status: 'start',
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-
-          case 'subagent:end': {
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'subagent',
-                id: uid(),
-                name: event.name,
-                result: event.result,
-                status: 'end',
-                timestamp: Date.now(),
-              },
-            ]);
-            break;
-          }
-        }
-
+        tracer.consume(iterResult.value);
+        consumer.consume(iterResult.value);
         iterResult = await gen.next();
       }
 
-      // Step completed
+      // Step 完成
       if (iterResult.done && iterResult.value) {
         const { state: newState, result: stepResult } = iterResult.value;
         runningState = newState;
         setState(newState);
 
-        // Flush residual tokens
-        flushContent();
-
         if (stepResult.type === 'done') {
-          setEntries((prev) =>
-            prev.map((e) =>
-              e.type === 'assistant' && e.id === assistantId
-                ? { ...e, content: accumulatedContent || stepResult.answer, isStreaming: false }
-                : e
-            )
-          );
+          consumer.finalizeAssistant(consumer.getAccumulatedContent() || stepResult.answer);
           continueLoop = false;
           return;
         }
 
-        // Step completed but more steps needed — pause and wait
+        // Step 完成但还需要继续 — 暂停等用户按 Enter
+        consumer.flush();
+        const id = consumer.getAssistantId();
         setEntries((prev) => [
           ...prev.map((e) =>
-            e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
+            e.type === 'assistant' && e.id === id ? { ...e, isStreaming: false } : e
           ),
           {
             type: 'system',
@@ -1140,11 +632,10 @@ async function executeStep(
       }
     } catch (error) {
       if (signal.aborted) return;
-      flushContent();
       const msg = error instanceof Error ? error.message : String(error);
       setEntries((prev) =>
         prev.map((e) =>
-          e.type === 'assistant' && e.id === assistantId
+          e.type === 'assistant' && e.id === consumer.getAssistantId()
             ? { ...e, content: `Error: ${msg}`, isStreaming: false }
             : e
         )
@@ -1185,262 +676,63 @@ async function executeAdvance(
     effectiveState = addUserMessage(effectiveState, userInput);
   }
 
-  // 创建追踪写入器
   const tracer = new TraceWriter(effectiveState.id);
 
-  let assistantId = uid();
-  let accumulatedContent = '';
-  let renderTimer: ReturnType<typeof setTimeout> | null = null;
+  // advance 模式：phase-change 时暂停，进入 calling-llm 时重置 assistant
+  const consumer = new StreamEventConsumer(setEntries, setState, {
+    onPhaseChange: async (event) => {
+      await pauseFn();
+      if (event.to.type === 'calling-llm') {
+        consumer.resetAssistant();
+      }
+    },
+  });
 
-  /** Flush assistant content to the UI */
-  const flushContent = () => {
-    if (renderTimer) {
-      clearTimeout(renderTimer);
-      renderTimer = null;
-    }
-    const content = accumulatedContent;
-    const id = assistantId;
-    setEntries((prev) =>
-      prev.map((e) => (e.type === 'assistant' && e.id === id ? { ...e, content } : e))
-    );
-  };
+  consumer.resetAssistant();
 
-  setEntries((prev) => [
-    ...prev,
-    { type: 'assistant', id: assistantId, content: '', timestamp: Date.now(), isStreaming: true },
-  ]);
+  // advanceStream 每次只推进一步 phase，需要循环调用直到到达 terminal phase
+  const currentExecState = execState;
+  let currentPhase = currentExecState.phase;
 
   try {
-    const gen = runner.advanceStream(effectiveState, execState, undefined, { signal });
-    let iterResult = await gen.next();
+    while (!isTerminalPhase(currentPhase)) {
+      signal.throwIfAborted();
 
-    while (!iterResult.done) {
-      const event = iterResult.value;
+      const gen = runner.advanceStream(effectiveState, currentExecState, undefined, { signal });
+      let iterResult = await gen.next();
 
-      // 追踪记录执行事件
-      tracer.consume(event);
-
-      switch (event.type) {
-        case 'token': {
-          if (event.token) {
-            accumulatedContent += event.token;
-            if (!renderTimer) {
-              renderTimer = setTimeout(() => {
-                renderTimer = null;
-                flushContent();
-              }, RENDER_INTERVAL);
-            }
-          }
-          break;
-        }
-
-        case 'tool:start': {
-          flushContent();
-          setEntries((prev) =>
-            prev.map((e) =>
-              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-            )
-          );
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'tool',
-              id: uid(),
-              tool: event.action.tool,
-              args: event.action.arguments,
-              isRunning: true,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'tool:end': {
-          setEntries((prev) => {
-            let idx = -1;
-            for (let i = prev.length - 1; i >= 0; i--) {
-              const e = prev[i];
-              if (e.type === 'tool' && e.isRunning) {
-                idx = i;
-                break;
-              }
-            }
-            if (idx >= 0) {
-              const updated = [...prev];
-              updated[idx] = {
-                ...updated[idx],
-                result: event.result,
-                isRunning: false,
-              } as TimelineEntry;
-              return updated;
-            }
-            return prev;
-          });
-          break;
-        }
-
-        case 'phase-change': {
-          flushContent();
-          setEntries((prev) => [
-            ...prev.map((e) =>
-              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-            ),
-            {
-              type: 'phase',
-              id: uid(),
-              from: event.from.type,
-              to: event.to.type,
-              timestamp: Date.now(),
-            },
-          ]);
-
-          // Pause after phase change
-          await pauseFn();
-
-          // After resuming, if tokens need to continue outputting, create a new assistant entry
-          // (only needed when the new phase is calling-llm or streaming)
-          if (event.to.type === 'calling-llm') {
-            assistantId = uid();
-            accumulatedContent = '';
-            setEntries((prev) => [
-              ...prev,
-              {
-                type: 'assistant',
-                id: assistantId,
-                content: '',
-                timestamp: Date.now(),
-                isStreaming: true,
-              },
-            ]);
-          }
-          break;
-        }
-
-        case 'error': {
-          flushContent();
-          const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
-          setEntries((prev) => [
-            ...prev.map((e) =>
-              e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-            ),
-            { type: 'error', id: uid(), message: errMsg, timestamp: Date.now() },
-          ]);
-          break;
-        }
-
-        case 'skill:start': {
-          if (event.state) setState(event.state);
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'skill',
-              id: uid(),
-              name: event.name,
-              status: 'active',
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'skill:end': {
-          if (event.state) setState(event.state);
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'skill',
-              id: uid(),
-              name: event.name,
-              status: 'completed',
-              result: event.result,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'skill:loading': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'skill',
-              id: uid(),
-              name: event.name,
-              status: 'loading',
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'skill:loaded': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'skill',
-              id: uid(),
-              name: event.name,
-              status: 'loaded',
-              tokenCount: event.tokenCount,
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'subagent:start': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'subagent',
-              id: uid(),
-              name: event.name,
-              task: event.task,
-              status: 'start',
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
-
-        case 'subagent:end': {
-          setEntries((prev) => [
-            ...prev,
-            {
-              type: 'subagent',
-              id: uid(),
-              name: event.name,
-              result: event.result,
-              status: 'end',
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-        }
+      while (!iterResult.done) {
+        tracer.consume(iterResult.value);
+        consumer.consume(iterResult.value);
+        iterResult = await gen.next();
       }
 
-      iterResult = await gen.next();
-    }
+      // 一次 advanceStream 结束，检查结果并准备下一次推进
+      if (iterResult.done && iterResult.value) {
+        const result = iterResult.value;
+        effectiveState = result.state;
+        currentPhase = result.phase;
+        setState(effectiveState);
+        consumer.flush();
+        const id = consumer.getAssistantId();
+        setEntries((prev) =>
+          prev.map((e) =>
+            e.type === 'assistant' && e.id === id ? { ...e, isStreaming: false } : e
+          )
+        );
 
-    // Final result
-    if (iterResult.done && iterResult.value) {
-      const { state: newState } = iterResult.value;
-      setState(newState);
-      // Flush residual tokens
-      flushContent();
-      setEntries((prev) =>
-        prev.map((e) =>
-          e.type === 'assistant' && e.id === assistantId ? { ...e, isStreaming: false } : e
-        )
-      );
+        if (result.done) break;
+      } else {
+        // generator 异常结束（没有 return value），退出循环
+        break;
+      }
     }
   } catch (error) {
     if (signal.aborted) return;
-    flushContent();
     const msg = error instanceof Error ? error.message : String(error);
     setEntries((prev) =>
       prev.map((e) =>
-        e.type === 'assistant' && e.id === assistantId
+        e.type === 'assistant' && e.id === consumer.getAssistantId()
           ? { ...e, content: `Error: ${msg}`, isStreaming: false }
           : e
       )

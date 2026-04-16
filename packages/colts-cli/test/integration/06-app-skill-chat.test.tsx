@@ -22,6 +22,11 @@ describe('Integration: App skill chat with real LLM', () => {
     await fs.writeFile(
       path.join(skillDir, 'poet', 'SKILL.md'),
       [
+        '---',
+        'name: poet',
+        'description: A classical Chinese poet that writes short poems',
+        '---',
+        '',
         '# Poet',
         '',
         'You are a classical Chinese poet.',
