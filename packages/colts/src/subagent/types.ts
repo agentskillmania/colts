@@ -59,6 +59,8 @@ export interface ISubAgentFactory {
     parentContext: {
       llmProvider: ILLMProvider;
       toolRegistry: IToolRegistry;
+      /** Parent agent's model identifier */
+      model?: string;
     }
   ): AgentRunner;
 }
@@ -79,10 +81,11 @@ export class DefaultSubAgentFactory implements ISubAgentFactory {
     parentContext: {
       llmProvider: ILLMProvider;
       toolRegistry: IToolRegistry;
+      model?: string;
     }
   ): AgentRunner {
     return new AgentRunner({
-      model: 'sub-agent',
+      model: parentContext.model ?? 'sub-agent',
       llmClient: parentContext.llmProvider,
       maxSteps: config.maxSteps ?? this.defaultMaxSteps,
     });
