@@ -202,7 +202,7 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
 
     for (let i = 0; i < keys.length - 1; i++) {
       const key = keys[i];
-      if (!current[key] || typeof current[key] !== 'object') {
+      if (current[key] === null || current[key] === undefined || typeof current[key] !== 'object') {
         current[key] = {};
       }
       current = current[key] as Record<string, unknown>;
