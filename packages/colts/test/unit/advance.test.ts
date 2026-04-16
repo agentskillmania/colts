@@ -700,6 +700,63 @@ describe('advanceStream()', () => {
   });
 });
 
+// T1: 回归测试 — advance() 路径 SWITCH_SKILL 后 skillState 应更新
+describe('advance() skillState regression (CR P0-1)', () => {
+  it('should update skillState.current after SWITCH_SKILL via advance()', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Loading skill',
+      toolCalls: [
+        {
+          id: 'call-skill-t1',
+          name: 'load_skill',
+          arguments: { name: 'test-skill' },
+        },
+      ],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      skills: [],
+    });
+
+    const registry = runner.getToolRegistry();
+    registry.register({
+      name: 'load_skill',
+      description: 'Load a skill',
+      parameters: z.object({ name: z.string() }),
+      execute: async () => ({
+        type: 'SWITCH_SKILL',
+        to: 'test-skill',
+        instructions: 'Test skill instructions',
+        task: 'Do the test thing',
+      }),
+    });
+
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+
+    // Progress to tool-result phase where SWITCH_SKILL fires
+    let result = await runner.advance(state, execState); // idle → preparing
+    result = await runner.advance(result.state, execState); // preparing → calling-llm
+    result = await runner.advance(result.state, execState, registry); // calling-llm → llm-response
+    result = await runner.advance(result.state, execState); // llm-response → parsing
+    result = await runner.advance(result.state, execState); // parsing → parsed
+    result = await runner.advance(result.state, execState, registry); // parsed → executing-tool
+    result = await runner.advance(result.state, execState, registry); // executing-tool → tool-result
+
+    // skillState.current 应该被 applySkillSignal 更新为 'test-skill'
+    const skillState = result.state.context.skillState;
+    expect(skillState).toBeDefined();
+    expect(skillState?.current).toBe('test-skill');
+    // loadedInstructions 应该包含 skill 的指令
+    expect(skillState?.loadedInstructions).toContain('Test skill instructions');
+  });
+});
+
 describe('isTerminalPhase', () => {
   it('should return true for completed phase', () => {
     expect(isTerminalPhase({ type: 'completed', answer: 'done' })).toBe(true);

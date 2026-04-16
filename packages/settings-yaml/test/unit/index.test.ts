@@ -614,6 +614,28 @@ server:
 
       expect(() => settings.set('key', 'value')).toThrow('Settings not initialized');
     });
+
+    // T5: 回归测试 — set() 不覆盖 falsy primitive 值 (CR SY-1)
+    it('should not overwrite falsy primitive values when creating intermediate objects', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({
+        defaultYaml: `
+flags:
+  enabled: false
+  count: 0
+  name: ""
+`,
+      });
+
+      // 在 flags 下设置一个新 key，不应覆盖已有的 falsy 值
+      settings.set('flags.newKey', 'value');
+      const values = settings.getValues();
+      expect((values as { flags: { enabled: boolean } }).flags.enabled).toBe(false);
+      expect((values as { flags: { count: number } }).flags.count).toBe(0);
+      expect((values as { flags: { name: string } }).flags.name).toBe('');
+      expect((values as { flags: { newKey: string } }).flags.newKey).toBe('value');
+    });
   });
 
   describe('toObject', () => {

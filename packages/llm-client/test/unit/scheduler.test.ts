@@ -267,3 +267,33 @@ describe('Scheduler default concurrency', () => {
     expect(scheduler.getStats().keyHealth.size).toBe(1);
   });
 });
+
+// T4: 回归测试 — 并发请求完成后 activeRequests 应归零 (CR scheduler leak)
+describe('concurrent request cleanup (CR T4)', () => {
+  it('should have zero activeRequests after all concurrent requests complete', async () => {
+    const scheduler = new RequestScheduler();
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 1, // 容量为 1，测试排队
+      models: [{ modelId: 'gpt-4', maxConcurrency: 2 }],
+    });
+
+    // 创建多个并发请求
+    const requests = [];
+    for (let i = 0; i < 5; i++) {
+      requests.push(scheduler.execute('gpt-4', 0, async () => `response-${i}`));
+    }
+
+    await Promise.all(requests);
+
+    // 所有请求完成后 activeRequests 应为 0
+    const stats = scheduler.getStats();
+    let totalActive = 0;
+    for (const [, count] of stats.providerActiveCounts) {
+      totalActive += count;
+    }
+    expect(totalActive).toBe(0);
+  });
+});
