@@ -17,7 +17,7 @@ export class ExecutingToolHandler implements IPhaseHandler {
   }
 
   async execute(
-    _ctx: PhaseHandlerContext,
+    ctx: PhaseHandlerContext,
     state: AgentState,
     execState: ExecutionState,
     toolRegistry?: IToolRegistry,
@@ -45,8 +45,16 @@ export class ExecutingToolHandler implements IPhaseHandler {
           });
           return { action, result, error: false };
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          return { action, result: `Error: ${errorMessage}`, error: true };
+          const err = error instanceof Error ? error : new Error(String(error));
+          // Delegate error handling to execution policy
+          const decision = await ctx.executionPolicy.onToolError(err, action, state, {
+            retryCount: 0,
+          });
+          if (decision.decision === 'continue') {
+            return { action, result: decision.sanitizedResult, error: false };
+          }
+          // decision === 'fail': re-throw to propagate up
+          throw decision.error;
         }
       })
     );

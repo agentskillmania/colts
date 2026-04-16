@@ -51,6 +51,8 @@ import { createDelegateTool } from './subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
 import { processToolResult } from './runner-process-tool-result.js';
 import type { ToolPostEffect } from './runner-process-tool-result.js';
+import type { IExecutionPolicy } from './policy/types.js';
+import { DefaultExecutionPolicy } from './policy/default-policy.js';
 
 /**
  * Runner event map — fully aligned with AsyncGenerator StreamEvent / RunStreamEvent.
@@ -173,6 +175,8 @@ export interface RunnerOptions {
   toolSchemaFormatter?: IToolSchemaFormatter;
   /** Sub-agent factory (defaults to DefaultSubAgentFactory) */
   subAgentFactory?: ISubAgentFactory;
+  /** Execution policy for stop conditions and error handling (defaults to DefaultExecutionPolicy) */
+  executionPolicy?: IExecutionPolicy;
 }
 
 /**
@@ -271,6 +275,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private phaseRouter: ReturnType<typeof createRouter>;
   private toolSchemaFormatter: IToolSchemaFormatter;
   private subAgentFactory: ISubAgentFactory;
+  private executionPolicy: IExecutionPolicy;
   private options: RunnerOptions;
 
   /** Get the Skill provider (used by the CLI layer for the /skill command) */
@@ -371,6 +376,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       });
       this.toolRegistry.register(delegateTool);
     }
+
+    // Initialize execution policy
+    this.executionPolicy = options.executionPolicy ?? new DefaultExecutionPolicy();
   }
 
   /**
@@ -444,6 +452,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       toolSchemaFormatter: this.toolSchemaFormatter,
       skillProvider: this._skillProvider,
       subAgentConfigs: this.subAgentConfigs,
+      executionPolicy: this.executionPolicy,
       options: {
         model: this.options.model,
         systemPrompt: this.options.systemPrompt,
@@ -1002,7 +1011,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     let totalSteps = 0;
 
     try {
-      while (totalSteps < maxSteps) {
+      const HARD_LIMIT = 1000;
+
+      while (totalSteps < HARD_LIMIT) {
         options?.signal?.throwIfAborted();
 
         // Call step() to get full event propagation (advance → step → run)
@@ -1015,17 +1026,33 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         currentState = newState;
         totalSteps++;
 
-        if (result.type === 'done') {
-          // Defensive cleanup: clear skillState when top-level skill replies directly (without return_skill)
-          currentState = this.cleanupStaleSkillState(currentState);
-          const runResult: RunResult = { type: 'success', answer: result.answer, totalSteps };
-          this.emit('run:end', { state: currentState, result: runResult });
-          return { state: currentState, result: runResult };
-        }
+        const decision = this.executionPolicy.shouldStop(currentState, result, {
+          stepCount: totalSteps,
+          maxSteps,
+        });
 
-        if (result.type === 'error') {
-          const runResult: RunResult = { type: 'error', error: result.error, totalSteps };
-          this.emit('error', { error: result.error, context: { step: totalSteps - 1 } });
+        if (decision.decision === 'stop') {
+          let runResult: RunResult;
+
+          if (decision.runResultType === 'success') {
+            // Defensive cleanup: clear skillState when top-level skill replies directly (without return_skill)
+            currentState = this.cleanupStaleSkillState(currentState);
+            runResult = {
+              type: 'success',
+              answer: (result as { type: 'done'; answer: string }).answer,
+              totalSteps,
+            };
+          } else if (decision.runResultType === 'error') {
+            runResult = {
+              type: 'error',
+              error: (result as { type: 'error'; error: Error }).error,
+              totalSteps,
+            };
+            this.emit('error', { error: runResult.error, context: { step: totalSteps - 1 } });
+          } else {
+            runResult = { type: 'max_steps', totalSteps };
+          }
+
           this.emit('run:end', { state: currentState, result: runResult });
           return { state: currentState, result: runResult };
         }
@@ -1045,7 +1072,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         }
       }
 
-      // maxSteps exhausted
+      // Hard limit reached (safety net for policy bugs)
       const runResult: RunResult = { type: 'max_steps', totalSteps };
       this.emit('run:end', { state: currentState, result: runResult });
       return { state: currentState, result: runResult };
@@ -1090,7 +1117,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     let totalSteps = 0;
 
     try {
-      while (totalSteps < maxSteps) {
+      const HARD_LIMIT = 1000;
+
+      while (totalSteps < HARD_LIMIT) {
         options?.signal?.throwIfAborted();
 
         // Step start
@@ -1143,36 +1172,44 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           }
         }
 
-        if (stepResult.result.type === 'done') {
-          // Defensive cleanup: clear skillState when top-level skill replies directly (without return_skill)
-          currentState = this.cleanupStaleSkillState(currentState);
-          const runResult: RunResult = {
-            type: 'success',
-            answer: stepResult.result.answer,
-            totalSteps,
-          };
-          this.emit('run:end', { state: currentState, result: runResult });
-          yield { type: 'complete', result: runResult };
-          return { state: currentState, result: runResult };
-        }
+        // Delegate stop decision to execution policy
+        const decision = this.executionPolicy.shouldStop(currentState, stepResult.result, {
+          stepCount: totalSteps,
+          maxSteps,
+        });
 
-        if (stepResult.result.type === 'error') {
-          const runResult: RunResult = {
-            type: 'error',
-            error: stepResult.result.error,
-            totalSteps,
-          };
-          this.emit('error', {
-            error: stepResult.result.error,
-            context: { step: totalSteps - 1 },
-          });
+        if (decision.decision === 'stop') {
+          let runResult: RunResult;
+
+          if (decision.runResultType === 'success') {
+            // Defensive cleanup: clear skillState when top-level skill replies directly (without return_skill)
+            currentState = this.cleanupStaleSkillState(currentState);
+            runResult = {
+              type: 'success',
+              answer: (stepResult.result as { type: 'done'; answer: string }).answer,
+              totalSteps,
+            };
+          } else if (decision.runResultType === 'error') {
+            runResult = {
+              type: 'error',
+              error: (stepResult.result as { type: 'error'; error: Error }).error,
+              totalSteps,
+            };
+            this.emit('error', {
+              error: runResult.error,
+              context: { step: totalSteps - 1 },
+            });
+          } else {
+            runResult = { type: 'max_steps', totalSteps };
+          }
+
           this.emit('run:end', { state: currentState, result: runResult });
           yield { type: 'complete', result: runResult };
           return { state: currentState, result: runResult };
         }
       }
 
-      // maxSteps exhausted
+      // Hard limit reached (safety net for policy bugs)
       const runResult: RunResult = { type: 'max_steps', totalSteps };
       this.emit('run:end', { state: currentState, result: runResult });
       yield { type: 'complete', result: runResult };

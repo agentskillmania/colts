@@ -825,3 +825,146 @@ describe('runStream()', () => {
     expect(errorThrown || errors.length > 0).toBe(true);
   });
 });
+
+// ============================================================
+// Custom Execution Policy tests
+// ============================================================
+describe('Execution Policy injection', () => {
+  it('should call custom policy.shouldStop() on each step', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Hello',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const shouldStopCalls: { stepCount: number; resultType: string }[] = [];
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      executionPolicy: {
+        shouldStop: (_state, result, meta) => {
+          shouldStopCalls.push({ stepCount: meta.stepCount, resultType: result.type });
+          if (result.type === 'done') {
+            return { decision: 'stop', reason: result.answer, runResultType: 'success' as const };
+          }
+          if (result.type === 'error') {
+            return {
+              decision: 'stop',
+              reason: result.error.message,
+              runResultType: 'error' as const,
+            };
+          }
+          if (meta.stepCount >= meta.maxSteps) {
+            return { decision: 'stop', reason: 'Max steps', runResultType: 'max_steps' as const };
+          }
+          return { decision: 'continue' };
+        },
+        onToolError: () => ({ decision: 'continue' as const, sanitizedResult: 'Error' }),
+        onParseError: (error) => ({ decision: 'fail' as const, error }),
+      },
+    });
+
+    const state = createAgentState(defaultConfig);
+    const { result } = await runner.run(state);
+
+    expect(result.type).toBe('success');
+    expect(shouldStopCalls).toHaveLength(1);
+    expect(shouldStopCalls[0]).toEqual({ stepCount: 1, resultType: 'done' });
+  });
+
+  it('should allow custom policy to override stop behavior', async () => {
+    // LLM gives a direct answer, but custom policy treats it as max_steps
+    const mockResponse: LLMResponse = {
+      content: 'Direct answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      executionPolicy: {
+        shouldStop: () => ({
+          decision: 'stop',
+          reason: 'Custom override',
+          runResultType: 'max_steps',
+        }),
+        onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
+        onParseError: (error) => ({ decision: 'fail', error }),
+      },
+    });
+
+    const state = createAgentState(defaultConfig);
+    const { result } = await runner.run(state);
+
+    // Policy overrides: even though LLM gave a direct answer, result is max_steps
+    expect(result.type).toBe('max_steps');
+  });
+
+  it('should use DefaultExecutionPolicy when no policy is provided', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const state = createAgentState(defaultConfig);
+
+    const { result } = await runner.run(state);
+
+    // Default policy: direct answer → success
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.answer).toBe('Answer');
+    }
+  });
+
+  it('should hit HARD_LIMIT when policy never stops', async () => {
+    const toolCallResponse: LLMResponse = {
+      content: 'Thinking...',
+      toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+
+    const responses = Array(1100).fill(toolCallResponse);
+    const client = createMockLLMClient(responses);
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculate',
+      description: 'Calculate',
+      parameters: z.object({ expression: z.string() }),
+      execute: async ({ expression }) => eval(expression).toString(),
+    });
+
+    // Policy that never stops (always continues)
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      executionPolicy: {
+        shouldStop: () => ({ decision: 'continue' }),
+        onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
+        onParseError: (error) => ({ decision: 'fail', error }),
+      },
+    });
+
+    const state = createAgentState(defaultConfig);
+    const { result } = await runner.run(state, undefined, registry);
+
+    // Hard limit should kick in
+    expect(result.type).toBe('max_steps');
+    if (result.type === 'max_steps') {
+      expect(result.totalSteps).toBe(1000);
+    }
+  });
+});

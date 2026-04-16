@@ -12,6 +12,7 @@ import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.
 import type { IMessageAssembler } from './message-assembler/types.js';
 import type { IPhaseHandler } from './execution-engine/types.js';
 import type { IToolSchemaFormatter } from './tools/schema-formatter.js';
+import type { IExecutionPolicy } from './policy/types.js';
 import { PhaseRouter } from './execution-engine/router.js';
 import { createDefaultPhaseHandlers } from './execution-engine/default-registry.js';
 
@@ -30,6 +31,8 @@ export interface RunnerContext {
   skillProvider?: ISkillProvider;
   /** Sub-agent configuration map (name → SubAgentConfig) */
   subAgentConfigs?: Map<string, SubAgentConfig>;
+  /** Execution policy for error handling decisions */
+  executionPolicy: IExecutionPolicy;
   options: {
     model: string;
     systemPrompt?: string;

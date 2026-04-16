@@ -12,6 +12,7 @@ import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { ISkillProvider } from '../skills/types.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
+import type { IExecutionPolicy } from '../policy/types.js';
 
 /**
  * Context passed to every IPhaseHandler
@@ -32,6 +33,8 @@ export interface PhaseHandlerContext {
   skillProvider?: ISkillProvider;
   /** Sub-agent configuration map (optional) */
   subAgentConfigs?: Map<string, SubAgentConfig>;
+  /** Execution policy for error handling decisions */
+  executionPolicy: IExecutionPolicy;
   /** Runner-level configuration */
   options: {
     model: string;

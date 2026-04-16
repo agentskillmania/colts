@@ -45,9 +45,23 @@ export class CallingLLMHandler implements IPhaseHandler {
     execState.llmResponse = responseText;
 
     if (response.toolCalls && response.toolCalls.length > 0) {
-      const toolCall = response.toolCalls[0];
-      execState.action = toolCallToAction(toolCall);
-      execState.allActions = response.toolCalls.map(toolCallToAction);
+      try {
+        const toolCall = response.toolCalls[0];
+        execState.action = toolCallToAction(toolCall);
+        execState.allActions = response.toolCalls.map(toolCallToAction);
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        const decision = await ctx.executionPolicy.onParseError(err, responseText, state, {
+          retryCount: 0,
+        });
+        if (decision.decision === 'ignore') {
+          // Treat as text-only response
+          execState.action = undefined;
+          execState.allActions = undefined;
+        } else {
+          throw decision.error;
+        }
+      }
     } else {
       execState.action = undefined;
       execState.allActions = undefined;

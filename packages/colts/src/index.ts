@@ -143,3 +143,12 @@ export {
   CompletedHandler,
   ErrorHandler,
 } from './execution-engine/index.js';
+
+// Execution Policy
+export type {
+  IExecutionPolicy,
+  StopDecision,
+  ToolErrorDecision,
+  ParseErrorDecision,
+} from './policy/types.js';
+export { DefaultExecutionPolicy } from './policy/default-policy.js';
