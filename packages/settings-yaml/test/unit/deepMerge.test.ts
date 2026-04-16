@@ -320,4 +320,31 @@ describe('deepMerge', () => {
       expect(result).toEqual({ string: 'target', number: 100, boolean: false });
     });
   });
+
+  // T6: 回归测试 — 数组中 undefined 使用 default fallback (CR SY-2)
+  describe('undefined semantics in arrays vs objects (CR SY-2)', () => {
+    it('should use default value for undefined array elements', () => {
+      const target = { items: [undefined, 'b'] } as unknown as Record<string, unknown>;
+      const defaultValue = { items: ['a', 'x', 'c'] };
+
+      const result = deepMerge(target, defaultValue);
+
+      // 数组中 undefined 元素应 fallback 到 default
+      expect((result as { items: string[] }).items[0]).toBe('a');
+      expect((result as { items: string[] }).items[1]).toBe('b');
+      // 短数组缺失的尾部元素从 default 填充
+      expect((result as { items: string[] }).items[2]).toBe('c');
+    });
+
+    it('should preserve undefined in object keys (target overrides default)', () => {
+      const target = { key: undefined } as unknown as Record<string, unknown>;
+      const defaultValue = { key: 'default-value' };
+
+      const result = deepMerge(target, defaultValue);
+
+      // 对象中 target 有这个 key（即使值为 undefined），应保留
+      expect(result).toHaveProperty('key');
+      expect(result.key).toBeUndefined();
+    });
+  });
 });
