@@ -42,6 +42,7 @@ import { compressState, maybeCompress } from './runner-compression.js';
 import { executeAdvance, createRouter } from './runner-advance.js';
 import type { RunnerContext } from './runner-advance.js';
 import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './runner-stream.js';
+import { isSkillSignal, type SkillSignal } from './skills/types.js';
 import type { ISkillProvider } from './skills/types.js';
 import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
 import { createLoadSkillTool, createReturnSkillTool } from './skills/index.js';
@@ -50,6 +51,7 @@ import { DefaultSubAgentFactory } from './subagent/types.js';
 import { createDelegateTool } from './subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
 import { processToolResult } from './runner-process-tool-result.js';
+import { applySkillSignal } from './skills/signal-handler.js';
 import type { ToolPostEffect } from './runner-process-tool-result.js';
 import type { IExecutionPolicy } from './policy/types.js';
 import { DefaultExecutionPolicy } from './policy/default-policy.js';
@@ -265,6 +267,10 @@ export interface ChatStreamChunk {
  * }
  * ```
  */
+
+/** run() / runStream() 的硬上限安全网，防止无限循环 */
+const RUN_HARD_LIMIT = 1000;
+
 export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private llmProvider: ILLMProvider;
   private toolRegistry: IToolRegistry;
@@ -371,6 +377,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       const delegateTool = createDelegateTool({
         subAgentConfigs: this.subAgentConfigs,
         llmProvider: this.llmProvider,
+        model: this.options.model,
         parentToolRegistry: this.toolRegistry,
         subAgentFactory: this.subAgentFactory,
       });
@@ -740,9 +747,22 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       if (result.phase.type === 'tool-result') {
         const keys = Object.keys(result.phase.results);
         if (keys.length === 1) {
-          this.emit('tool:end', { result: result.phase.results[keys[0]] });
+          this.emit('tool:end', {
+            result: result.phase.results[keys[0]],
+            callId: keys[0],
+          });
         } else {
           this.emit('tools:end', { results: result.phase.results });
+        }
+
+        // advance() 路径独有：处理 skill signal 更新 skillState
+        // step()/run() 路径会走 processToolResult()，那里也会处理，不会走到这里
+        const firstKey = keys[0];
+        const firstResult = firstKey !== undefined ? result.phase.results[firstKey] : undefined;
+        if (isSkillSignal(firstResult)) {
+          const sig = firstResult as SkillSignal;
+          const [stateAfterSkill] = applySkillSignal(result.state, sig);
+          result.state = stateAfterSkill;
         }
       }
       if (result.phase.type === 'error') {
@@ -1011,9 +1031,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     let totalSteps = 0;
 
     try {
-      const HARD_LIMIT = 1000;
-
-      while (totalSteps < HARD_LIMIT) {
+      while (totalSteps < RUN_HARD_LIMIT) {
         options?.signal?.throwIfAborted();
 
         // Call step() to get full event propagation (advance → step → run)
@@ -1117,9 +1135,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     let totalSteps = 0;
 
     try {
-      const HARD_LIMIT = 1000;
-
-      while (totalSteps < HARD_LIMIT) {
+      while (totalSteps < RUN_HARD_LIMIT) {
         options?.signal?.throwIfAborted();
 
         // Step start

@@ -996,4 +996,64 @@ describe('Execution Policy integration', () => {
       // onParseError is tested via integration when LLM returns malformed JSON.
     });
   });
+
+  // T3: 回归测试 — onParseError ignore 时 fallbackText 应保留到 execState.llmResponse (CR P0-3)
+  describe('CallingLLMHandler onParseError ignore regression (CR P0-3)', () => {
+    it('should preserve fallbackText in execState.llmResponse when policy ignores parse error', async () => {
+      const handler = new CallingLLMHandler();
+      const state = createMockState();
+      const execState = createExecutionState();
+      execState.phase = { type: 'calling-llm' };
+      execState.preparedMessages = [{ role: 'user', content: 'test' }];
+
+      const onParseError = vi.fn().mockResolvedValue({
+        decision: 'ignore',
+        fallbackText: 'Fallback text from policy',
+      });
+
+      const ctx = createMockCtx({
+        llmProvider: {
+          call: vi.fn().mockResolvedValue({
+            content: 'original response',
+            toolCalls: [{ id: 'tc-1', name: 'someTool', arguments: {} }],
+            tokens: { input: 10, output: 5 },
+            stopReason: 'tool_calls',
+          }),
+          stream: vi.fn(),
+        } as never,
+        executionPolicy: {
+          shouldStop: () => ({ decision: 'continue' }),
+          onToolError: (error: Error) => ({
+            decision: 'continue' as const,
+            sanitizedResult: `Error: ${error.message}`,
+          }),
+          onParseError,
+        },
+      });
+
+      // CallingLLMHandler 内部调用 toolCallToAction，这个函数只做字段映射不会抛错。
+      // 我们通过 vi.mock 替换 execution.ts 的 toolCallToAction 让它抛错，
+      // 触发 onParseError → ignore 路径。
+      const executionModule = await import('../../../src/execution.js');
+      const originalFn = executionModule.toolCallToAction;
+      vi.spyOn(executionModule, 'toolCallToAction').mockImplementation(() => {
+        throw new Error('Simulated parse failure');
+      });
+
+      try {
+        await handler.execute(ctx, state, execState);
+
+        // onParseError 应该被调用
+        expect(onParseError).toHaveBeenCalled();
+        // llmResponse 应该被设置为 fallbackText（P0-3 修复的核心断言）
+        expect(execState.llmResponse).toBe('Fallback text from policy');
+        // action 和 allActions 应该被清除
+        expect(execState.action).toBeUndefined();
+        expect(execState.allActions).toBeUndefined();
+      } finally {
+        // 恢复原始实现
+        vi.restoreAllMocks();
+      }
+    });
+  });
 });

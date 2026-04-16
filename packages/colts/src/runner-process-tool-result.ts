@@ -112,12 +112,13 @@ export async function processToolResult(
   const action = execState.action;
   let currentState = state;
 
-  // 1. Detect delegate tool - always emit subagent:start regardless of
-  //    whether the result is also a skill signal.
-  const isDelegate = action?.tool === 'delegate';
-  if (isDelegate) {
-    const agentName = String(action!.arguments.agent ?? '');
-    const taskDesc = String(action!.arguments.task ?? '');
+  // 1. Detect delegate tool - search allActions, fall back to single action
+  const delegateAction =
+    execState.allActions?.find((a) => a.tool === 'delegate') ??
+    (action?.tool === 'delegate' ? action : undefined);
+  if (delegateAction) {
+    const agentName = String(delegateAction.arguments.agent ?? '');
+    const taskDesc = String(delegateAction.arguments.task ?? '');
     effects.push({ type: 'subagent:start', name: agentName, task: taskDesc });
   }
 
@@ -195,8 +196,8 @@ export async function processToolResult(
     }
 
     // Emit subagent:end after skill-signal processing for delegate tools
-    if (isDelegate) {
-      const agentName = String(action!.arguments.agent ?? '');
+    if (delegateAction) {
+      const agentName = String(delegateAction.arguments.agent ?? '');
       effects.push({ type: 'subagent:end', name: agentName, result });
     }
 
@@ -210,8 +211,8 @@ export async function processToolResult(
     effects.push({ type: 'tools:end', results });
   }
 
-  if (isDelegate) {
-    const agentName = String(action!.arguments.agent ?? '');
+  if (delegateAction) {
+    const agentName = String(delegateAction.arguments.agent ?? '');
     effects.push({ type: 'subagent:end', name: agentName, result });
   }
 

@@ -104,6 +104,16 @@ export class StreamEventConsumer {
         break;
       }
 
+      case 'tools:start': {
+        this.handleToolsStart(event);
+        break;
+      }
+
+      case 'tools:end': {
+        this.handleToolsEnd(event);
+        break;
+      }
+
       case 'phase-change': {
         this.handlePhaseChange(event);
         break;
@@ -276,6 +286,47 @@ export class StreamEventConsumer {
         return updated;
       }
       return prev;
+    });
+    this.hooks.onToolEnd?.();
+  }
+
+  /** tools:start 事件：flush token，停止 assistant streaming，批量创建 tool entry */
+  private handleToolsStart(event: Extract<StreamEvent, { type: 'tools:start' }>): void {
+    this.flush();
+    const id = this.assistantId;
+    this.setEntries((prev) =>
+      prev.map((e) => (e.type === 'assistant' && e.id === id ? { ...e, isStreaming: false } : e))
+    );
+    for (const action of event.actions) {
+      this.addEntry({
+        type: 'tool',
+        id: this.uid(),
+        tool: action.tool,
+        args: action.arguments,
+        isRunning: true,
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  /** tools:end 事件：从后往前匹配 isRunning 的 tool 条目，更新结果 */
+  private handleToolsEnd(event: Extract<StreamEvent, { type: 'tools:end' }>): void {
+    this.setEntries((prev) => {
+      const next = [...prev];
+      const keys = Object.keys(event.results);
+      let ki = keys.length - 1;
+      for (let i = next.length - 1; i >= 0 && ki >= 0; i--) {
+        if (next[i].type === 'tool' && (next[i] as { isRunning?: boolean }).isRunning) {
+          const callId = keys[ki];
+          next[i] = {
+            ...next[i],
+            result: event.results[callId],
+            isRunning: false,
+          } as TimelineEntry;
+          ki--;
+        }
+      }
+      return next;
     });
     this.hooks.onToolEnd?.();
   }

@@ -765,4 +765,41 @@ describe('processToolResult - multi-result parallel tools', () => {
     const toolEnd = outcome.effects[0] as { type: 'tool:end'; result: unknown };
     expect(toolEnd.result).toBe('42');
   });
+
+  // T2: 回归测试 — delegate 不在首个 action 时仍能被检测到 (CR P0-2)
+  it('should detect delegate tool when it is not the first action', async () => {
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+
+    // action 指向 calculator（非 delegate），allActions 中 delegate 在后面
+    execState.phase = { type: 'tool-result', results: { 'tc-1': '42', 'tc-2': 'delegated' } };
+    execState.action = {
+      id: 'tc-1',
+      tool: 'calculator',
+      arguments: { expr: '6*7' },
+    };
+    execState.allActions = [
+      { id: 'tc-1', tool: 'calculator', arguments: { expr: '6*7' } },
+      {
+        id: 'tc-2',
+        tool: 'delegate',
+        arguments: { agent: 'sub-expert', task: 'analyze data' },
+      },
+    ];
+
+    const outcome = await processToolResult(state, execState);
+
+    // 应检测到 delegate 并发出 subagent:start + subagent:end
+    const types = outcome.effects.map((e) => e.type);
+    expect(types).toContain('subagent:start');
+    expect(types).toContain('subagent:end');
+
+    const subStart = outcome.effects.find((e) => e.type === 'subagent:start') as {
+      type: 'subagent:start';
+      name: string;
+      task: string;
+    };
+    expect(subStart.name).toBe('sub-expert');
+    expect(subStart.task).toBe('analyze data');
+  });
 });
