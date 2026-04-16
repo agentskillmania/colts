@@ -424,6 +424,7 @@ export class RequestScheduler extends EventEmitter {
         // Atomically acquire all three semaphores
         // Note: We acquire in order: provider -> key -> model to avoid deadlock
         await providerSem.acquire();
+        let providerReleased = false;
         try {
           await keySem.acquire();
           try {
@@ -477,13 +478,12 @@ export class RequestScheduler extends EventEmitter {
             }
           } finally {
             providerSem.release();
+            providerReleased = true;
           }
         } finally {
-          // Ensure provider semaphore is released if not already
-          // This handles the case where an error occurred before inner finally blocks ran
-          const usage = providerSem.getUsage();
-          if (usage.current > 0 && provider.activeCount < usage.current) {
-            // Already released by inner finally, do nothing
+          // Release provider if keySem.acquire() threw before entering inner try/finally
+          if (!providerReleased) {
+            providerSem.release();
           }
         }
       },
