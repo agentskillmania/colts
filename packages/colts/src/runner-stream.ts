@@ -144,6 +144,7 @@ export async function* executeAdvanceStream(
   const fromPhase = execState.phase;
 
   // Handle streaming LLM response
+  // TODO(M3): integrate streaming with PhaseRouter (strategy B bypass for calling-llm)
   if (fromPhase.type === 'calling-llm') {
     yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 

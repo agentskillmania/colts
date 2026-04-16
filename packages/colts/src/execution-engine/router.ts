@@ -81,7 +81,7 @@ export class PhaseRouter {
   ): Promise<AdvanceResult> {
     const handler = this.handlers.get(execState.phase.type);
     if (!handler) {
-      const error = new Error(`No handler for phase: ${execState.phase.type}`);
+      const error = new Error(`Unknown phase: ${JSON.stringify(execState.phase)}`);
       execState.phase = { type: 'error', error };
       return { state, phase: execState.phase, done: true };
     }

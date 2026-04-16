@@ -1,24 +1,18 @@
 /**
  * @fileoverview Advance Phase Machine
  *
- * Handles phase-by-phase advancement of the ReAct execution cycle.
- * Extracted from AgentRunner for maintainability.
+ * Delegates phase-by-phase advancement to the PhaseRouter.
+ * The router dispatches to registered IPhaseHandler instances.
  */
 
 import type { AgentState, ILLMProvider, IToolRegistry } from './types.js';
 import type { ISkillProvider } from './skills/types.js';
 import type { SubAgentConfig } from './subagent/types.js';
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.js';
-import { toolCallToAction } from './execution.js';
-import { getToolsForLLM } from './tools/llm-format.js';
 import type { IMessageAssembler } from './message-assembler/types.js';
-import { isSkillSignal, type SkillSignal } from './skills/types.js';
-import {
-  addAssistantMessage,
-  addToolMessage,
-  addUserMessage,
-  incrementStepCount,
-} from './state.js';
+import type { IPhaseHandler } from './execution-engine/types.js';
+import { PhaseRouter } from './execution-engine/router.js';
+import { createDefaultPhaseHandlers } from './execution-engine/default-registry.js';
 
 /**
  * Runner context passed to extracted functions instead of `this`
@@ -28,6 +22,8 @@ export interface RunnerContext {
   toolRegistry: IToolRegistry;
   /** Message assembler for building LLM message arrays */
   messageAssembler: IMessageAssembler;
+  /** Phase router for dispatching to phase handlers */
+  phaseRouter: PhaseRouter;
   skillProvider?: ISkillProvider;
   /** Sub-agent configuration map (name → SubAgentConfig) */
   subAgentConfigs?: Map<string, SubAgentConfig>;
@@ -39,8 +35,30 @@ export interface RunnerContext {
   };
 }
 
+/** Module-level default PhaseRouter (shared, lazy-initialized) */
+let _defaultRouter: PhaseRouter | null = null;
+
+/**
+ * Create the default PhaseRouter with all 10 standard handlers.
+ * Returns a singleton to avoid repeated handler instantiation.
+ *
+ * @param customHandlers - Optional custom handler list (overrides defaults)
+ * @returns PhaseRouter instance
+ */
+export function createRouter(customHandlers?: IPhaseHandler[]): PhaseRouter {
+  if (customHandlers) {
+    return new PhaseRouter(customHandlers);
+  }
+  if (!_defaultRouter) {
+    _defaultRouter = new PhaseRouter(createDefaultPhaseHandlers());
+  }
+  return _defaultRouter;
+}
+
 /**
  * Execute one phase advancement
+ *
+ * Delegates to PhaseRouter for phase dispatching.
  *
  * @param ctx - Runner context
  * @param state - Current agent state
@@ -56,245 +74,13 @@ export async function executeAdvance(
   toolRegistry?: IToolRegistry,
   options?: AdvanceOptions
 ): Promise<AdvanceResult> {
-  const registry = toolRegistry ?? ctx.toolRegistry;
-  const currentPhase = execState.phase;
-
   try {
-    switch (currentPhase.type) {
-      case 'idle':
-        return advanceToPreparing(ctx, state, execState);
-
-      case 'preparing':
-        return advanceToCallingLLM(state, execState);
-
-      case 'calling-llm':
-        return await advanceToLLMResponse(ctx, state, execState, registry, options?.signal);
-
-      case 'llm-response':
-        return advanceToParsing(state, execState);
-
-      case 'parsing':
-        return advanceToParsed(state, execState);
-
-      case 'parsed':
-        return advanceFromParsed(state, execState);
-
-      case 'executing-tool':
-        return await advanceToToolResult(state, execState, registry, options?.signal);
-
-      case 'tool-result':
-        return advanceToCompleted(state, execState);
-
-      case 'completed':
-      case 'error':
-        return { state, phase: currentPhase, done: true };
-
-      default:
-        execState.phase = { type: 'error', error: new Error(`Unknown phase: ${currentPhase}`) };
-        return { state, phase: execState.phase, done: true };
-    }
+    return await ctx.phaseRouter.execute(ctx, state, execState, toolRegistry, options);
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
     execState.phase = { type: 'error', error: errorObj };
     return { state, phase: execState.phase, done: true };
   }
-}
-
-function advanceToPreparing(
-  ctx: RunnerContext,
-  state: AgentState,
-  execState: ExecutionState
-): AdvanceResult {
-  const messages = ctx.messageAssembler.build(state, {
-    systemPrompt: ctx.options.systemPrompt,
-    model: ctx.options.model,
-    skillProvider: ctx.skillProvider,
-    subAgentConfigs: ctx.subAgentConfigs,
-  });
-  execState.preparedMessages = messages;
-  const displayMessages: import('./types.js').Message[] = messages.map((m) => ({
-    role: m.role as import('./types.js').MessageRole,
-    content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-    timestamp: Date.now(),
-  }));
-  execState.phase = { type: 'preparing', messages: displayMessages };
-  return { state, phase: execState.phase, done: false };
-}
-
-function advanceToCallingLLM(state: AgentState, execState: ExecutionState): AdvanceResult {
-  execState.phase = { type: 'calling-llm' };
-  return { state, phase: execState.phase, done: false };
-}
-
-async function advanceToLLMResponse(
-  ctx: RunnerContext,
-  state: AgentState,
-  execState: ExecutionState,
-  registry?: IToolRegistry,
-  signal?: AbortSignal
-): Promise<AdvanceResult> {
-  const tools = getToolsForLLM(registry);
-
-  const response = await ctx.llmProvider.call({
-    model: ctx.options.model,
-    messages:
-      execState.preparedMessages ??
-      ctx.messageAssembler.build(state, {
-        systemPrompt: ctx.options.systemPrompt,
-        model: ctx.options.model,
-        skillProvider: ctx.skillProvider,
-      }),
-    tools,
-    priority: 0,
-    requestTimeout: ctx.options.requestTimeout,
-    signal,
-  });
-
-  const responseText = response.content;
-  execState.llmResponse = responseText;
-
-  if (response.toolCalls && response.toolCalls.length > 0) {
-    const toolCall = response.toolCalls[0];
-    execState.action = toolCallToAction(toolCall);
-    execState.allActions = response.toolCalls.map(toolCallToAction);
-  } else {
-    // New response has no toolCalls; clear stale action to prevent reusing expired tool calls
-    execState.action = undefined;
-    execState.allActions = undefined;
-  }
-
-  execState.phase = { type: 'llm-response', response: responseText };
-  return { state, phase: execState.phase, done: false };
-}
-
-function advanceToParsing(state: AgentState, execState: ExecutionState): AdvanceResult {
-  execState.phase = { type: 'parsing' };
-  return { state, phase: execState.phase, done: false };
-}
-
-function advanceToParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
-  // Action already extracted from raw response in advanceToLLMResponse, no need to re-parse
-  const thought = execState.llmResponse ?? '';
-  execState.thought = thought;
-
-  if (execState.action) {
-    execState.phase = { type: 'parsed', thought, action: execState.action };
-  } else {
-    execState.phase = { type: 'parsed', thought };
-  }
-
-  return { state, phase: execState.phase, done: false };
-}
-
-function advanceFromParsed(state: AgentState, execState: ExecutionState): AdvanceResult {
-  if (execState.action) {
-    const thought = execState.thought ?? '';
-    const toolCalls = execState.allActions?.map((a) => ({
-      id: a.id,
-      name: a.tool,
-      arguments: a.arguments,
-    }));
-    const newState = addAssistantMessage(state, thought, {
-      type: 'thought',
-      toolCalls,
-    });
-    execState.phase = { type: 'executing-tool', action: execState.action };
-    return { state: newState, phase: execState.phase, done: false };
-  } else {
-    return advanceToCompleted(state, execState);
-  }
-}
-
-async function advanceToToolResult(
-  state: AgentState,
-  execState: ExecutionState,
-  registry?: IToolRegistry,
-  signal?: AbortSignal
-): Promise<AdvanceResult> {
-  const action = execState.action;
-  if (!action) {
-    throw new Error('No action to execute');
-  }
-  if (!registry) {
-    throw new Error('Tool registry is required for tool execution');
-  }
-
-  let result: unknown;
-  try {
-    result = await registry.execute(action.tool, action.arguments, { signal });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    result = `Error: ${errorMessage}`;
-  }
-
-  execState.toolResult = result;
-  execState.phase = { type: 'tool-result', result };
-
-  // Format skill signals as LLM-friendly text instead of raw JSON
-  let toolResultContent: string;
-  if (isSkillSignal(result)) {
-    const sig = result as SkillSignal;
-    switch (sig.type) {
-      case 'SWITCH_SKILL': {
-        // Validate transition before writing optimistic message
-        const ss = state.context.skillState;
-        if (ss?.current === sig.to) {
-          toolResultContent = `Skill '${sig.to}' is already active. Continue with current instructions.`;
-        } else if (ss?.stack.some((f) => f.skillName === sig.to)) {
-          toolResultContent = `Cannot load Skill '${sig.to}': already in the call stack. Continue with current task.`;
-        } else {
-          toolResultContent = `Skill '${sig.to}' loaded. Follow its instructions.`;
-        }
-        break;
-      }
-      case 'RETURN_SKILL':
-        toolResultContent =
-          typeof sig.result === 'string' ? sig.result : JSON.stringify(sig.result);
-        break;
-      case 'SKILL_NOT_FOUND':
-        toolResultContent = `Skill '${sig.requested}' not found. Available: ${sig.available.join(', ')}`;
-        break;
-      default:
-        toolResultContent = JSON.stringify(result);
-    }
-  } else {
-    toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
-  }
-  const newState = incrementStepCount(
-    addToolMessage(state, toolResultContent, {
-      toolCallId: action.id,
-      toolName: action.tool,
-    })
-  );
-
-  // Inject task instruction as a user message on skill switch (always injected)
-  if (isSkillSignal(result)) {
-    const sig = result as SkillSignal;
-    if (sig.type === 'SWITCH_SKILL') {
-      const task = (sig as SkillSignal & { task?: string }).task;
-      const instruction =
-        task && task !== 'Execute as instructed'
-          ? task
-          : 'Follow the loaded skill instructions to complete the user request.';
-      const withTask = addUserMessage(newState, instruction);
-      return { state: withTask, phase: execState.phase, done: false };
-    }
-  }
-
-  return { state: newState, phase: execState.phase, done: false };
-}
-
-function advanceToCompleted(state: AgentState, execState: ExecutionState): AdvanceResult {
-  const answer = execState.thought ?? '';
-  execState.phase = { type: 'completed', answer };
-
-  if (execState.toolResult === undefined) {
-    const newState = incrementStepCount(addAssistantMessage(state, answer, { type: 'final' }));
-    return { state: newState, phase: execState.phase, done: true };
-  }
-
-  // tool-result → completed: messages already written (thought + tool message), don't duplicate
-  return { state, phase: execState.phase, done: true };
 }
 
 /**
