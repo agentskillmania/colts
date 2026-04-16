@@ -21,6 +21,7 @@ import type { ExecutionState } from '../../../src/execution.js';
 import { createExecutionState } from '../../../src/execution.js';
 import { createAgentState } from '../../../src/state.js';
 import type { ToolSchema } from '../../../src/tools/registry.js';
+import { DefaultToolSchemaFormatter } from '../../../src/tools/schema-formatter.js';
 
 // ---------------------------------------------------------------------------
 // Shared test helpers
@@ -52,6 +53,7 @@ function createMockCtx(overrides?: Partial<PhaseHandlerContext>): PhaseHandlerCo
         { role: 'user', content: 'Hello' },
       ]),
     } as never,
+    toolSchemaFormatter: new DefaultToolSchemaFormatter(),
     options: { model: 'test-model' },
     ...overrides,
   };

@@ -34,6 +34,8 @@ import type {
 import type { AdvanceOptions } from './execution.js';
 import { createExecutionState, isTerminalPhase } from './execution.js';
 import { getToolsForLLM } from './tools/llm-format.js';
+import type { IToolSchemaFormatter } from './tools/schema-formatter.js';
+import { DefaultToolSchemaFormatter } from './tools/schema-formatter.js';
 import { DefaultMessageAssembler } from './message-assembler/index.js';
 import type { IMessageAssembler } from './message-assembler/types.js';
 import { compressState, maybeCompress } from './runner-compression.js';
@@ -43,7 +45,8 @@ import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './run
 import type { ISkillProvider } from './skills/types.js';
 import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
 import { createLoadSkillTool, createReturnSkillTool } from './skills/index.js';
-import type { SubAgentConfig, DelegateResult } from './subagent/types.js';
+import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from './subagent/types.js';
+import { DefaultSubAgentFactory } from './subagent/types.js';
 import { createDelegateTool } from './subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
 import { processToolResult } from './runner-process-tool-result.js';
@@ -160,6 +163,12 @@ export interface RunnerOptions {
   // --- SubAgents ---
   /** Sub-agent configuration list, auto-registers delegate tool when provided */
   subAgents?: SubAgentConfig[];
+
+  // --- Extensibility ---
+  /** Tool schema formatter (defaults to DefaultToolSchemaFormatter) */
+  toolSchemaFormatter?: IToolSchemaFormatter;
+  /** Sub-agent factory (defaults to DefaultSubAgentFactory) */
+  subAgentFactory?: ISubAgentFactory;
 }
 
 /**
@@ -256,6 +265,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private subAgentConfigs?: Map<string, SubAgentConfig>;
   private messageAssembler: IMessageAssembler;
   private phaseRouter: ReturnType<typeof createRouter>;
+  private toolSchemaFormatter: IToolSchemaFormatter;
+  private subAgentFactory: ISubAgentFactory;
   private options: RunnerOptions;
 
   /** Get the Skill provider (used by the CLI layer for the /skill command) */
@@ -311,6 +322,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Initialize phase router (default handlers)
     this.phaseRouter = createRouter();
 
+    // Initialize tool schema formatter
+    this.toolSchemaFormatter = options.toolSchemaFormatter ?? new DefaultToolSchemaFormatter();
+
+    // Initialize sub-agent factory
+    this.subAgentFactory = options.subAgentFactory ?? new DefaultSubAgentFactory();
+
     // Initialize compressor
     if (options.compressor) {
       if (typeof options.compressor === 'object' && 'shouldCompress' in options.compressor) {
@@ -346,6 +363,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         subAgentConfigs: this.subAgentConfigs,
         llmProvider: this.llmProvider,
         parentToolRegistry: this.toolRegistry,
+        subAgentFactory: this.subAgentFactory,
       });
       this.toolRegistry.register(delegateTool);
     }
@@ -419,6 +437,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       toolRegistry: this.toolRegistry,
       messageAssembler: this.messageAssembler,
       phaseRouter: this.phaseRouter,
+      toolSchemaFormatter: this.toolSchemaFormatter,
       skillProvider: this._skillProvider,
       subAgentConfigs: this.subAgentConfigs,
       options: {
@@ -629,7 +648,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    * @private
    */
   private getToolsForLLM(registry?: IToolRegistry): Tool[] | undefined {
-    return getToolsForLLM(registry);
+    return getToolsForLLM(registry, this.toolSchemaFormatter);
   }
 
   /**

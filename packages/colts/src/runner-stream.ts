@@ -43,7 +43,7 @@ export async function* streamCallingLLM(
   registry?: IToolRegistry,
   signal?: AbortSignal
 ): AsyncGenerator<StreamEvent> {
-  const tools = getToolsForLLM(registry);
+  const tools = getToolsForLLM(registry, ctx.toolSchemaFormatter);
   const messages = execState.preparedMessages ?? buildMessagesFromCtx(ctx, state);
 
   // Yield llm:request event before LLM call, carrying the full input

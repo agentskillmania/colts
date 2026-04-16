@@ -186,4 +186,15 @@ export class ToolRegistry {
   clear(): void {
     this.tools.clear();
   }
+
+  /**
+   * Get all registered tool definitions
+   *
+   * Used by IToolSchemaFormatter to convert tools for LLM consumption.
+   *
+   * @returns Array of all registered tools
+   */
+  getAll(): Tool<z.ZodTypeAny>[] {
+    return Array.from(this.tools.values());
+  }
 }

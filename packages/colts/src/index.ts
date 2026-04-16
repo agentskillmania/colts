@@ -85,6 +85,10 @@ export {
   type ConfirmableRegistryOptions,
 } from './tools/index.js';
 
+// Tool Schema Formatter
+export type { IToolSchemaFormatter } from './tools/schema-formatter.js';
+export { DefaultToolSchemaFormatter } from './tools/schema-formatter.js';
+
 // Runner
 export {
   AgentRunner,
@@ -115,8 +119,13 @@ export {
 export { FilesystemSkillProvider, createLoadSkillTool } from './skills/index.js';
 
 // Subagent
-export type { SubAgentConfig, DelegateResult, SubAgentStreamEvent } from './subagent/index.js';
-export { createDelegateTool } from './subagent/index.js';
+export type {
+  SubAgentConfig,
+  DelegateResult,
+  SubAgentStreamEvent,
+  ISubAgentFactory,
+} from './subagent/index.js';
+export { createDelegateTool, DefaultSubAgentFactory } from './subagent/index.js';
 export type { DelegateToolDeps } from './subagent/index.js';
 
 // Execution Engine

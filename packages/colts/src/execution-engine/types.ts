@@ -11,6 +11,7 @@ import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../execution
 import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { ISkillProvider } from '../skills/types.js';
 import type { SubAgentConfig } from '../subagent/types.js';
+import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 
 /**
  * Context passed to every IPhaseHandler
@@ -25,6 +26,8 @@ export interface PhaseHandlerContext {
   toolRegistry: IToolRegistry;
   /** Message assembler for building LLM message arrays */
   messageAssembler: IMessageAssembler;
+  /** Tool schema formatter for converting tools to LLM format */
+  toolSchemaFormatter: IToolSchemaFormatter;
   /** Skill provider (optional, for skill-aware handlers) */
   skillProvider?: ISkillProvider;
   /** Sub-agent configuration map (optional) */
