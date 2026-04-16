@@ -224,10 +224,11 @@ export async function* executeStepStream(
 
     // Emit tool events based on phase transitions
     if (phase.type === 'executing-tool') {
-      yield {
-        type: 'tool:start',
-        action: phase.action,
-      };
+      if (phase.actions.length === 1) {
+        yield { type: 'tool:start', action: phase.actions[0] };
+      } else {
+        yield { type: 'tools:start', actions: phase.actions };
+      }
     }
 
     yield { type: 'phase-change', from: fromPhase, to: phase };

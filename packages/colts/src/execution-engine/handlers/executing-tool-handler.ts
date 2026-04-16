@@ -1,8 +1,8 @@
 /**
  * @fileoverview Executing-Tool Phase Handler
  *
- * Executes the current tool action, processes skill signals,
- * writes tool messages to state. Transitions to tool-result phase.
+ * Executes tool actions in parallel via Promise.all, processes skill
+ * signals, writes tool messages to state. Transitions to tool-result phase.
  */
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
@@ -23,67 +23,62 @@ export class ExecutingToolHandler implements IPhaseHandler {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): Promise<AdvanceResult> {
-    const action = execState.action;
-    if (!action) {
-      throw new Error('No action to execute');
+    const phase = execState.phase;
+    if (phase.type !== 'executing-tool') {
+      throw new Error('Unexpected phase type');
+    }
+
+    const actions = phase.actions;
+    if (actions.length === 0) {
+      throw new Error('No actions to execute');
     }
     if (!toolRegistry) {
       throw new Error('Tool registry is required for tool execution');
     }
 
-    let result: unknown;
-    try {
-      result = await toolRegistry.execute(action.tool, action.arguments, {
-        signal: options?.signal,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      result = `Error: ${errorMessage}`;
-    }
-
-    execState.toolResult = result;
-    execState.phase = { type: 'tool-result', result };
-
-    // Format skill signals as LLM-friendly text instead of raw JSON
-    let toolResultContent: string;
-    if (isSkillSignal(result)) {
-      const sig = result as SkillSignal;
-      switch (sig.type) {
-        case 'SWITCH_SKILL': {
-          // Validate transition before writing optimistic message
-          const ss = state.context.skillState;
-          if (ss?.current === sig.to) {
-            toolResultContent = `Skill '${sig.to}' is already active. Continue with current instructions.`;
-          } else if (ss?.stack.some((f) => f.skillName === sig.to)) {
-            toolResultContent = `Cannot load Skill '${sig.to}': already in the call stack. Continue with current task.`;
-          } else {
-            toolResultContent = `Skill '${sig.to}' loaded. Follow its instructions.`;
-          }
-          break;
+    // Execute all tool calls in parallel
+    const results = await Promise.all(
+      actions.map(async (action) => {
+        try {
+          const result = await toolRegistry.execute(action.tool, action.arguments, {
+            signal: options?.signal,
+          });
+          return { action, result, error: false };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return { action, result: `Error: ${errorMessage}`, error: true };
         }
-        case 'RETURN_SKILL':
-          toolResultContent =
-            typeof sig.result === 'string' ? sig.result : JSON.stringify(sig.result);
-          break;
-        case 'SKILL_NOT_FOUND':
-          toolResultContent = `Skill '${sig.requested}' not found. Available: ${sig.available.join(', ')}`;
-          break;
-        default:
-          toolResultContent = JSON.stringify(result);
-      }
-    } else {
-      toolResultContent = typeof result === 'string' ? result : JSON.stringify(result);
-    }
-    const newState = incrementStepCount(
-      addToolMessage(state, toolResultContent, {
-        toolCallId: action.id,
-        toolName: action.tool,
       })
     );
 
-    // Inject task instruction as a user message on skill switch (always injected)
-    if (isSkillSignal(result)) {
-      const sig = result as SkillSignal;
+    // Aggregate results into Record<toolCallId, result>
+    const resultMap: Record<string, unknown> = {};
+    for (const { action, result } of results) {
+      resultMap[action.id] = result;
+    }
+
+    // Backward compat: execState.action takes the first, execState.toolResult takes the first result
+    execState.toolResult = results[0]?.result;
+
+    execState.phase = { type: 'tool-result', results: resultMap };
+
+    // Write individual tool messages for each action
+    let newState = state;
+    for (const { action, result } of results) {
+      const toolResultContent = formatToolResult(result);
+      newState = addToolMessage(newState, toolResultContent, {
+        toolCallId: action.id,
+        toolName: action.tool,
+      });
+    }
+    newState = incrementStepCount(newState);
+
+    // Skill signal: only check on the first result
+    // Models should not mix skill calls with plain tool calls in one batch
+    const firstResult = results[0]?.result;
+    const firstAction = results[0]?.action;
+    if (isSkillSignal(firstResult) && firstAction) {
+      const sig = firstResult as SkillSignal;
       if (sig.type === 'SWITCH_SKILL') {
         const task = (sig as SkillSignal & { task?: string }).task;
         const instruction =
@@ -97,4 +92,25 @@ export class ExecutingToolHandler implements IPhaseHandler {
 
     return { state: newState, phase: execState.phase, done: false };
   }
+}
+
+/**
+ * Format tool result as string.
+ * Skill signals get special formatting; plain results are serialized directly.
+ */
+function formatToolResult(result: unknown): string {
+  if (isSkillSignal(result)) {
+    const sig = result as SkillSignal;
+    switch (sig.type) {
+      case 'SWITCH_SKILL':
+        return `Skill '${sig.to}' loaded. Follow its instructions.`;
+      case 'RETURN_SKILL':
+        return typeof sig.result === 'string' ? sig.result : JSON.stringify(sig.result);
+      case 'SKILL_NOT_FOUND':
+        return `Skill '${sig.requested}' not found. Available: ${sig.available.join(', ')}`;
+      default:
+        return JSON.stringify(result);
+    }
+  }
+  return typeof result === 'string' ? result : JSON.stringify(result);
 }

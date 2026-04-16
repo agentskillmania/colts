@@ -273,17 +273,19 @@ describe('advance()', () => {
 
     expect(execState.phase.type).toBe('executing-tool');
 
-    // Manually clear action to simulate invalid state
-    execState.action = undefined;
+    // Manually clear actions to simulate invalid state
+    if (execState.phase.type === 'executing-tool') {
+      execState.phase.actions = [];
+    }
 
-    // When: Advance to tool-result without action
+    // When: Advance to tool-result without actions
     result = await runner.advance(result.state, execState, registry);
 
     // Then: Error should be caught and converted to error phase
     expect(result.phase.type).toBe('error');
     expect(result.done).toBe(true);
     if (result.phase.type === 'error') {
-      expect(result.phase.error.message).toBe('No action to execute');
+      expect(result.phase.error.message).toBe('No actions to execute');
     }
   });
 
@@ -430,7 +432,7 @@ describe('advance()', () => {
     expect(result.phase.type).toBe('tool-result');
     expect(result.done).toBe(false);
     if (result.phase.type === 'tool-result') {
-      expect(result.phase.result).toBe('4');
+      expect(Object.values(result.phase.results)[0]).toBe('4');
     }
 
     // Phase: tool-result -> completed
@@ -583,8 +585,8 @@ describe('advance()', () => {
     expect(result.phase.type).toBe('parsed');
 
     // Simulate intervention: modify the action before executing
-    if (result.phase.type === 'parsed' && execState.action) {
-      execState.action.arguments = { expression: '3 + 3' };
+    if (result.phase.type === 'parsed' && execState.allActions && execState.allActions.length > 0) {
+      execState.allActions[0].arguments = { expression: '3 + 3' };
     }
 
     // Continue execution with modified action
@@ -601,7 +603,7 @@ describe('advance()', () => {
 
     if (finalResult.phase.type === 'tool-result') {
       // Should be 6, not 4, because we modified the action
-      expect(finalResult.phase.result).toBe('6');
+      expect(Object.values(finalResult.phase.results)[0]).toBe('6');
     }
   });
 });

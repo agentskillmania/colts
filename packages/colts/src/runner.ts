@@ -82,6 +82,10 @@ export interface RunnerEventMap {
   'tool:start': { action: Action };
   /** Tool execution completed */
   'tool:end': { result: unknown };
+  /** Parallel tool execution started */
+  'tools:start': { actions: Action[] };
+  /** Parallel tool execution completed */
+  'tools:end': { results: Record<string, unknown> };
   /** Execution error */
   error: { error: Error; context: { toolName?: string; step: number } };
 
@@ -718,10 +722,19 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
       // Emit corresponding StreamEvent based on phase type
       if (result.phase.type === 'executing-tool') {
-        this.emit('tool:start', { action: result.phase.action });
+        if (result.phase.actions.length === 1) {
+          this.emit('tool:start', { action: result.phase.actions[0] });
+        } else {
+          this.emit('tools:start', { actions: result.phase.actions });
+        }
       }
       if (result.phase.type === 'tool-result') {
-        this.emit('tool:end', { result: result.phase.result });
+        const keys = Object.keys(result.phase.results);
+        if (keys.length === 1) {
+          this.emit('tool:end', { result: result.phase.results[keys[0]] });
+        } else {
+          this.emit('tools:end', { results: result.phase.results });
+        }
       }
       if (result.phase.type === 'error') {
         this.emit('error', { error: result.phase.error, context: { step: 0 } });
@@ -847,7 +860,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         // Emit corresponding StreamEvent based on phase type
         if (phase.type === 'executing-tool') {
-          this.emit('tool:start', { action: phase.action });
+          if (phase.actions.length === 1) {
+            this.emit('tool:start', { action: phase.actions[0] });
+          } else {
+            this.emit('tools:start', { actions: phase.actions });
+          }
         }
         this.emit('phase-change', { from, to: phase });
 
