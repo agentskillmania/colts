@@ -92,8 +92,8 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
           expect(result.type).toBe('success');
           if (result.type === 'success') {
             expect(result.answer).toBeTruthy();
-            // If LLM used the ask_human tool (multi-step), answer should mention Alice
-            // If LLM answered directly (single step), that's also acceptable behavior
+            // EXPLORATORY: LLM may use ask_human (multi-step) or answer directly
+            // If multi-step, answer should mention Alice; if single-step, that's acceptable
             if (result.totalSteps > 1) {
               expect(result.answer.toLowerCase()).toContain('alice');
             }

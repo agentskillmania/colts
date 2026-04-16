@@ -44,6 +44,8 @@ import { createLoadSkillTool, createReturnSkillTool } from './skills/index.js';
 import type { SubAgentConfig, DelegateResult } from './subagent/types.js';
 import { createDelegateTool } from './subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
+import { processToolResult } from './runner-process-tool-result.js';
+import type { ToolPostEffect } from './runner-process-tool-result.js';
 
 /**
  * Runner event map — fully aligned with AsyncGenerator StreamEvent / RunStreamEvent.
@@ -90,9 +92,9 @@ export interface RunnerEventMap {
   /** Skill loaded */
   'skill:loaded': { name: string; tokenCount: number };
   /** Skill execution started */
-  'skill:start': { name: string; task: string };
+  'skill:start': { name: string; task: string; state?: AgentState };
   /** Skill execution completed */
-  'skill:end': { name: string; result: string };
+  'skill:end': { name: string; result: string; state?: AgentState };
 
   // ── SubAgent (aligned with StreamEvent) ──
   /** Sub-agent started */
@@ -438,10 +440,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    */
   async chat(state: AgentState, userInput: string, chatOptions?: ChatOptions): Promise<ChatResult> {
     // Initialize skill state if needed
-    this.initializeSkillState(state);
+    const initializedState = this.initializeSkillState(state);
 
     // 1. Add user message to state
-    let newState = addUserMessage(state, userInput);
+    let newState = addUserMessage(initializedState, userInput);
 
     // 2. Prepare messages for LLM
     const messages = this.buildMessages(newState);
@@ -461,6 +463,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     // 5. Increment step count
     newState = incrementStepCount(newState);
+
+    // 6. Clean up stale skill state on completion
+    newState = this.cleanupStaleSkillState(newState);
 
     return {
       state: newState,
@@ -511,8 +516,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     userInput: string,
     chatOptions?: ChatOptions
   ): AsyncIterable<ChatStreamChunk> {
+    // Initialize skill state if needed
+    const initializedState = this.initializeSkillState(state);
+
     // 1. Add user message to state (initial state for streaming)
-    const currentState = addUserMessage(state, userInput);
+    const currentState = addUserMessage(initializedState, userInput);
 
     // 2. Prepare messages for LLM
     const messages = this.buildMessages(currentState);
@@ -544,11 +552,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
           case 'done': {
             // Finalize state with complete response
-            const finalState = incrementStepCount(
+            let finalState = incrementStepCount(
               addAssistantMessage(currentState, accumulatedContent, {
                 type: 'final',
               })
             );
+            // Clean up stale skill state on completion
+            finalState = this.cleanupStaleSkillState(finalState);
 
             yield {
               type: 'done',
@@ -611,22 +621,30 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   }
 
   /**
-   * Initialize skill state in AgentState if not present
+   * Ensure skill state is initialized in the given AgentState.
+   *
+   * Returns a new state (via Immer) when initialization was needed,
+   * or the original state unchanged when skillState already exists or
+   * no skill provider is configured.
    *
    * @param state - Agent state to initialize
+   * @returns Agent state with skillState initialized (if applicable)
    * @private
    */
-  private initializeSkillState(state: AgentState): void {
-    if (!state.context.skillState && this._skillProvider) {
-      state.context.skillState = {
+  private initializeSkillState(state: AgentState): AgentState {
+    if (state.context.skillState || !this._skillProvider) {
+      return state;
+    }
+    return updateState(state, (draft) => {
+      draft.context.skillState = {
         stack: [],
         current: null,
-        availableSkills: this._skillProvider.listSkills().map((s) => ({
+        availableSkills: this._skillProvider!.listSkills().map((s) => ({
           name: s.name,
           description: s.description,
         })),
       };
-    }
+    });
   }
 
   /**
@@ -804,12 +822,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         if (phase.type === 'executing-tool') {
           this.emit('tool:start', { action: phase.action });
         }
-        if (phase.type === 'tool-result') {
-          this.emit('tool:end', { result: phase.result });
-        }
         this.emit('phase-change', { from, to: phase });
 
-        // Terminal: completed (direct answer)
+        // Terminal: completed (direct answer, no tool call)
         if (done && phase.type === 'completed') {
           const result: StepResult = { type: 'done', answer: phase.answer };
           this.emit('step:end', { step: stepIdx, result });
@@ -823,9 +838,43 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           return { state: currentState, result };
         }
 
-        // Non-terminal stopping point: tool-result
+        // Tool-result: delegate to shared processToolResult
         if (phase.type === 'tool-result') {
-          const result: StepResult = { type: 'continue', toolResult: phase.result };
+          const outcome = await processToolResult(currentState, execState, registry);
+          currentState = await maybeCompress(this.compressor, outcome.state);
+
+          // Forward lifecycle effects to EventEmitter
+          for (const effect of outcome.effects) {
+            if ((effect.type as string).startsWith('step:')) continue;
+            this.emit(effect.type as keyof RunnerEventMap, effect as never);
+          }
+
+          // Determine step control flow from effects
+          const stepEffect = outcome.effects.find((e): e is ToolPostEffect & { type: string } =>
+            (e.type as string).startsWith('step:')
+          );
+
+          if (stepEffect?.type === 'step:continue') {
+            // Continue the while loop (e.g. skill loaded/returned)
+            continue;
+          }
+          if (stepEffect?.type === 'step:done') {
+            const answer = (stepEffect as { type: 'step:done'; answer: string }).answer;
+            const result: StepResult = { type: 'done', answer };
+            this.emit('step:end', { step: stepIdx, result });
+            return { state: currentState, result };
+          }
+          if (stepEffect?.type === 'step:error') {
+            const error = (stepEffect as { type: 'step:error'; error: Error }).error;
+            const result: StepResult = { type: 'error', error };
+            this.emit('step:end', { step: stepIdx, result });
+            return { state: currentState, result };
+          }
+
+          // step:continue-return (same-skill, cyclic, plain tool)
+          const toolResult = (stepEffect as { type: 'step:continue-return'; toolResult: unknown })
+            .toolResult;
+          const result: StepResult = { type: 'continue', toolResult };
           this.emit('step:end', { step: stepIdx, result });
           return { state: currentState, result };
         }
@@ -900,12 +949,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
     // Initialize skill state if needed
-    this.initializeSkillState(state);
+    const initializedState = this.initializeSkillState(state);
 
-    this.emit('run:start', { state });
+    this.emit('run:start', { state: initializedState });
     const registry = toolRegistry ?? this.toolRegistry;
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
-    let currentState = state;
+    let currentState = initializedState;
     let totalSteps = 0;
 
     try {
@@ -987,10 +1036,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     options?: { maxSteps?: number; signal?: AbortSignal },
     toolRegistry?: IToolRegistry
   ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
-    this.emit('run:start', { state });
+    // Initialize skill state if needed
+    const initializedState = this.initializeSkillState(state);
+
+    this.emit('run:start', { state: initializedState });
     const registry = toolRegistry ?? this.toolRegistry;
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
-    let currentState = state;
+    let currentState = initializedState;
     let totalSteps = 0;
 
     try {

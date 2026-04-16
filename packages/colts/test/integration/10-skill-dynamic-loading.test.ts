@@ -122,7 +122,7 @@ Do NOT just say you are done — always use return_skill.`,
           expect(result.answer.length).toBeGreaterThan(0);
         }
 
-        // Verify skill events were emitted if LLM used load_skill
+        // EXPLORATORY: Real LLM may or may not use load_skill; do not gate CI on this
         if (events.includes('loaded:poet')) {
           expect(events).toContain('start:poet');
           // If poet was used, answer should be roughly 3 lines
@@ -131,9 +131,7 @@ Do NOT just say you are done — always use return_skill.`,
         }
 
         // Verify skill state was updated
-        if (finalState.context.skillState?.current) {
-          expect(finalState.context.skillState.current).toBe('poet');
-        }
+        expect(finalState.context.skillState?.current).toBe('poet');
       },
       120000
     );
@@ -218,7 +216,7 @@ Do NOT just say you are done — always use return_skill.`,
           expect(result.answer.length).toBeGreaterThan(0);
         }
 
-        // If critic was loaded as sub-skill, we should see end event
+        // EXPLORATORY: Real LLM may or may not load critic sub-skill
         if (skillEvents.includes('start:critic')) {
           expect(skillEvents).toContain('end:critic');
         }
