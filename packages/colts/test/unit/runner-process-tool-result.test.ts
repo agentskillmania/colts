@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
+import { createAgentState, updateState } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { z } from 'zod';
@@ -332,5 +332,378 @@ describe('stepStream() streaming path - basic scenarios', () => {
     if (lastValue!.result.type === 'continue') {
       expect(lastValue!.result.toolResult).toBe('42');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// processToolResult skill signal tests
+// ---------------------------------------------------------------------------
+
+describe('processToolResult - skill signals', () => {
+  it('should emit skill:start + tool:end + step:continue for SWITCH_SKILL (first load)', async () => {
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+    const switchSignal = {
+      type: 'SWITCH_SKILL',
+      to: 'research',
+      instructions: 'Research thoroughly',
+      task: 'Find sources about X',
+    };
+    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.action = {
+      id: 'tc1',
+      tool: 'load_skill',
+      arguments: { name: 'research', task: 'Find sources about X' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    expect(outcome.effects.map((e) => e.type)).toEqual([
+      'skill:start',
+      'tool:end',
+      'step:continue',
+    ]);
+
+    // Verify skill:start payload
+    const skillStart = outcome.effects[0] as {
+      type: 'skill:start';
+      name: string;
+      task: string;
+      state: typeof state;
+    };
+    expect(skillStart.name).toBe('research');
+    expect(skillStart.task).toBe('Find sources about X');
+    expect(skillStart.state.context.skillState?.current).toBe('research');
+
+    // Verify tool:end carries formatted string, not raw signal
+    const toolEnd = outcome.effects[1] as { type: 'tool:end'; result: unknown };
+    expect(toolEnd.result).toBe("Skill 'research' loaded");
+
+    // Verify execState.phase was reset to idle
+    expect(execState.phase.type).toBe('idle');
+  });
+
+  it('should emit skill:start + tool:end + step:continue for nested SWITCH_SKILL (parent pushed)', async () => {
+    // Start with an active skill
+    let state = createAgentState(defaultConfig);
+    state = updateState(state, (draft) => {
+      draft.context.skillState = {
+        stack: [],
+        current: 'writer',
+        loadedInstructions: 'Write well',
+      };
+    });
+
+    const execState = createExecutionState();
+    const switchSignal = {
+      type: 'SWITCH_SKILL',
+      to: 'editor',
+      instructions: 'Edit carefully',
+      task: 'Review the draft',
+    };
+    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.action = {
+      id: 'tc2',
+      tool: 'load_skill',
+      arguments: { name: 'editor', task: 'Review the draft' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    expect(outcome.effects.map((e) => e.type)).toEqual([
+      'skill:start',
+      'tool:end',
+      'step:continue',
+    ]);
+
+    // Verify parent was pushed onto stack
+    const skillStart = outcome.effects[0] as {
+      type: 'skill:start';
+      name: string;
+      state: typeof state;
+    };
+    expect(skillStart.name).toBe('editor');
+    expect(skillStart.state.context.skillState?.current).toBe('editor');
+    expect(skillStart.state.context.skillState?.stack.length).toBe(1);
+    expect(skillStart.state.context.skillState?.stack[0].skillName).toBe('writer');
+  });
+
+  it('should emit tool:end + step:continue-return for same-skill SWITCH_SKILL', async () => {
+    let state = createAgentState(defaultConfig);
+    state = updateState(state, (draft) => {
+      draft.context.skillState = {
+        stack: [],
+        current: 'research',
+        loadedInstructions: 'Research thoroughly',
+      };
+    });
+
+    const execState = createExecutionState();
+    const switchSignal = {
+      type: 'SWITCH_SKILL',
+      to: 'research', // same as current
+      instructions: 'Research thoroughly',
+      task: 'Do it again',
+    };
+    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.action = {
+      id: 'tc3',
+      tool: 'load_skill',
+      arguments: { name: 'research', task: 'Do it again' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    expect(outcome.effects.map((e) => e.type)).toEqual(['tool:end', 'step:continue-return']);
+
+    const toolEnd = outcome.effects[0] as { type: 'tool:end'; result: unknown };
+    expect(toolEnd.result).toBe("Skill 'research' is already active");
+  });
+
+  it('should emit tool:end + step:continue-return for cyclic SWITCH_SKILL', async () => {
+    let state = createAgentState(defaultConfig);
+    state = updateState(state, (draft) => {
+      draft.context.skillState = {
+        stack: [{ skillName: 'research', loadedAt: Date.now(), savedInstructions: 'Research' }],
+        current: 'writer',
+        loadedInstructions: 'Write well',
+      };
+    });
+
+    const execState = createExecutionState();
+    const switchSignal = {
+      type: 'SWITCH_SKILL',
+      to: 'research', // already in stack
+      instructions: 'Research thoroughly',
+      task: 'Cycle attempt',
+    };
+    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.action = {
+      id: 'tc4',
+      tool: 'load_skill',
+      arguments: { name: 'research', task: 'Cycle attempt' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    expect(outcome.effects.map((e) => e.type)).toEqual(['tool:end', 'step:continue-return']);
+
+    const toolEnd = outcome.effects[0] as { type: 'tool:end'; result: unknown };
+    expect(toolEnd.result).toBe("Cannot load Skill 'research': already in the call stack");
+  });
+
+  it('should emit skill:end + tool:end + step:done for top-level RETURN_SKILL', async () => {
+    let state = createAgentState(defaultConfig);
+    state = updateState(state, (draft) => {
+      draft.context.skillState = {
+        stack: [],
+        current: 'research',
+        loadedInstructions: 'Research thoroughly',
+      };
+    });
+
+    const execState = createExecutionState();
+    const returnSignal = {
+      type: 'RETURN_SKILL',
+      result: 'Found 3 relevant papers',
+      status: 'success' as const,
+    };
+    execState.phase = { type: 'tool-result', result: returnSignal };
+    execState.action = {
+      id: 'tc5',
+      tool: 'return_skill',
+      arguments: { result: 'Found 3 relevant papers' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    expect(outcome.effects.map((e) => e.type)).toEqual(['skill:end', 'tool:end', 'step:done']);
+
+    const skillEnd = outcome.effects[0] as {
+      type: 'skill:end';
+      name: string;
+      result: string;
+    };
+    expect(skillEnd.name).toBe('research');
+    expect(skillEnd.result).toBe('Found 3 relevant papers');
+
+    const toolEnd = outcome.effects[1] as { type: 'tool:end'; result: unknown };
+    expect(toolEnd.result).toBe('Found 3 relevant papers');
+
+    const stepDone = outcome.effects[2] as { type: 'step:done'; answer: string };
+    expect(stepDone.answer).toBe('Found 3 relevant papers');
+  });
+
+  it('should emit skill:end + tool:end + step:continue for nested RETURN_SKILL', async () => {
+    let state = createAgentState(defaultConfig);
+    state = updateState(state, (draft) => {
+      draft.context.skillState = {
+        stack: [
+          {
+            skillName: 'research',
+            loadedAt: Date.now(),
+            savedInstructions: 'Research thoroughly',
+          },
+        ],
+        current: 'writer',
+        loadedInstructions: 'Write well',
+      };
+    });
+
+    const execState = createExecutionState();
+    const returnSignal = {
+      type: 'RETURN_SKILL',
+      result: 'Draft completed',
+      status: 'success' as const,
+    };
+    execState.phase = { type: 'tool-result', result: returnSignal };
+    execState.action = {
+      id: 'tc6',
+      tool: 'return_skill',
+      arguments: { result: 'Draft completed' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    expect(outcome.effects.map((e) => e.type)).toEqual(['skill:end', 'tool:end', 'step:continue']);
+
+    const skillEnd = outcome.effects[0] as {
+      type: 'skill:end';
+      name: string;
+      result: string;
+    };
+    // completedSkill is 'writer' (the returning sub-skill)
+    expect(skillEnd.name).toBe('writer');
+    expect(skillEnd.result).toBe('Draft completed');
+
+    // Verify parent was restored
+    const returnedState = outcome.state;
+    expect(returnedState.context.skillState?.current).toBe('research');
+    expect(returnedState.context.skillState?.stack.length).toBe(0);
+
+    // Verify execState.phase was reset to idle
+    expect(execState.phase.type).toBe('idle');
+  });
+
+  it('should emit error + step:error for SKILL_NOT_FOUND', async () => {
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+    const notFoundSignal = {
+      type: 'SKILL_NOT_FOUND',
+      requested: 'nonexistent',
+      available: ['research', 'writer'],
+    };
+    execState.phase = { type: 'tool-result', result: notFoundSignal };
+    execState.action = {
+      id: 'tc7',
+      tool: 'load_skill',
+      arguments: { name: 'nonexistent' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    expect(outcome.effects.map((e) => e.type)).toEqual(['error', 'step:error']);
+
+    const errorEffect = outcome.effects[0] as {
+      type: 'error';
+      error: Error;
+      context: { step: number };
+    };
+    expect(errorEffect.error.message).toContain("Skill 'nonexistent' not found");
+
+    const stepError = outcome.effects[1] as { type: 'step:error'; error: Error };
+    expect(stepError.error).toBe(errorEffect.error);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// processToolResult delegate tool tests
+// ---------------------------------------------------------------------------
+
+describe('processToolResult - delegate tools', () => {
+  it('should emit subagent:start + tool:end + subagent:end + step:continue-return for delegate + plain result', async () => {
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+    execState.phase = { type: 'tool-result', result: 'delegated task completed' };
+    execState.action = {
+      id: 'tc8',
+      tool: 'delegate',
+      arguments: { agent: 'sub-agent', task: 'do something' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    expect(outcome.effects.map((e) => e.type)).toEqual([
+      'subagent:start',
+      'tool:end',
+      'subagent:end',
+      'step:continue-return',
+    ]);
+
+    const subStart = outcome.effects[0] as {
+      type: 'subagent:start';
+      name: string;
+      task: string;
+    };
+    expect(subStart.name).toBe('sub-agent');
+    expect(subStart.task).toBe('do something');
+
+    const subEnd = outcome.effects[2] as {
+      type: 'subagent:end';
+      name: string;
+      result: unknown;
+    };
+    expect(subEnd.name).toBe('sub-agent');
+    expect(subEnd.result).toBe('delegated task completed');
+  });
+
+  it('should emit subagent:start + skill:start + tool:end + step:continue + subagent:end for delegate + SWITCH_SKILL', async () => {
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+    const switchSignal = {
+      type: 'SWITCH_SKILL',
+      to: 'research',
+      instructions: 'Research thoroughly',
+      task: 'Find sources',
+    };
+    execState.phase = { type: 'tool-result', result: switchSignal };
+    execState.action = {
+      id: 'tc9',
+      tool: 'delegate',
+      arguments: { agent: 'research-agent', task: 'Find sources' },
+    };
+
+    const outcome = await processToolResult(state, execState);
+
+    // subagent:start comes first (before skill-signal processing)
+    // Then skill:start + tool:end + step:continue (from loaded action)
+    // Then subagent:end (after skill-signal processing)
+    expect(outcome.effects.map((e) => e.type)).toEqual([
+      'subagent:start',
+      'skill:start',
+      'tool:end',
+      'step:continue',
+      'subagent:end',
+    ]);
+
+    const subStart = outcome.effects[0] as {
+      type: 'subagent:start';
+      name: string;
+      task: string;
+    };
+    expect(subStart.name).toBe('research-agent');
+
+    const skillStart = outcome.effects[1] as {
+      type: 'skill:start';
+      name: string;
+    };
+    expect(skillStart.name).toBe('research');
+
+    const subEnd = outcome.effects[4] as {
+      type: 'subagent:end';
+      name: string;
+      result: unknown;
+    };
+    expect(subEnd.name).toBe('research-agent');
   });
 });
