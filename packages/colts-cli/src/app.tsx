@@ -1,5 +1,8 @@
 /**
  * @fileoverview 根组件 — 路由到主 TUI、交互对话框或配置向导
+ *
+ * App 持有 config/runner/initialState 的内部 state。
+ * 首次启动配置无效时显示 SetupWizard，保存后自动 reload 并切换到 MainTUI。
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -19,7 +22,11 @@ import type { ExecutionMode } from './components/input/mode-badge.js';
 import type { AppConfig } from './config.js';
 import type { AgentRunner, AgentState } from '@agentskillmania/colts';
 import type { InteractionState } from './types/interaction.js';
-import { interactionCallbacks } from './index.js';
+import {
+  interactionCallbacks,
+  createRunnerFromConfig,
+  createInitialStateFromConfig,
+} from './runner-setup.js';
 
 /**
  * App props
@@ -38,26 +45,52 @@ interface AppProps {
 /**
  * Root component
  *
- * Routes to the main TUI, setup wizard, or config guidance.
+ * Holds config/runner/initialState as internal state.
+ * Routes to MainTUI when config is valid, otherwise shows SetupWizard.
+ * After SetupWizard completes, reloads config and auto-switches to MainTUI.
  */
-export function App({ config, runner, initialState, sessionBaseDir }: AppProps) {
+export function App({
+  config: initialConfig,
+  runner: initialRunner,
+  initialState: initialInitialState,
+  sessionBaseDir,
+}: AppProps) {
+  const [config, setConfig] = useState<AppConfig>(initialConfig);
+  const [runner, setRunner] = useState<AgentRunner | null>(initialRunner ?? null);
+  const [appInitialState, setAppInitialState] = useState<AgentState | null>(
+    initialInitialState ?? null
+  );
+
+  const ready = config.hasValidConfig && runner !== null;
+
+  /**
+   * SetupWizard 完成后的回调
+   *
+   * 保存配置 → 重新加载 → 创建 runner → 切换到 MainTUI
+   */
+  const handleSetupComplete = useCallback(async (setup: { provider: string; apiKey: string; model: string }) => {
+    const { saveSetup, loadConfig } = await import('./config.js');
+    await saveSetup(setup);
+    const newConfig = await loadConfig();
+    const newRunner = createRunnerFromConfig(newConfig);
+    const newInitialState = createInitialStateFromConfig(newConfig);
+
+    setConfig(newConfig);
+    setRunner(newRunner);
+    setAppInitialState(newInitialState);
+  }, []);
+
   return (
     <ThemeProvider theme={coltsTheme}>
-      {config.hasValidConfig && runner ? (
+      {ready ? (
         <MainTUI
           config={config}
           runner={runner}
-          initialState={initialState ?? null}
+          initialState={appInitialState}
           sessionBaseDir={sessionBaseDir}
         />
       ) : (
-        <SetupWizard
-          onComplete={async (setup) => {
-            // 动态导入避免循环依赖
-            const { saveSetup } = await import('./config.js');
-            await saveSetup(setup);
-          }}
-        />
+        <SetupWizard onComplete={handleSetupComplete} />
       )}
     </ThemeProvider>
   );

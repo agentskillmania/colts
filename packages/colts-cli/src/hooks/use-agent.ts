@@ -129,6 +129,22 @@ function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+/** 条目数量上限，超过时裁剪最老的条目，防止长对话导致渲染卡顿 */
+export const MAX_ENTRIES = 200;
+
+/**
+ * 裁剪条目到上限
+ *
+ * 纯函数，便于测试。超过 max 时保留最后 max 条。
+ *
+ * @param entries - 当前条目数组
+ * @param max - 最大条目数
+ * @returns 裁剪后的数组（同一引用或新数组）
+ */
+export function trimToMaxEntries<T>(entries: T[], max: number): T[] {
+  return entries.length > max ? entries.slice(-max) : entries;
+}
+
 /**
  * Agent interaction hook
  *
@@ -146,14 +162,11 @@ export function useAgent(
 ): UseAgentReturn {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
 
-  /** 条目数量上限，超过时裁剪最老的条目，防止长对话导致渲染卡顿 */
-  const MAX_ENTRIES = 200;
-
   /** setEntries 包装：自动裁剪超出上限的条目 */
   const trimEntries = useCallback((action: React.SetStateAction<TimelineEntry[]>) => {
     setEntries((prev) => {
       const next = typeof action === 'function' ? action(prev) : action;
-      return next.length > MAX_ENTRIES ? next.slice(-MAX_ENTRIES) : next;
+      return trimToMaxEntries(next, MAX_ENTRIES);
     });
   }, []);
   const [mode, setMode] = useState<ExecutionMode>('run');
