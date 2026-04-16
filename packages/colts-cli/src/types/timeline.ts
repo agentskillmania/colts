@@ -137,6 +137,8 @@ export type TimelineEntry =
       status: 'loading' | 'loaded' | 'active' | 'completed';
       /** Loaded token count */
       tokenCount?: number;
+      /** Skill execution result (present when status is 'completed') */
+      result?: string;
       /** Timestamp in milliseconds */
       timestamp: number;
     }

@@ -67,10 +67,10 @@ describe('useSession hook', () => {
     expect(getHook().sessionId).toBe(state.id);
     expect(getHook().isSaving).toBe(false);
 
-    // Verify file actually exists
+    // Verify file actually exists (v1 format: state.id is nested)
     const filePath = path.join(testDir, `${state.id}.json`);
     const content = await fs.readFile(filePath, 'utf-8');
-    expect(JSON.parse(content).id).toBe(state.id);
+    expect(JSON.parse(content).state.id).toBe(state.id);
   });
 
   it('should return null when restoreLatest has no sessions', async () => {
@@ -167,7 +167,7 @@ describe('useSession hook', () => {
     const sessionModule = await import('../../src/session.js');
     const origList = sessionModule.listSessions;
     vi.spyOn(sessionModule, 'listSessions').mockResolvedValueOnce([
-      { id: 'deleted-session', createdAt: Date.now(), messageCount: 1, lastMessage: 'test' },
+      { id: 'deleted-session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, lastMessage: 'test' },
     ]);
 
     const { Wrapper, getHook } = createWrapper();

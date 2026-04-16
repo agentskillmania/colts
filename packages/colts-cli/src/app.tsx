@@ -1,21 +1,25 @@
 /**
- * @fileoverview Root component — routes to the main TUI or config guidance
+ * @fileoverview 根组件 — 路由到主 TUI、交互对话框或配置向导
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, useApp, useInput } from 'ink';
 import { ThemeProvider } from '@inkjs/ui';
 import { coltsTheme } from './theme/index.js';
 import { HeaderBar } from './components/layout/header-bar.js';
 import { InputBar } from './components/input/input-bar.js';
 import { TimelinePanel } from './components/timeline/index.js';
 import { WelcomeScreen } from './components/screens/welcome-screen.js';
+import { AskHumanDialog } from './components/interactive/ask-human-dialog.js';
+import { ConfirmDialog } from './components/interactive/confirm-dialog.js';
+import { SetupWizard } from './components/setup/setup-wizard.js';
 import { useAgent } from './hooks/use-agent.js';
 import { useSession } from './hooks/use-session.js';
 import type { ExecutionMode } from './components/input/mode-badge.js';
 import type { AppConfig } from './config.js';
 import type { AgentRunner, AgentState } from '@agentskillmania/colts';
-import { theme } from './utils/theme.js';
+import type { InteractionState } from './types/interaction.js';
+import { interactionCallbacks } from './index.js';
 
 /**
  * App props
@@ -34,13 +38,7 @@ interface AppProps {
 /**
  * Root component
  *
- * Routes to the main TUI or config guidance based on config validity.
- *
- * @param props - Component props
- * @param props.config - Application config
- * @param props.runner - AgentRunner instance (null when config is invalid)
- * @param props.initialState - Initial AgentState (may be null)
- * @returns Rendered app root
+ * Routes to the main TUI, setup wizard, or config guidance.
  */
 export function App({ config, runner, initialState, sessionBaseDir }: AppProps) {
   return (
@@ -53,7 +51,13 @@ export function App({ config, runner, initialState, sessionBaseDir }: AppProps) 
           sessionBaseDir={sessionBaseDir}
         />
       ) : (
-        <ConfigPrompt configPath={config.configPath} />
+        <SetupWizard
+          onComplete={async (setup) => {
+            // 动态导入避免循环依赖
+            const { saveSetup } = await import('./config.js');
+            await saveSetup(setup);
+          }}
+        />
       )}
     </ThemeProvider>
   );
@@ -63,6 +67,7 @@ export function App({ config, runner, initialState, sessionBaseDir }: AppProps) 
  * Main TUI
  *
  * Single-canvas layout: HeaderBar + TimelinePanel + InputBar.
+ * Supports interaction modes (AskHuman, Confirm).
  */
 function MainTUI({
   config,
@@ -76,6 +81,27 @@ function MainTUI({
   sessionBaseDir?: string;
 }) {
   const { exit } = useApp();
+
+  // 交互状态（AskHuman / Confirm 对话框）
+  const [interaction, setInteraction] = useState<InteractionState>({ type: 'none' });
+
+  // 延迟绑定交互 handler：挂载时填入闭包持有 setInteraction 的 handler
+  useEffect(() => {
+    interactionCallbacks.askHuman = async ({ questions, context }) => {
+      return new Promise((resolve) => {
+        setInteraction({ type: 'ask-human', questions, context, resolve });
+      });
+    };
+    interactionCallbacks.confirm = async (toolName, args) => {
+      return new Promise((resolve) => {
+        setInteraction({ type: 'confirm', toolName, args, resolve });
+      });
+    };
+    return () => {
+      interactionCallbacks.askHuman = null;
+      interactionCallbacks.confirm = null;
+    };
+  }, []);
 
   // Session persistence
   const { save, restoreLatest, setSessionId } = useSession(sessionBaseDir);
@@ -166,65 +192,45 @@ function MainTUI({
 
   const model = config.llm?.model ?? 'unknown';
   const hasEntries = entries.length > 0;
+  const isInteracting = interaction.type !== 'none';
 
   return (
     <Box flexDirection="column" height="100%">
       <Box flexGrow={1} flexDirection="column">
-        {hasEntries ? (
+        {isInteracting ? (
+          interaction.type === 'ask-human' ? (
+            <AskHumanDialog
+              questions={interaction.questions}
+              context={interaction.context}
+              onAnswer={(response) => {
+                interaction.resolve(response);
+                setInteraction({ type: 'none' });
+              }}
+            />
+          ) : (
+            <ConfirmDialog
+              toolName={interaction.toolName}
+              args={interaction.args}
+              onResult={(approved) => {
+                interaction.resolve(approved);
+                setInteraction({ type: 'none' });
+              }}
+            />
+          )
+        ) : hasEntries ? (
           <TimelinePanel entries={entries} detailLevel={detailLevel} />
         ) : (
           <WelcomeScreen agentName={config.agent?.name} model={model} />
         )}
       </Box>
-      <InputBar onSubmit={handleSubmit} mode={mode} isRunning={isRunning} isPaused={isPaused} />
+      {!isInteracting && (
+        <InputBar onSubmit={handleSubmit} mode={mode} isRunning={isRunning} isPaused={isPaused} />
+      )}
       <HeaderBar
         model={model}
         status={isRunning ? 'running' : runStatus}
         skillState={state?.context?.skillState}
       />
-    </Box>
-  );
-}
-
-/**
- * Config guidance
- *
- * Shown when the config is invalid, prompting the user to edit the config file.
- */
-function ConfigPrompt({ configPath }: { configPath?: string }) {
-  const { exit } = useApp();
-
-  useInput((_input, key) => {
-    if (key.ctrl && _input === 'c') {
-      exit();
-    }
-  });
-
-  return (
-    <Box flexDirection="column" padding={1}>
-      <Text bold color={theme.error}>
-        AI Key Configuration Required
-      </Text>
-      <Box marginTop={1}>
-        <Text>Please configure your LLM provider and API key.</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text color={theme.dim}>Config file: {configPath ?? 'N/A'}</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text color={theme.dim}>Example:</Text>
-      </Box>
-      <Box marginLeft={2}>
-        <Text color={theme.dim}>
-          llm:{'\n'}
-          {'  '}provider: openai{'\n'}
-          {'  '}apiKey: sk-your-key-here{'\n'}
-          {'  '}model: gpt-4o
-        </Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text color={theme.dim}>Press Ctrl+C to exit</Text>
-      </Box>
     </Box>
   );
 }
