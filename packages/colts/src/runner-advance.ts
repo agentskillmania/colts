@@ -10,7 +10,8 @@ import type { ISkillProvider } from './skills/types.js';
 import type { SubAgentConfig } from './subagent/types.js';
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.js';
 import { toolCallToAction } from './execution.js';
-import { buildMessages, getToolsForLLM } from './runner-message-builder.js';
+import { getToolsForLLM } from './runner-message-builder.js';
+import type { IMessageAssembler } from './message-assembler/types.js';
 import { isSkillSignal, type SkillSignal } from './skills/types.js';
 import {
   addAssistantMessage,
@@ -25,6 +26,8 @@ import {
 export interface RunnerContext {
   llmProvider: ILLMProvider;
   toolRegistry: IToolRegistry;
+  /** Message assembler for building LLM message arrays */
+  messageAssembler: IMessageAssembler;
   skillProvider?: ISkillProvider;
   /** Sub-agent configuration map (name → SubAgentConfig) */
   subAgentConfigs?: Map<string, SubAgentConfig>;
@@ -102,7 +105,7 @@ function advanceToPreparing(
   state: AgentState,
   execState: ExecutionState
 ): AdvanceResult {
-  const messages = buildMessages(state, {
+  const messages = ctx.messageAssembler.build(state, {
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,
     skillProvider: ctx.skillProvider,
@@ -136,7 +139,7 @@ async function advanceToLLMResponse(
     model: ctx.options.model,
     messages:
       execState.preparedMessages ??
-      buildMessages(state, {
+      ctx.messageAssembler.build(state, {
         systemPrompt: ctx.options.systemPrompt,
         model: ctx.options.model,
         skillProvider: ctx.skillProvider,
@@ -306,7 +309,7 @@ export function buildMessagesFromCtx(
   ctx: RunnerContext,
   state: AgentState
 ): import('@mariozechner/pi-ai').Message[] {
-  return buildMessages(state, {
+  return ctx.messageAssembler.build(state, {
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,
     skillProvider: ctx.skillProvider,
