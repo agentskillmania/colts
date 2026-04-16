@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import type { AgentRunner, AgentState, ISkillProvider } from '@agentskillmania/colts';
+import type { AgentRunner, AgentState, ISkillProvider, StreamEvent } from '@agentskillmania/colts';
 import {
   createAgentState,
   addUserMessage,
@@ -691,15 +691,8 @@ async function executeAdvance(
 
   const tracer = new TraceWriter(effectiveState.id);
 
-  // advance 模式：phase-change 时暂停，进入 calling-llm 时重置 assistant
-  const consumer = new StreamEventConsumer(setEntries, setState, {
-    onPhaseChange: async (event) => {
-      await pauseFn();
-      if (event.to.type === 'calling-llm') {
-        consumer.resetAssistant();
-      }
-    },
-  });
+  // advance 模式：consumer 不负责暂停，暂停在循环中检测 phase-change 事件后执行
+  const consumer = new StreamEventConsumer(setEntries, setState);
 
   consumer.resetAssistant();
 
@@ -717,6 +710,17 @@ async function executeAdvance(
       while (!iterResult.done) {
         tracer.consume(iterResult.value);
         consumer.consume(iterResult.value);
+
+        // 检测 phase-change 事件，在内层循环中执行暂停
+        // 这样 await pauseFn() 能真正阻塞，而不是 fire-and-forget
+        if (iterResult.value.type === 'phase-change') {
+          const phaseEvent = iterResult.value as Extract<StreamEvent, { type: 'phase-change' }>;
+          await pauseFn();
+          if (phaseEvent.to.type === 'calling-llm') {
+            consumer.resetAssistant();
+          }
+        }
+
         iterResult = await gen.next();
       }
 
