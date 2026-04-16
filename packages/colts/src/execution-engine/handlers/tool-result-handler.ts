@@ -15,7 +15,8 @@ export class ToolResultHandler implements IPhaseHandler {
   }
 
   execute(_ctx: PhaseHandlerContext, state: AgentState, execState: ExecutionState): AdvanceResult {
-    const answer = execState.thought ?? '';
+    // Fallback chain: thought (set by ParsingHandler) → llmResponse (set by CallingLLMHandler) → empty
+    const answer = execState.thought ?? execState.llmResponse ?? '';
     execState.phase = { type: 'completed', answer };
     // tool-result → completed: messages already written (thought + tool message), don't duplicate
     return { state, phase: execState.phase, done: true };

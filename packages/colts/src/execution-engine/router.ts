@@ -34,32 +34,47 @@ export class PhaseRouter {
    * Register a phase handler
    *
    * Infers the phase type from the handler's canHandle() method
-   * by testing against known phase types.
+   * by testing against known phase types (alphabetically sorted to
+   * reduce order-dependent surprises).
+   *
+   * Rejects catch-all handlers that match more than one phase type,
+   * since they indicate ambiguous registration intent.
    *
    * @param handler - Handler to register
-   * @throws Error if the handler's phase type cannot be inferred
+   * @throws Error if the handler's phase type cannot be inferred or is ambiguous
    */
   register(handler: IPhaseHandler): void {
     const knownTypes = [
-      'idle',
-      'preparing',
       'calling-llm',
-      'llm-response',
-      'parsing',
-      'parsed',
-      'executing-tool',
-      'tool-result',
       'completed',
       'error',
+      'executing-tool',
+      'idle',
+      'llm-response',
+      'parsed',
+      'parsing',
+      'preparing',
+      'tool-result',
     ];
 
+    const matchedTypes: string[] = [];
     for (const type of knownTypes) {
       if (handler.canHandle(type)) {
-        this.handlers.set(type, handler);
-        return;
+        matchedTypes.push(type);
       }
     }
-    throw new Error('Cannot infer phase type for handler');
+
+    if (matchedTypes.length === 0) {
+      throw new Error('Cannot infer phase type for handler');
+    }
+    if (matchedTypes.length > 1) {
+      throw new Error(
+        `Ambiguous handler: matches multiple phases [${matchedTypes.join(', ')}]. ` +
+          'A handler must match exactly one phase type.'
+      );
+    }
+
+    this.handlers.set(matchedTypes[0], handler);
   }
 
   /**

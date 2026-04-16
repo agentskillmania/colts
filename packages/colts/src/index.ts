@@ -118,3 +118,19 @@ export { FilesystemSkillProvider, createLoadSkillTool } from './skills/index.js'
 export type { SubAgentConfig, DelegateResult, SubAgentStreamEvent } from './subagent/index.js';
 export { createDelegateTool } from './subagent/index.js';
 export type { DelegateToolDeps } from './subagent/index.js';
+
+// Execution Engine
+export type { IPhaseHandler, PhaseHandlerContext } from './execution-engine/index.js';
+export { PhaseRouter, createDefaultPhaseHandlers } from './execution-engine/index.js';
+export {
+  IdleHandler,
+  PreparingHandler,
+  CallingLLMHandler,
+  LLMResponseHandler,
+  ParsingHandler,
+  ParsedHandler,
+  ExecutingToolHandler,
+  ToolResultHandler,
+  CompletedHandler,
+  ErrorHandler,
+} from './execution-engine/index.js';

@@ -81,6 +81,19 @@ describe('PhaseRouter', () => {
 
       expect(() => new PhaseRouter([badHandler])).toThrow('Cannot infer phase type');
     });
+
+    it('should reject catch-all handlers that match multiple phases', () => {
+      const catchAllHandler: IPhaseHandler = {
+        canHandle: () => true,
+        execute: () => ({
+          state: createMockState(),
+          phase: { type: 'error', error: new Error() },
+          done: true,
+        }),
+      };
+
+      expect(() => new PhaseRouter([catchAllHandler])).toThrow('Ambiguous handler');
+    });
   });
 
   describe('execute', () => {
