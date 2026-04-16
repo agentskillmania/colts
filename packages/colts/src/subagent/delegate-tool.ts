@@ -20,6 +20,8 @@ export interface DelegateToolDeps {
   subAgentConfigs: Map<string, SubAgentConfig>;
   /** LLM provider instance */
   llmProvider: ILLMProvider;
+  /** Parent agent's model identifier, passed through to sub-agent */
+  model?: string;
   /** Default max steps for sub-agents (default: 10) */
   defaultMaxSteps?: number;
   /** Parent agent's tool registry for inheriting tool implementations */
@@ -60,6 +62,7 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
   const {
     subAgentConfigs,
     llmProvider,
+    model,
     defaultMaxSteps = 10,
     parentToolRegistry,
     subAgentFactory = new DefaultSubAgentFactory(defaultMaxSteps),
@@ -127,6 +130,7 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
       const subRunner = subAgentFactory.create(config, {
         llmProvider,
         toolRegistry: parentToolRegistry,
+        model,
       });
       // Register resolved tool implementations onto the sub-agent's registry
       for (const tool of subAgentTools) {

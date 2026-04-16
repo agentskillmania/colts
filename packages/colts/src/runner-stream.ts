@@ -100,8 +100,8 @@ export async function* streamCallingLLM(
     toolCalls: responseToolCalls ?? null,
   };
 
-  // Store complete response
-  execState.llmResponse = responseContent;
+  // Store complete response, fallback to accumulatedContent if 'done' event was missed
+  execState.llmResponse = responseContent || accumulatedContent;
   if (responseToolCalls && responseToolCalls.length > 0) {
     const toolCall = responseToolCalls[0];
     execState.action = {
