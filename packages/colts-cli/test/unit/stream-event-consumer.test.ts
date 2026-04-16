@@ -868,4 +868,105 @@ describe('StreamEventConsumer', () => {
       expect(uniqueIds.size).toBe(ids.length);
     });
   });
+
+  // T-CLI1: 回归测试 — tools:start / tools:end 并行工具事件 (CR CLI-1)
+  describe('tools:start / tools:end 并行工具事件 (CR CLI-1)', () => {
+    function toolsStartEvent(
+      actions: Array<{ tool: string; id: string; args?: Record<string, unknown> }>
+    ): RunStreamEvent {
+      return {
+        type: 'tools:start',
+        actions: actions.map((a) => ({
+          id: a.id,
+          tool: a.tool,
+          arguments: a.args ?? {},
+        })),
+      };
+    }
+
+    function toolsEndEvent(results: Record<string, unknown>): RunStreamEvent {
+      return { type: 'tools:end', results };
+    }
+
+    it('tools:start 应为每个 action 创建 isRunning=true 的 tool entry', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+
+      consumer.consume(
+        toolsStartEvent([
+          { tool: 'read_file', id: 'tc-1' },
+          { tool: 'calculator', id: 'tc-2' },
+        ])
+      );
+
+      const tools = entries.lastEntries.filter((e) => e.type === 'tool');
+      expect(tools).toHaveLength(2);
+      if (tools[0]?.type === 'tool') {
+        expect(tools[0].tool).toBe('read_file');
+        expect(tools[0].isRunning).toBe(true);
+      }
+      if (tools[1]?.type === 'tool') {
+        expect(tools[1].tool).toBe('calculator');
+        expect(tools[1].isRunning).toBe(true);
+      }
+    });
+
+    it('tools:end 应从后往前匹配 isRunning 的 tool entry 并设置结果', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+
+      consumer.consume(
+        toolsStartEvent([
+          { tool: 'read_file', id: 'tc-1' },
+          { tool: 'calculator', id: 'tc-2' },
+        ])
+      );
+      consumer.consume(toolsEndEvent({ 'tc-1': 'file content', 'tc-2': 42 }));
+
+      const tools = entries.lastEntries.filter((e) => e.type === 'tool');
+      expect(tools).toHaveLength(2);
+      // tools:end 从后往前匹配，所以 tc-2 匹配最后一个，tc-1 匹配前一个
+      if (tools[0]?.type === 'tool') {
+        expect(tools[0].result).toBe('file content');
+        expect(tools[0].isRunning).toBe(false);
+      }
+      if (tools[1]?.type === 'tool') {
+        expect(tools[1].result).toBe(42);
+        expect(tools[1].isRunning).toBe(false);
+      }
+    });
+
+    it('tools:end 应触发 onToolEnd 钩子', () => {
+      const onToolEnd = vi.fn();
+      const consumer = new StreamEventConsumer(entries.setter, state.setter, { onToolEnd });
+
+      consumer.consume(
+        toolsStartEvent([
+          { tool: 'read_file', id: 'tc-1' },
+          { tool: 'calculator', id: 'tc-2' },
+        ])
+      );
+      consumer.consume(toolsEndEvent({ 'tc-1': 'a', 'tc-2': 'b' }));
+
+      expect(onToolEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('tools:start 前应 flush 累积的 token', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+      consumer.resetAssistant();
+
+      consumer.consume(tokenEvent('partial text'));
+      consumer.consume(
+        toolsStartEvent([
+          { tool: 'read_file', id: 'tc-1' },
+          { tool: 'calc', id: 'tc-2' },
+        ])
+      );
+
+      // assistant entry 应有累积的 token
+      const assistant = entries.lastEntries.find((e) => e.type === 'assistant');
+      if (assistant?.type === 'assistant') {
+        expect(assistant.content).toBe('partial text');
+        expect(assistant.isStreaming).toBe(false);
+      }
+    });
+  });
 });
