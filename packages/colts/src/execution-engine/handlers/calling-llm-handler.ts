@@ -55,7 +55,8 @@ export class CallingLLMHandler implements IPhaseHandler {
           retryCount: 0,
         });
         if (decision.decision === 'ignore') {
-          // Treat as text-only response
+          // 用 fallbackText 替代原始 LLM 响应，作为纯文本继续
+          execState.llmResponse = decision.fallbackText;
           execState.action = undefined;
           execState.allActions = undefined;
         } else {

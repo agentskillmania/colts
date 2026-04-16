@@ -623,7 +623,7 @@ async function executeStep(
         if (stepResult.type === 'done') {
           consumer.finalizeAssistant(consumer.getAccumulatedContent() || stepResult.answer);
           continueLoop = false;
-          return;
+          break;
         }
 
         // Step 完成但还需要继续 — 暂停等用户按 Enter
