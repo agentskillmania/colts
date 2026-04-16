@@ -7,9 +7,9 @@
 
 import { z } from 'zod';
 import type { Tool } from '../tools/registry.js';
-import type { SubAgentConfig, DelegateResult } from './types.js';
+import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from './types.js';
+import { DefaultSubAgentFactory } from './types.js';
 import { createAgentState, addUserMessage } from '../state.js';
-import { AgentRunner } from '../runner.js';
 import type { ILLMProvider, IToolRegistry } from '../types.js';
 
 /**
@@ -24,6 +24,8 @@ export interface DelegateToolDeps {
   defaultMaxSteps?: number;
   /** Parent agent's tool registry for inheriting tool implementations */
   parentToolRegistry: IToolRegistry;
+  /** Sub-agent factory (defaults to DefaultSubAgentFactory) */
+  subAgentFactory?: ISubAgentFactory;
 }
 
 /**
@@ -55,7 +57,13 @@ export interface DelegateToolDeps {
  * ```
  */
 export function createDelegateTool(deps: DelegateToolDeps): Tool {
-  const { subAgentConfigs, llmProvider, defaultMaxSteps = 10, parentToolRegistry } = deps;
+  const {
+    subAgentConfigs,
+    llmProvider,
+    defaultMaxSteps = 10,
+    parentToolRegistry,
+    subAgentFactory = new DefaultSubAgentFactory(defaultMaxSteps),
+  } = deps;
 
   return {
     name: 'delegate',
@@ -115,13 +123,15 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
         // If tool not found in parent, it's not added (sub-agent won't have access)
       }
 
-      // Create a runner for the sub-agent with real tool implementations
-      const subRunner = new AgentRunner({
-        model: 'sub-agent',
-        llmClient: llmProvider,
-        maxSteps: config.maxSteps ?? defaultMaxSteps,
-        tools: subAgentTools,
+      // Create a runner for the sub-agent via factory
+      const subRunner = subAgentFactory.create(config, {
+        llmProvider,
+        toolRegistry: parentToolRegistry,
       });
+      // Register resolved tool implementations onto the sub-agent's registry
+      for (const tool of subAgentTools) {
+        subRunner.registerTool(tool);
+      }
 
       // Check abort signal before running
       options?.signal?.throwIfAborted();

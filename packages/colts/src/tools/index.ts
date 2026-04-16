@@ -29,3 +29,6 @@ export {
   type ConfirmHandler,
   type ConfirmableRegistryOptions,
 } from './confirmable-registry.js';
+
+export type { IToolSchemaFormatter } from './schema-formatter.js';
+export { DefaultToolSchemaFormatter } from './schema-formatter.js';

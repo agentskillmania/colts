@@ -7,7 +7,7 @@
  */
 
 import type { IToolRegistry } from '../types.js';
-import type { ToolSchema } from './registry.js';
+import type { ToolSchema, Tool } from './registry.js';
 
 /**
  * Confirmation handler provided by the upper application
@@ -145,5 +145,19 @@ export class ConfirmableRegistry implements IToolRegistry {
    */
   private needsConfirm(name: string): boolean {
     return this.options.confirmTools.includes(name);
+  }
+
+  /**
+   * Get all registered tool definitions
+   *
+   * Delegates to inner registry's getAll() for IToolSchemaFormatter.
+   *
+   * @returns Array of all registered tools
+   */
+  getAll(): Tool[] {
+    if (this.inner.getAll) {
+      return this.inner.getAll();
+    }
+    return [];
   }
 }

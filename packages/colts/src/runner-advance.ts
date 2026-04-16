@@ -11,6 +11,7 @@ import type { SubAgentConfig } from './subagent/types.js';
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.js';
 import type { IMessageAssembler } from './message-assembler/types.js';
 import type { IPhaseHandler } from './execution-engine/types.js';
+import type { IToolSchemaFormatter } from './tools/schema-formatter.js';
 import { PhaseRouter } from './execution-engine/router.js';
 import { createDefaultPhaseHandlers } from './execution-engine/default-registry.js';
 
@@ -24,6 +25,8 @@ export interface RunnerContext {
   messageAssembler: IMessageAssembler;
   /** Phase router for dispatching to phase handlers */
   phaseRouter: PhaseRouter;
+  /** Tool schema formatter for converting tools to LLM format */
+  toolSchemaFormatter: IToolSchemaFormatter;
   skillProvider?: ISkillProvider;
   /** Sub-agent configuration map (name → SubAgentConfig) */
   subAgentConfigs?: Map<string, SubAgentConfig>;

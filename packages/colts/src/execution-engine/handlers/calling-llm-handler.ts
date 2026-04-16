@@ -24,7 +24,7 @@ export class CallingLLMHandler implements IPhaseHandler {
     options?: AdvanceOptions
   ): Promise<AdvanceResult> {
     const registry = toolRegistry ?? ctx.toolRegistry;
-    const tools = getToolsForLLM(registry);
+    const tools = getToolsForLLM(registry, ctx.toolSchemaFormatter);
 
     const response = await ctx.llmProvider.call({
       model: ctx.options.model,

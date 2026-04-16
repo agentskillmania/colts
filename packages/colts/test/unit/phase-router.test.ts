@@ -9,6 +9,7 @@ import type { IPhaseHandler, PhaseHandlerContext } from '../../src/execution-eng
 import type { AgentState } from '../../src/types.js';
 import type { ExecutionState, AdvanceResult } from '../../src/execution.js';
 import { createExecutionState } from '../../src/execution.js';
+import { DefaultToolSchemaFormatter } from '../../src/tools/schema-formatter.js';
 
 function createMockHandler(phaseType: string, resultPhase?: Partial<AdvanceResult>): IPhaseHandler {
   return {
@@ -45,6 +46,7 @@ function createMockCtx(): PhaseHandlerContext {
     llmProvider: {} as never,
     toolRegistry: {} as never,
     messageAssembler: {} as never,
+    toolSchemaFormatter: new DefaultToolSchemaFormatter(),
     options: { model: 'test' },
   };
 }

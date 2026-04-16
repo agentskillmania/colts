@@ -259,6 +259,16 @@ export interface IToolRegistry {
    * @returns Tool definition or undefined if not found
    */
   get(name: string): LocalTool | undefined;
+
+  /**
+   * Get all registered tool definitions
+   *
+   * Used by IToolSchemaFormatter to convert tools for LLM consumption.
+   * Optional: falls back to toToolSchemas() when not implemented.
+   *
+   * @returns Array of all registered tools
+   */
+  getAll?(): LocalTool[];
 }
 
 /**
