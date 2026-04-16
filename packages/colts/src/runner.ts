@@ -37,7 +37,7 @@ import { getToolsForLLM } from './tools/llm-format.js';
 import { DefaultMessageAssembler } from './message-assembler/index.js';
 import type { IMessageAssembler } from './message-assembler/types.js';
 import { compressState, maybeCompress } from './runner-compression.js';
-import { executeAdvance } from './runner-advance.js';
+import { executeAdvance, createRouter } from './runner-advance.js';
 import type { RunnerContext } from './runner-advance.js';
 import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './runner-stream.js';
 import type { ISkillProvider } from './skills/types.js';
@@ -255,6 +255,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private _skillProvider?: ISkillProvider;
   private subAgentConfigs?: Map<string, SubAgentConfig>;
   private messageAssembler: IMessageAssembler;
+  private phaseRouter: ReturnType<typeof createRouter>;
   private options: RunnerOptions;
 
   /** Get the Skill provider (used by the CLI layer for the /skill command) */
@@ -306,6 +307,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     // Initialize message assembler (default implementation)
     this.messageAssembler = new DefaultMessageAssembler();
+
+    // Initialize phase router (default handlers)
+    this.phaseRouter = createRouter();
 
     // Initialize compressor
     if (options.compressor) {
@@ -414,6 +418,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       llmProvider: this.llmProvider,
       toolRegistry: this.toolRegistry,
       messageAssembler: this.messageAssembler,
+      phaseRouter: this.phaseRouter,
       skillProvider: this._skillProvider,
       subAgentConfigs: this.subAgentConfigs,
       options: {

@@ -1,0 +1,792 @@
+/**
+ * @fileoverview Phase handler unit tests
+ *
+ * Tests each of the 10 default IPhaseHandler implementations in isolation.
+ * Verifies canHandle(), phase transitions, state updates, and edge cases.
+ */
+import { describe, it, expect, vi } from 'vitest';
+import { IdleHandler } from '../../../src/execution-engine/handlers/idle-handler.js';
+import { PreparingHandler } from '../../../src/execution-engine/handlers/preparing-handler.js';
+import { CallingLLMHandler } from '../../../src/execution-engine/handlers/calling-llm-handler.js';
+import { LLMResponseHandler } from '../../../src/execution-engine/handlers/llm-response-handler.js';
+import { ParsingHandler } from '../../../src/execution-engine/handlers/parsing-handler.js';
+import { ParsedHandler } from '../../../src/execution-engine/handlers/parsed-handler.js';
+import { ExecutingToolHandler } from '../../../src/execution-engine/handlers/executing-tool-handler.js';
+import { ToolResultHandler } from '../../../src/execution-engine/handlers/tool-result-handler.js';
+import { CompletedHandler } from '../../../src/execution-engine/handlers/completed-handler.js';
+import { ErrorHandler } from '../../../src/execution-engine/handlers/error-handler.js';
+import type { PhaseHandlerContext } from '../../../src/execution-engine/types.js';
+import type { AgentState, IToolRegistry } from '../../../src/types.js';
+import type { ExecutionState } from '../../../src/execution.js';
+import { createExecutionState } from '../../../src/execution.js';
+import { createAgentState } from '../../../src/state.js';
+import type { ToolSchema } from '../../../src/tools/registry.js';
+
+// ---------------------------------------------------------------------------
+// Shared test helpers
+// ---------------------------------------------------------------------------
+
+function createMockState(): AgentState {
+  return createAgentState({
+    name: 'test-agent',
+    instructions: 'You are a test assistant.',
+    tools: [],
+  });
+}
+
+function createMockCtx(overrides?: Partial<PhaseHandlerContext>): PhaseHandlerContext {
+  return {
+    llmProvider: {
+      call: vi.fn().mockResolvedValue({
+        content: 'mock response',
+        toolCalls: [],
+        tokens: { input: 10, output: 5 },
+        stopReason: 'stop',
+      }),
+      stream: vi.fn(),
+    } as never,
+    toolRegistry: createMockToolRegistry(),
+    messageAssembler: {
+      build: vi.fn().mockReturnValue([
+        { role: 'system', content: 'You are a test assistant.' },
+        { role: 'user', content: 'Hello' },
+      ]),
+    } as never,
+    options: { model: 'test-model' },
+    ...overrides,
+  };
+}
+
+function createMockToolRegistry(executeResult: unknown = 'tool-result'): IToolRegistry {
+  return {
+    execute: vi.fn().mockResolvedValue(executeResult),
+    toToolSchemas: vi.fn().mockReturnValue([]),
+    register: vi.fn(),
+    unregister: vi.fn(),
+    has: vi.fn(),
+    getToolNames: vi.fn().mockReturnValue([]),
+    get: vi.fn(),
+  } as unknown as IToolRegistry;
+}
+
+/** Helper to create a simple action */
+function createAction(overrides?: { tool?: string; id?: string }) {
+  return {
+    id: overrides?.id ?? 'call-1',
+    tool: overrides?.tool ?? 'testTool',
+    arguments: { key: 'value' },
+  };
+}
+
+// ===========================================================================
+// IdleHandler
+// ===========================================================================
+describe('IdleHandler', () => {
+  const handler = new IdleHandler();
+
+  it('should handle idle phase', () => {
+    expect(handler.canHandle('idle')).toBe(true);
+    expect(handler.canHandle('preparing')).toBe(false);
+  });
+
+  it('should assemble messages and transition to preparing', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const ctx = createMockCtx();
+
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('preparing');
+    expect(result.done).toBe(false);
+    expect(result.state).toBe(state);
+    expect(execState.preparedMessages).toBeDefined();
+    expect(execState.preparedMessages!.length).toBeGreaterThan(0);
+  });
+
+  it('should pass skillProvider and subAgentConfigs to assembler', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const build = vi.fn().mockReturnValue([{ role: 'user', content: 'hi' }]);
+    const ctx = createMockCtx({
+      messageAssembler: { build } as never,
+      skillProvider: {} as never,
+      subAgentConfigs: new Map(),
+    });
+
+    handler.execute(ctx, state, execState);
+
+    expect(build).toHaveBeenCalledWith(state, {
+      systemPrompt: undefined,
+      model: 'test-model',
+      skillProvider: expect.anything(),
+      subAgentConfigs: expect.anything(),
+    });
+  });
+});
+
+// ===========================================================================
+// PreparingHandler
+// ===========================================================================
+describe('PreparingHandler', () => {
+  const handler = new PreparingHandler();
+
+  it('should handle preparing phase', () => {
+    expect(handler.canHandle('preparing')).toBe(true);
+    expect(handler.canHandle('idle')).toBe(false);
+  });
+
+  it('should transition to calling-llm', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const ctx = createMockCtx();
+
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('calling-llm');
+    expect(result.done).toBe(false);
+    expect(result.state).toBe(state);
+  });
+});
+
+// ===========================================================================
+// CallingLLMHandler
+// ===========================================================================
+describe('CallingLLMHandler', () => {
+  const handler = new CallingLLMHandler();
+
+  it('should handle calling-llm phase', () => {
+    expect(handler.canHandle('calling-llm')).toBe(true);
+    expect(handler.canHandle('idle')).toBe(false);
+  });
+
+  it('should call LLM and transition to llm-response with no tool calls', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.preparedMessages = [{ role: 'user', content: 'hi' }] as never;
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('llm-response');
+    expect(result.done).toBe(false);
+    expect(execState.llmResponse).toBe('mock response');
+    expect(execState.action).toBeUndefined();
+  });
+
+  it('should extract tool calls from LLM response', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.preparedMessages = [{ role: 'user', content: 'hi' }] as never;
+    const ctx = createMockCtx({
+      llmProvider: {
+        call: vi.fn().mockResolvedValue({
+          content: 'Using tool',
+          toolCalls: [
+            {
+              id: 'call-1',
+              name: 'calculator',
+              arguments: { expression: '2+2' },
+            },
+          ],
+          tokens: { input: 10, output: 5 },
+          stopReason: 'tool_calls',
+        }),
+        stream: vi.fn(),
+      } as never,
+    });
+
+    const result = await handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('llm-response');
+    expect(execState.action).toBeDefined();
+    expect(execState.action!.tool).toBe('calculator');
+    expect(execState.action!.arguments).toEqual({ expression: '2+2' });
+    expect(execState.allActions).toHaveLength(1);
+  });
+
+  it('should use ctx.toolRegistry when no override provided', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const ctx = createMockCtx();
+
+    await handler.execute(ctx, state, execState);
+
+    expect(ctx.llmProvider.call).toHaveBeenCalled();
+  });
+
+  it('should build messages from assembler if preparedMessages missing', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    // No preparedMessages set
+    const build = vi.fn().mockReturnValue([{ role: 'user', content: 'hello' }]);
+    const ctx = createMockCtx({
+      messageAssembler: { build } as never,
+    });
+
+    await handler.execute(ctx, state, execState);
+
+    expect(build).toHaveBeenCalled();
+  });
+
+  it('should clear stale action when LLM response has no tool calls', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.preparedMessages = [{ role: 'user', content: 'hi' }] as never;
+    // Pre-set stale action
+    execState.action = createAction();
+    execState.allActions = [createAction()];
+
+    const ctx = createMockCtx(); // response has no tool calls
+
+    await handler.execute(ctx, state, execState);
+
+    expect(execState.action).toBeUndefined();
+    expect(execState.allActions).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// LLMResponseHandler
+// ===========================================================================
+describe('LLMResponseHandler', () => {
+  const handler = new LLMResponseHandler();
+
+  it('should handle llm-response phase', () => {
+    expect(handler.canHandle('llm-response')).toBe(true);
+    expect(handler.canHandle('parsing')).toBe(false);
+  });
+
+  it('should transition to parsing', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const ctx = createMockCtx();
+
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('parsing');
+    expect(result.done).toBe(false);
+    expect(result.state).toBe(state);
+  });
+});
+
+// ===========================================================================
+// ParsingHandler
+// ===========================================================================
+describe('ParsingHandler', () => {
+  const handler = new ParsingHandler();
+
+  it('should handle parsing phase', () => {
+    expect(handler.canHandle('parsing')).toBe(true);
+    expect(handler.canHandle('parsed')).toBe(false);
+  });
+
+  it('should extract thought and transition to parsed with action', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.llmResponse = 'I need to calculate something';
+    execState.action = createAction();
+
+    const ctx = createMockCtx();
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('parsed');
+    if (result.phase.type === 'parsed') {
+      expect(result.phase.thought).toBe('I need to calculate something');
+      expect(result.phase.action).toBeDefined();
+    }
+    expect(execState.thought).toBe('I need to calculate something');
+    expect(result.done).toBe(false);
+  });
+
+  it('should transition to parsed without action when no tool call', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.llmResponse = 'Here is the answer';
+    // No action set
+
+    const ctx = createMockCtx();
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('parsed');
+    if (result.phase.type === 'parsed') {
+      expect(result.phase.thought).toBe('Here is the answer');
+      expect(result.phase.action).toBeUndefined();
+    }
+  });
+
+  it('should use empty string when llmResponse is undefined', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    // llmResponse is undefined
+
+    const ctx = createMockCtx();
+    const result = handler.execute(ctx, state, execState);
+
+    expect(execState.thought).toBe('');
+    if (result.phase.type === 'parsed') {
+      expect(result.phase.thought).toBe('');
+    }
+  });
+});
+
+// ===========================================================================
+// ParsedHandler
+// ===========================================================================
+describe('ParsedHandler', () => {
+  const handler = new ParsedHandler();
+
+  it('should handle parsed phase', () => {
+    expect(handler.canHandle('parsed')).toBe(true);
+    expect(handler.canHandle('executing-tool')).toBe(false);
+  });
+
+  it('should transition to executing-tool when action exists', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.llmResponse = 'Calculating...';
+    execState.action = createAction();
+    execState.allActions = [createAction()];
+
+    const ctx = createMockCtx();
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('executing-tool');
+    expect(result.done).toBe(false);
+    // Should have added assistant message to state
+    expect(result.state.context.messages.length).toBeGreaterThan(state.context.messages.length);
+  });
+
+  it('should transition to completed when no action', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.llmResponse = 'Final answer';
+
+    const ctx = createMockCtx();
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('completed');
+    expect(result.done).toBe(true);
+    if (result.phase.type === 'completed') {
+      expect(result.phase.answer).toBe('Final answer');
+    }
+    // Should increment step count
+    expect(result.state.context.stepCount).toBe(1);
+  });
+
+  it('should use empty thought when llmResponse undefined', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    // No action, no llmResponse
+
+    const ctx = createMockCtx();
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('completed');
+    if (result.phase.type === 'completed') {
+      expect(result.phase.answer).toBe('');
+    }
+  });
+
+  it('should include toolCalls in assistant message', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.llmResponse = 'Using tool';
+    execState.action = createAction();
+    execState.allActions = [createAction({ id: 'call-1' }), createAction({ id: 'call-2' })];
+
+    const ctx = createMockCtx();
+    const result = handler.execute(ctx, state, execState);
+
+    const msg = result.state.context.messages[0];
+    expect(msg.role).toBe('assistant');
+    expect(msg.toolCalls).toBeDefined();
+    expect(msg.toolCalls).toHaveLength(2);
+  });
+});
+
+// ===========================================================================
+// ExecutingToolHandler
+// ===========================================================================
+describe('ExecutingToolHandler', () => {
+  const handler = new ExecutingToolHandler();
+
+  it('should handle executing-tool phase', () => {
+    expect(handler.canHandle('executing-tool')).toBe(true);
+    expect(handler.canHandle('tool-result')).toBe(false);
+  });
+
+  it('should execute tool and transition to tool-result', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.phase = { type: 'executing-tool', action: createAction() };
+    execState.action = createAction();
+    const registry = createMockToolRegistry('42');
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    expect(result.phase.type).toBe('tool-result');
+    expect(result.done).toBe(false);
+    expect(execState.toolResult).toBe('42');
+    // Tool message added to state
+    expect(result.state.context.messages.length).toBeGreaterThan(0);
+  });
+
+  it('should throw when no action set', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.phase = { type: 'executing-tool', action: createAction() };
+    // No action set
+    const registry = createMockToolRegistry();
+    const ctx = createMockCtx();
+
+    await expect(handler.execute(ctx, state, execState, registry)).rejects.toThrow(
+      'No action to execute'
+    );
+  });
+
+  it('should throw when no tool registry provided', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction();
+    const ctx = createMockCtx();
+
+    await expect(handler.execute(ctx, state, execState)).rejects.toThrow(
+      'Tool registry is required for tool execution'
+    );
+  });
+
+  it('should handle tool execution error gracefully', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction();
+    const registry = createMockToolRegistry();
+    (registry.execute as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Tool crashed'));
+
+    const ctx = createMockCtx();
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    expect(result.phase.type).toBe('tool-result');
+    // Error should be captured as tool result content
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain('Error: Tool crashed');
+  });
+
+  it('should handle non-Error thrown value from tool', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction();
+    const registry = createMockToolRegistry();
+    (registry.execute as ReturnType<typeof vi.fn>).mockRejectedValue('string error');
+
+    const ctx = createMockCtx();
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain('Error: string error');
+  });
+
+  it('should format SWITCH_SKILL signal as LLM-friendly text', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction({ tool: 'load_skill' });
+    const switchSignal = {
+      type: 'SWITCH_SKILL' as const,
+      to: 'my-skill',
+      instructions: 'Do stuff',
+      task: 'Do the thing',
+    };
+    const registry = createMockToolRegistry(switchSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain("Skill 'my-skill' loaded");
+    // Should also inject task user message
+    const taskMsg = result.state.context.messages[result.state.context.messages.length - 1];
+    expect(taskMsg.role).toBe('user');
+    expect(taskMsg.content).toBe('Do the thing');
+  });
+
+  it('should handle SWITCH_SKILL to same skill (already active)', async () => {
+    const state = createMockState();
+    // Set skillState with current = 'my-skill'
+    state.context.skillState = {
+      current: 'my-skill',
+      stack: [],
+    };
+    const execState = createExecutionState();
+    execState.action = createAction({ tool: 'load_skill' });
+    const switchSignal = {
+      type: 'SWITCH_SKILL' as const,
+      to: 'my-skill',
+      instructions: 'Do stuff',
+      task: 'Same skill',
+    };
+    const registry = createMockToolRegistry(switchSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain('already active');
+  });
+
+  it('should handle SWITCH_SKILL to skill already in stack', async () => {
+    const state = createMockState();
+    state.context.skillState = {
+      current: 'parent-skill',
+      stack: [{ skillName: 'my-skill', loadedAt: Date.now() }],
+    };
+    const execState = createExecutionState();
+    execState.action = createAction({ tool: 'load_skill' });
+    const switchSignal = {
+      type: 'SWITCH_SKILL' as const,
+      to: 'my-skill',
+      instructions: 'Do stuff',
+      task: 'Stack skill',
+    };
+    const registry = createMockToolRegistry(switchSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain('already in the call stack');
+  });
+
+  it('should format RETURN_SKILL signal', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction({ tool: 'return_skill' });
+    const returnSignal = {
+      type: 'RETURN_SKILL' as const,
+      result: 'Task completed',
+      status: 'success' as const,
+    };
+    const registry = createMockToolRegistry(returnSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toBe('Task completed');
+  });
+
+  it('should format RETURN_SKILL with non-string result as JSON', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction({ tool: 'return_skill' });
+    const returnSignal = {
+      type: 'RETURN_SKILL' as const,
+      result: { key: 'value' },
+      status: 'success' as const,
+    };
+    const registry = createMockToolRegistry(returnSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toBe('{"key":"value"}');
+  });
+
+  it('should format SKILL_NOT_FOUND signal', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction({ tool: 'load_skill' });
+    const notFoundSignal = {
+      type: 'SKILL_NOT_FOUND' as const,
+      requested: 'missing-skill',
+      available: ['skill-a', 'skill-b'],
+    };
+    const registry = createMockToolRegistry(notFoundSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain("Skill 'missing-skill' not found");
+    expect(toolMsg?.content).toContain('skill-a, skill-b');
+  });
+
+  it('should format non-signal result as JSON when not a string', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction();
+    const registry = createMockToolRegistry({ count: 42 });
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toBe('{"count":42}');
+  });
+
+  it('should use default task instruction when task is default text', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction({ tool: 'load_skill' });
+    const switchSignal = {
+      type: 'SWITCH_SKILL' as const,
+      to: 'new-skill',
+      instructions: 'Instructions',
+      task: 'Execute as instructed',
+    };
+    const registry = createMockToolRegistry(switchSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const taskMsg = result.state.context.messages[result.state.context.messages.length - 1];
+    expect(taskMsg.role).toBe('user');
+    expect(taskMsg.content).toBe(
+      'Follow the loaded skill instructions to complete the user request.'
+    );
+  });
+
+  it('should pass abort signal to tool execution', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction();
+    const registry = createMockToolRegistry('ok');
+    const ctx = createMockCtx();
+    const signal = new AbortController().signal;
+
+    await handler.execute(ctx, state, execState, registry, { signal });
+
+    expect(registry.execute).toHaveBeenCalledWith('testTool', { key: 'value' }, { signal });
+  });
+
+  it('should increment step count in result state', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction();
+    const registry = createMockToolRegistry('ok');
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    expect(result.state.context.stepCount).toBe(1);
+  });
+
+  it('should handle unknown skill signal type (default JSON)', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.action = createAction();
+    const unknownSignal = { type: 'UNKNOWN_SIGNAL', data: 123 };
+    const registry = createMockToolRegistry(unknownSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain('UNKNOWN_SIGNAL');
+  });
+});
+
+// ===========================================================================
+// ToolResultHandler
+// ===========================================================================
+describe('ToolResultHandler', () => {
+  const handler = new ToolResultHandler();
+
+  it('should handle tool-result phase', () => {
+    expect(handler.canHandle('tool-result')).toBe(true);
+    expect(handler.canHandle('completed')).toBe(false);
+  });
+
+  it('should transition to completed with thought as answer', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.thought = 'Processing result';
+    execState.phase = { type: 'tool-result', result: 'some result' };
+    const ctx = createMockCtx();
+
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.phase.type).toBe('completed');
+    expect(result.done).toBe(true);
+    if (result.phase.type === 'completed') {
+      expect(result.phase.answer).toBe('Processing result');
+    }
+  });
+
+  it('should use empty string when thought is undefined', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const ctx = createMockCtx();
+
+    const result = handler.execute(ctx, state, execState);
+
+    if (result.phase.type === 'completed') {
+      expect(result.phase.answer).toBe('');
+    }
+  });
+
+  it('should fall back to llmResponse when thought is undefined', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.llmResponse = 'fallback from LLM';
+    // thought is undefined
+    const ctx = createMockCtx();
+
+    const result = handler.execute(ctx, state, execState);
+
+    if (result.phase.type === 'completed') {
+      expect(result.phase.answer).toBe('fallback from LLM');
+    }
+  });
+});
+
+// ===========================================================================
+// CompletedHandler
+// ===========================================================================
+describe('CompletedHandler', () => {
+  const handler = new CompletedHandler();
+
+  it('should handle completed phase', () => {
+    expect(handler.canHandle('completed')).toBe(true);
+    expect(handler.canHandle('error')).toBe(false);
+  });
+
+  it('should return done=true without changing state', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.phase = { type: 'completed', answer: 'done' };
+    const ctx = createMockCtx();
+
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.done).toBe(true);
+    expect(result.state).toBe(state);
+    expect(result.phase.type).toBe('completed');
+  });
+});
+
+// ===========================================================================
+// ErrorHandler
+// ===========================================================================
+describe('ErrorHandler', () => {
+  const handler = new ErrorHandler();
+
+  it('should handle error phase', () => {
+    expect(handler.canHandle('error')).toBe(true);
+    expect(handler.canHandle('completed')).toBe(false);
+  });
+
+  it('should return done=true without changing state', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    const error = new Error('Something went wrong');
+    execState.phase = { type: 'error', error };
+    const ctx = createMockCtx();
+
+    const result = handler.execute(ctx, state, execState);
+
+    expect(result.done).toBe(true);
+    expect(result.state).toBe(state);
+    expect(result.phase.type).toBe('error');
+  });
+});

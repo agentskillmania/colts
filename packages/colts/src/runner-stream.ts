@@ -144,6 +144,10 @@ export async function* executeAdvanceStream(
   const fromPhase = execState.phase;
 
   // Handle streaming LLM response
+  // TODO(M3): calling-llm phase bypasses PhaseRouter and uses streamCallingLLM() directly.
+  //   This duplicates logic from CallingLLMHandler (which uses llmProvider.call()).
+  //   Plan: add optional streamExecute() to IPhaseHandler so CallingLLMHandler owns both
+  //   blocking and streaming paths. Then remove streamCallingLLM() and this bypass block.
   if (fromPhase.type === 'calling-llm') {
     yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 
@@ -193,7 +197,7 @@ export async function* executeStepStream(
     options?.signal?.throwIfAborted();
     const fromPhase = execState.phase;
 
-    // Special: streaming LLM response (single streaming call, no double invocation)
+    // TODO(M3): same calling-llm bypass as executeAdvanceStream above, see plan there
     if (fromPhase.type === 'calling-llm') {
       yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
 
