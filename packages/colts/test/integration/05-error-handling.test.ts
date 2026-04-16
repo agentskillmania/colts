@@ -205,7 +205,7 @@ describe('User Story: Error Handling with Real LLM', () => {
         expect(eventTypes).toContain('step:end');
         expect(eventTypes).toContain('complete');
 
-        // If LLM called the tool, should have tool events
+        // EXPLORATORY: Real LLM may or may not call the tool
         if (eventTypes.includes('tool:start')) {
           expect(eventTypes).toContain('tool:end');
         }

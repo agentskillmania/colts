@@ -158,7 +158,7 @@ describe('User Story: Subagent Delegation', () => {
           // consume stream
         }
 
-        // If LLM used delegate, we should see both events
+        // EXPLORATORY: Real LLM may or may not use delegate tool
         if (events.includes('start:math-expert')) {
           expect(events).toContain('end:math-expert');
         }
