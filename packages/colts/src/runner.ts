@@ -33,7 +33,7 @@ import type {
 } from './execution.js';
 import type { AdvanceOptions } from './execution.js';
 import { createExecutionState, isTerminalPhase } from './execution.js';
-import { getToolsForLLM } from './runner-message-builder.js';
+import { getToolsForLLM } from './tools/llm-format.js';
 import { DefaultMessageAssembler } from './message-assembler/index.js';
 import type { IMessageAssembler } from './message-assembler/types.js';
 import { compressState, maybeCompress } from './runner-compression.js';

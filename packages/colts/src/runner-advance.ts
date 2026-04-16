@@ -10,7 +10,7 @@ import type { ISkillProvider } from './skills/types.js';
 import type { SubAgentConfig } from './subagent/types.js';
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.js';
 import { toolCallToAction } from './execution.js';
-import { getToolsForLLM } from './runner-message-builder.js';
+import { getToolsForLLM } from './tools/llm-format.js';
 import type { IMessageAssembler } from './message-assembler/types.js';
 import { isSkillSignal, type SkillSignal } from './skills/types.js';
 import {

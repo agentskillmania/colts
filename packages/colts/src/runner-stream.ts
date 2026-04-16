@@ -17,7 +17,7 @@ import { createExecutionState, isTerminalPhase } from './execution.js';
 import type { RunnerContext } from './runner-advance.js';
 import { executeAdvance } from './runner-advance.js';
 import { buildMessagesFromCtx } from './runner-advance.js';
-import { getToolsForLLM } from './runner-message-builder.js';
+import { getToolsForLLM } from './tools/llm-format.js';
 import { maybeCompress } from './runner-compression.js';
 import type { IContextCompressor } from './types.js';
 import { processToolResult } from './runner-process-tool-result.js';
