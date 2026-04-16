@@ -20,12 +20,8 @@ import { buildMessagesFromCtx } from './runner-advance.js';
 import { getToolsForLLM } from './runner-message-builder.js';
 import { maybeCompress } from './runner-compression.js';
 import type { IContextCompressor } from './types.js';
-import { isSkillSignal, type SkillSignal } from './skills/types.js';
-import {
-  applySkillSignal,
-  formatSkillToolResult,
-  formatSkillAnswer,
-} from './skills/signal-handler.js';
+import { processToolResult } from './runner-process-tool-result.js';
+import type { ToolPostEffect } from './runner-process-tool-result.js';
 
 /**
  * Stream LLM response during calling-llm phase.
@@ -232,103 +228,39 @@ export async function* executeStepStream(
 
     yield { type: 'phase-change', from: fromPhase, to: phase };
 
+    // Tool-result: delegate to shared processToolResult
     if (phase.type === 'tool-result') {
-      // Handle skill signals via centralized handler
-      if (isSkillSignal(phase.result)) {
-        const [newState, sigResult] = applySkillSignal(currentState, phase.result as SkillSignal);
-        currentState = newState;
+      const outcome = await processToolResult(currentState, execState, registry);
+      currentState = await maybeCompress(compressor, outcome.state);
 
-        switch (sigResult.action) {
-          case 'loaded':
-            // Skill loaded (first time or nested)
-            yield {
-              type: 'skill:start',
-              name: sigResult.skillName,
-              task: (phase.result as SkillSignal & { task: string }).task ?? '',
-              state: currentState,
-            };
-            yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
-            execState.phase = { type: 'idle' };
-            continue;
-
-          case 'returned':
-            // Sub-skill finished, returned to parent
-            yield {
-              type: 'skill:end',
-              name: sigResult.completedSkill,
-              result: (phase.result as SkillSignal & { result: string }).result,
-              state: currentState,
-            };
-            yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
-            execState.phase = { type: 'idle' };
-            continue;
-
-          case 'top-level-return':
-            // Top-level skill finished: yield skill:end for event symmetry, then end step
-            yield {
-              type: 'skill:end',
-              name: sigResult.skillName,
-              result: (phase.result as SkillSignal & { result: string }).result,
-              state: currentState,
-            };
-            yield { type: 'tool:end', result: formatSkillToolResult(phase.result) };
-            return {
-              state: currentState,
-              result: { type: 'done', answer: formatSkillAnswer(phase.result) },
-            };
-
-          case 'same-skill':
-            // Already active — communicate clearly to LLM and TUI
-            yield {
-              type: 'tool:end',
-              result: `Skill '${sigResult.currentSkill}' is already active`,
-            };
-            return { state: currentState, result: { type: 'continue', toolResult: phase.result } };
-
-          case 'cyclic':
-            // Would cause cycle — communicate clearly to LLM and TUI
-            yield {
-              type: 'tool:end',
-              result: `Cannot load Skill '${sigResult.currentSkill}': already in the call stack`,
-            };
-            return { state: currentState, result: { type: 'continue', toolResult: phase.result } };
-
-          case 'not-found':
-            yield { type: 'error', error: sigResult.error, context: { step: 0 } };
-            return { state: currentState, result: { type: 'error', error: sigResult.error } };
-        }
+      // Yield lifecycle effects, skip step-control effects
+      for (const effect of outcome.effects) {
+        if ((effect.type as string).startsWith('step:')) continue;
+        yield effect as StreamEvent;
       }
 
-      // When delegate tool execution completes, wrap and yield sub-agent events
-      if (fromPhase.type === 'executing-tool' && fromPhase.action.tool === 'delegate') {
-        const delegateAction = fromPhase.action;
-        const agentName = String(delegateAction.arguments.agent ?? '');
-        const taskDesc = String(delegateAction.arguments.task ?? '');
-        yield { type: 'subagent:start', name: agentName, task: taskDesc };
+      // Determine step control flow from effects
+      const stepEffect = outcome.effects.find((e): e is ToolPostEffect & { type: string } =>
+        (e.type as string).startsWith('step:')
+      );
+
+      if (stepEffect?.type === 'step:continue') {
+        // Continue the while loop (e.g. skill loaded/returned)
+        continue;
+      }
+      if (stepEffect?.type === 'step:done') {
+        const answer = (stepEffect as { type: 'step:done'; answer: string }).answer;
+        return { state: currentState, result: { type: 'done', answer } };
+      }
+      if (stepEffect?.type === 'step:error') {
+        const error = (stepEffect as { type: 'step:error'; error: Error }).error;
+        return { state: currentState, result: { type: 'error', error } };
       }
 
-      yield {
-        type: 'tool:end',
-        result: phase.result,
-      };
-
-      // When delegate tool execution completes, yield subagent:end event
-      if (fromPhase.type === 'executing-tool' && fromPhase.action.tool === 'delegate') {
-        const agentName = String(fromPhase.action.arguments.agent ?? '');
-        yield {
-          type: 'subagent:end',
-          name: agentName,
-          result: phase.result as import('./subagent/types.js').DelegateResult,
-        };
-      }
-
-      return {
-        state: currentState,
-        result: {
-          type: 'continue',
-          toolResult: phase.result,
-        },
-      };
+      // step:continue-return (same-skill, cyclic, plain tool)
+      const toolResult = (stepEffect as { type: 'step:continue-return'; toolResult: unknown })
+        .toolResult;
+      return { state: currentState, result: { type: 'continue', toolResult } };
     }
 
     if (done && phase.type === 'completed') {
