@@ -133,9 +133,7 @@ export async function waitForPauseOrIdle(
     }
     await new Promise((r) => setTimeout(r, interval));
   }
-  throw new Error(
-    `Timeout waiting for pause or idle. Last frame:\n${lastFrame() || '(empty)'}`
-  );
+  throw new Error(`Timeout waiting for pause or idle. Last frame:\n${lastFrame() || '(empty)'}`);
 }
 
 /** Submit a message through the captured TextInput onSubmit */

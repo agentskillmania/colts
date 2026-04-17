@@ -182,6 +182,33 @@ describe('StreamEventConsumer', () => {
       // 空token不调 throttledFlush，只有构造时不会有 setter 调用
     });
 
+    it('纯空白 token 不创建 assistant entry', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+
+      consumer.consume(tokenEvent('\n'));
+      consumer.consume(tokenEvent(' '));
+      consumer.consume(tokenEvent('\n'));
+
+      // 纯空白内容不触发 ensureAssistantInserted
+      const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
+      expect(assistants).toHaveLength(0);
+      expect(consumer.getAccumulatedContent()).toBe('\n \n');
+    });
+
+    it('空白 token 后跟有内容 token 才创建 entry', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+
+      consumer.consume(tokenEvent('\n'));
+      consumer.consume(tokenEvent('Hello'));
+
+      // 第二个 token 有非空白内容，此时才创建 entry
+      const asst = entries.lastEntries.find((e) => e.type === 'assistant');
+      expect(asst).toBeDefined();
+      if (asst?.type === 'assistant') {
+        expect(asst.content).toBe('\nHello');
+      }
+    });
+
     it('节流：连续 token 在 50ms 内只调度一次延迟 flush', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       const beforeCount = entries.setter.mock.calls.length;
@@ -245,6 +272,19 @@ describe('StreamEventConsumer', () => {
         expect(asst.content).toBe('partial');
       }
     });
+
+    it('没有 token 时 tool:start 不创建空 assistant entry', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+
+      // LLM 直接调工具，没有说话
+      consumer.consume(toolStartEvent('search'));
+
+      const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
+      expect(assistants).toHaveLength(0);
+
+      const tools = entries.lastEntries.filter((e) => e.type === 'tool');
+      expect(tools).toHaveLength(1);
+    });
   });
 
   describe('tool:end 事件', () => {
@@ -299,19 +339,24 @@ describe('StreamEventConsumer', () => {
   // ── onToolEnd 钩子（run 模式场景） ──
 
   describe('onToolEnd 钩子', () => {
-    it('run 模式：tool:end 后自动 resetAssistant 创建新 assistant', () => {
+    it('run 模式：tool:end 后 resetAssistant，后续 token 写入新 assistant', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter, {
         onToolEnd: () => consumer.resetAssistant(),
       });
-      consumer.resetAssistant();
 
+      // 第一个 assistant entry（lazy：第一个 token 触发创建）
       consumer.consume(tokenEvent('thinking'));
       consumer.consume(toolStartEvent('read_file'));
       consumer.consume(toolEndEvent('result'));
+      // onToolEnd → resetAssistant()，重置内部状态但不立即插入新 entry
 
-      // resetAssistant 产生新 assistant entry
+      // 新 token 触发创建第二个 assistant entry
+      consumer.consume(tokenEvent('second'));
+      consumer.flush();
+
       const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
       expect(assistants.length).toBeGreaterThanOrEqual(2);
+      expect(consumer.getAccumulatedContent()).toBe('second');
     });
 
     it('run 模式：重置后新 token 写入新 assistant', () => {
@@ -359,6 +404,18 @@ describe('StreamEventConsumer', () => {
       expect(event.to.type).toBe('calling-llm');
     });
 
+    it('没有 assistant entry 时 phase-change 不崩溃', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+
+      consumer.consume(phaseChangeEvent('idle', 'preparing'));
+
+      const phases = entries.lastEntries.filter((e) => e.type === 'phase');
+      expect(phases).toHaveLength(1);
+      // 没有 assistant entry
+      const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
+      expect(assistants).toHaveLength(0);
+    });
+
     it('advance 模式：onPhaseChange 在 calling-llm 时 resetAssistant', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter, {
         onPhaseChange: (event) => {
@@ -368,15 +425,21 @@ describe('StreamEventConsumer', () => {
         },
       });
 
-      // 非 calling-llm 的 phase-change，不重置
-      consumer.consume(phaseChangeEvent('idle', 'preparing'));
+      // 先发 token 让第一个 assistant entry 存在
+      consumer.consume(tokenEvent('text'));
       const assistantsBefore = entries.lastEntries.filter((e) => e.type === 'assistant').length;
+      expect(assistantsBefore).toBe(1);
 
-      // calling-llm 的 phase-change，重置
+      // calling-llm 的 phase-change，触发 resetAssistant（lazy：不立即创建 entry）
       consumer.consume(phaseChangeEvent('preparing', 'calling-llm'));
-      const assistantsAfter = entries.lastEntries.filter((e) => e.type === 'assistant').length;
+      const assistantsAfterReset = entries.lastEntries.filter((e) => e.type === 'assistant').length;
+      // lazy creation：resetAssistant 不创建新 entry，assistant 数量不变
+      expect(assistantsAfterReset).toBe(1);
 
-      expect(assistantsAfter).toBeGreaterThan(assistantsBefore);
+      // 新 token 触发创建新的 assistant entry
+      consumer.consume(tokenEvent('new-text'));
+      const assistantsFinal = entries.lastEntries.filter((e) => e.type === 'assistant').length;
+      expect(assistantsFinal).toBe(2);
     });
   });
 
@@ -406,6 +469,21 @@ describe('StreamEventConsumer', () => {
       if (asst?.type === 'assistant') {
         expect(asst.content).toBe('partial text');
       }
+    });
+
+    it('没有 assistant entry 时 error 不崩溃，只创建 error entry', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+
+      consumer.consume(errorEvent('unexpected'));
+
+      const err = entries.lastEntries.find((e) => e.type === 'error');
+      expect(err).toBeDefined();
+      if (err?.type === 'error') {
+        expect(err.message).toBe('unexpected');
+      }
+      // 没有 assistant entry
+      const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
+      expect(assistants).toHaveLength(0);
     });
   });
 
@@ -737,31 +815,43 @@ describe('StreamEventConsumer', () => {
       expect(entries.setter.mock.calls.length).toBe(callCount);
     });
 
-    it('llm:request 事件不产生 TimelineEntry', () => {
+    it('llm:request 事件产生 llm-request entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
-      const callCount = entries.setter.mock.calls.length;
 
       consumer.consume({
         type: 'llm:request',
-        messages: [{ role: 'user', content: 'hi' }],
-        tools: [],
+        messages: [
+          { role: 'user', content: 'hi' },
+          { role: 'assistant', content: 'hello' },
+        ],
+        tools: ['read_file', 'search'],
         skill: null,
       } as RunStreamEvent);
 
-      expect(entries.setter.mock.calls.length).toBe(callCount);
+      const reqEntry = entries.lastEntries.find((e) => e.type === 'llm-request');
+      expect(reqEntry).toBeDefined();
+      if (reqEntry?.type === 'llm-request') {
+        expect(reqEntry.messageCount).toBe(2);
+        expect(reqEntry.tools).toEqual(['read_file', 'search']);
+      }
     });
 
-    it('llm:response 事件不产生 TimelineEntry', () => {
+    it('llm:response 事件产生 llm-response entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
-      const callCount = entries.setter.mock.calls.length;
 
       consumer.consume({
         type: 'llm:response',
         text: 'response text',
-        toolCalls: null,
+        toolCalls: [{ id: 'c1', name: 'read_file', arguments: { path: 'a.ts' } }],
       } as RunStreamEvent);
 
-      expect(entries.setter.mock.calls.length).toBe(callCount);
+      const resEntry = entries.lastEntries.find((e) => e.type === 'llm-response');
+      expect(resEntry).toBeDefined();
+      if (resEntry?.type === 'llm-response') {
+        expect(resEntry.textLength).toBe(13);
+        expect(resEntry.toolCalls).toHaveLength(1);
+        expect(resEntry.toolCalls![0].name).toBe('read_file');
+      }
     });
   });
 

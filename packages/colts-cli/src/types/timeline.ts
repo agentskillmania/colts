@@ -18,164 +18,141 @@ export type DetailLevel = 'compact' | 'detail' | 'verbose';
 
 /**
  * Timeline entry — converted from StreamEvent / RunStreamEvent
+ *
+ * 所有 entry 共享 seq 字段（全局单调递增序号），用于保证渲染顺序。
+ * 即使 React 批量更新合并了中间状态，按 seq 排序后条目顺序始终正确。
  */
 export type TimelineEntry =
   | {
-      /** Entry type */
       type: 'user';
-      /** Unique entry identifier */
       id: string;
-      /** User message content */
+      /** 全局单调递增序号，保证渲染顺序 */
+      seq: number;
       content: string;
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'assistant';
-      /** Unique entry identifier */
       id: string;
-      /** Assistant message content */
+      seq: number;
       content: string;
-      /** Timestamp in milliseconds */
       timestamp: number;
-      /** Whether it is currently streaming output */
       isStreaming?: boolean;
     }
   | {
-      /** Entry type */
       type: 'tool';
-      /** Unique entry identifier */
       id: string;
-      /** Tool name */
+      seq: number;
       tool: string;
-      /** Tool arguments */
       args?: unknown;
-      /** Tool execution result */
       result?: unknown;
-      /** Whether the tool is currently executing */
       isRunning?: boolean;
-      /** Timestamp in milliseconds */
+      /** 工具执行耗时（毫秒） */
+      duration?: number;
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'phase';
-      /** Unique entry identifier */
       id: string;
-      /** Previous phase name */
+      seq: number;
       from: string;
-      /** Next phase name */
       to: string;
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'thought';
-      /** Unique entry identifier */
       id: string;
-      /** Thought content */
+      seq: number;
       content: string;
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'step-start';
-      /** Unique entry identifier */
       id: string;
-      /** Step number */
+      seq: number;
       step: number;
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'step-end';
-      /** Unique entry identifier */
       id: string;
-      /** Step number */
+      seq: number;
       step: number;
-      /** Step execution result */
       result: StepResult;
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'run-complete';
-      /** Unique entry identifier */
       id: string;
-      /** Run execution result */
+      seq: number;
       result: RunResult;
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'compress';
-      /** Unique entry identifier */
       id: string;
-      /** Compression status */
+      seq: number;
       status: 'compressing' | 'compressed';
-      /** Compression summary text */
       summary?: string;
-      /** Number of removed messages */
       removedCount?: number;
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'skill';
-      /** Unique entry identifier */
       id: string;
-      /** Skill name */
+      seq: number;
       name: string;
-      /** Skill loading status */
       status: 'loading' | 'loaded' | 'active' | 'completed';
-      /** Loaded token count */
       tokenCount?: number;
-      /** Skill execution result (present when status is 'completed') */
       result?: string;
-      /** Timestamp in milliseconds */
-      timestamp: number;
-    }
-  | {
-      /** Entry type */
-      type: 'subagent';
-      /** Unique entry identifier */
-      id: string;
-      /** SubAgent name */
-      name: string;
-      /** Task description */
+      /** Skill 任务描述 */
       task?: string;
-      /** SubAgent result */
+      timestamp: number;
+    }
+  | {
+      type: 'subagent';
+      id: string;
+      seq: number;
+      name: string;
+      task?: string;
       result?: unknown;
-      /** SubAgent execution status */
       status: 'start' | 'end';
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'system';
-      /** Unique entry identifier */
       id: string;
-      /** System message content */
+      seq: number;
       content: string;
-      /** Timestamp in milliseconds */
       timestamp: number;
     }
   | {
-      /** Entry type */
       type: 'error';
-      /** Unique entry identifier */
       id: string;
-      /** Error message */
+      seq: number;
       message: string;
-      /** Timestamp in milliseconds */
+      timestamp: number;
+    }
+  | {
+      type: 'llm-request';
+      id: string;
+      seq: number;
+      /** 发送给 LLM 的消息数量 */
+      messageCount: number;
+      /** 可用工具列表 */
+      tools: string[];
+      /** 当前 skill 上下文 */
+      skill: { current: string | null; stack: string[] } | null;
+      timestamp: number;
+    }
+  | {
+      type: 'llm-response';
+      id: string;
+      seq: number;
+      /** LLM 返回的文本长度 */
+      textLength: number;
+      /** 工具调用列表 */
+      toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
       timestamp: number;
     };
 
@@ -198,6 +175,8 @@ export const VISIBILITY_MAP: Record<TimelineEntry['type'], Record<DetailLevel, b
   subagent: { compact: true, detail: true, verbose: true },
   system: { compact: true, detail: true, verbose: true },
   error: { compact: true, detail: true, verbose: true },
+  'llm-request': { compact: false, detail: false, verbose: true },
+  'llm-response': { compact: false, detail: false, verbose: true },
 };
 
 /**
@@ -220,4 +199,21 @@ export function isVisible(entry: TimelineEntry, level: DetailLevel): boolean {
  */
 export function filterByDetailLevel(entries: TimelineEntry[], level: DetailLevel): TimelineEntry[] {
   return entries.filter((entry) => isVisible(entry, level));
+}
+
+/**
+ * 全局 seq 计数器
+ *
+ * 保证所有 TimelineEntry 的 seq 单调递增，用于渲染排序。
+ * 跨 StreamEventConsumer 和 useAgent 共享。
+ */
+let globalSeq = 0;
+
+/**
+ * 分配下一个 seq 序号
+ *
+ * @returns 单调递增的序号
+ */
+export function nextSeq(): number {
+  return ++globalSeq;
 }

@@ -23,7 +23,9 @@ vi.mock('../../src/runner-setup.js', async (importOriginal) => {
   const { vi: viModule } = await import('vitest');
 
   // 空 async generator
-  async function* emptyStream() { return; }
+  async function* emptyStream() {
+    return;
+  }
 
   const mockRunner = {
     runStream: viModule.fn().mockReturnValue(emptyStream()),
@@ -38,9 +40,9 @@ vi.mock('../../src/runner-setup.js', async (importOriginal) => {
     ...actual,
     interactionCallbacks: { askHuman: null, confirm: null },
     createRunnerFromConfig: viModule.fn().mockReturnValue(mockRunner),
-    createInitialStateFromConfig: viModule.fn().mockReturnValue(
-      createState({ name: 'test-agent', instructions: 'Test', tools: [] })
-    ),
+    createInitialStateFromConfig: viModule
+      .fn()
+      .mockReturnValue(createState({ name: 'test-agent', instructions: 'Test', tools: [] })),
   };
 });
 
@@ -302,9 +304,7 @@ describe('App', () => {
 
   describe('SetupWizard 自动切换 MainTUI', () => {
     it('SetupWizard 完成后切换到 MainTUI 显示 WelcomeScreen', async () => {
-      const { lastFrame } = render(
-        <App config={invalidConfig} runner={null} />
-      );
+      const { lastFrame } = render(<App config={invalidConfig} runner={null} />);
 
       // 初始显示 SetupWizard
       expect(lastFrame()).toContain('colts-cli Setup');
@@ -333,9 +333,12 @@ describe('App', () => {
       capturedOnSubmit!('gpt-4o');
 
       // 等待状态切换完成，应该显示 MainTUI 的 WelcomeScreen
-      await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Welcome to colts-cli');
-      }, { timeout: 5000 });
+      await vi.waitFor(
+        () => {
+          expect(lastFrame()).toContain('Welcome to colts-cli');
+        },
+        { timeout: 5000 }
+      );
 
       // 不应再包含 SetupWizard
       expect(lastFrame()).not.toContain('colts-cli Setup');
