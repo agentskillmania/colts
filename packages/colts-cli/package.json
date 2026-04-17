@@ -1,6 +1,6 @@
 {
   "name": "@agentskillmania/colts-cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Terminal UI for the colts agent framework — interactive debugging and development environment.",
   "type": "module",
   "main": "dist/index.js",
