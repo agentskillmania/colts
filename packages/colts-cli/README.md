@@ -2,18 +2,16 @@
 
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
-Terminal UI (TUI) for the colts agent framework — an interactive debugging and development environment built with [Ink](https://github.com/vadimdemedes/ink).
+Terminal UI for the colts agent framework. An interactive chat-based tool for building, debugging, and running AI agents in the terminal. Built with [Ink](https://github.com/vadimdemedes/ink).
 
-## Features
+## Highlights
 
-- **Single-Canvas Layout**: Header bar, timeline panel, and input bar in one unified view
-- **Three-Level Execution Control**: Switch between `/run`, `/step`, and `/advance` modes on the fly
-- **Real-Time Streaming**: Live token output with throttled UI updates (~50ms)
-- **Three Detail Levels**: `/show:compact`, `/show:detail`, `/show:verbose` to control how much execution metadata is displayed
-- **Session Persistence**: Auto-save and restore conversation history to `~/.agentskillmania/colts/sessions/`
-- **Skill Integration**: `/skill <name>` to load domain-specific instructions; `/skill` to list available skills
-- **Subagent Events**: Visualize sub-agent activity in the timeline
-- **Config Guidance**: Shows setup instructions when LLM configuration is missing
+- **Real-Time Streaming** — Live token output with throttled UI updates (~50ms)
+- **Three-Level Execution** — Switch between `/run`, `/step`, and `/advance` modes on the fly
+- **Skill System** — Load domain-specific instructions at runtime with `/skill <name>`
+- **Session Persistence** — Auto-save and restore conversations to `~/.agentskillmania/colts/sessions/`
+- **Three Detail Levels** — `/compact`, `/detail`, `/verbose` to control output verbosity
+- **Tool Confirmation** — Require human approval for dangerous tools via `confirmTools` config
 
 ## Installation
 
@@ -27,49 +25,64 @@ pnpm add -g @agentskillmania/colts-cli
 # Start the TUI
 colts
 
-# Or via pnpm dlx
+# Or run without installing
 pnpm dlx @agentskillmania/colts-cli
 ```
 
-If no valid configuration is found, the TUI displays a setup prompt with the config file path.
+On first launch, you'll see a setup prompt with the config file path. Create the config and start chatting.
+
+## Usage Flow
+
+1. **Configure** — Create `colts.yaml` in your project or `~/.agentskillmania/colts/config.yaml`
+2. **Start** — Run `colts` to launch the TUI
+3. **Chat** — Type a message and press Enter. By default you're in **run** mode (auto-loop)
+4. **Switch modes** — Use `/step` to advance one ReAct cycle at a time, or `/advance` for phase-by-phase control
+5. **Load skills** — Use `/skill poet` to switch the agent into a specific domain mode
+6. **Adjust detail** — `/verbose` to see phase transitions and thinking, `/compact` to hide them
 
 ## Commands
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `/run` | — | Switch to **run** mode: auto-loop until completion |
-| `/step` | — | Switch to **step** mode: one ReAct cycle per Enter |
-| `/advance` | — | Switch to **advance** mode: one phase per Enter |
-| `/skill <name> [message]` | — | Load a skill and optionally send an initial message |
-| `/skill` | — | List all available skills |
-| `/show:compact` | `/compact` | Show only user messages, assistant replies, and run completions |
-| `/show:detail` | `/detail` | Also show step boundaries, tool args/results, and compression events |
-| `/show:verbose` | `/verbose` | Also show phase transitions, real-time tokens, and thoughts |
-| `/clear` | — | Clear all timeline entries |
-| `/help` | — | Show available commands |
+| Command | Description |
+|---------|-------------|
+| `/run` | Auto-loop until completion (default mode) |
+| `/step` | One ReAct cycle per message |
+| `/advance` | One execution phase per message |
+| `/skill <name> [message]` | Load a skill and optionally send an initial message |
+| `/skill` | List all available skills |
+| `/compact` | Show only messages, tool results, and completions |
+| `/detail` | Also show step boundaries, tool args/results, compression |
+| `/verbose` | Also show phase transitions, thinking, and LLM request/response |
+| `/clear` | Clear all timeline entries |
+| `/help` | Show available commands |
 
-### Global shortcuts
-
-- **Ctrl+C** (while running): Abort the current agent execution
-- **Ctrl+C** (while idle): Exit the application
+**Keyboard shortcuts:** Ctrl+C during execution to abort, Ctrl+C when idle to exit.
 
 ## Configuration
 
-Configuration is loaded in the following order:
+Config file search order:
 
 1. `./colts.yaml` (project-local)
 2. `~/.agentskillmania/colts/config.yaml` (global)
 
-If neither exists, a default config file is created at the global path.
-
-Example `colts.yaml`:
+Minimal config:
 
 ```yaml
 llm:
   provider: openai
   apiKey: sk-...
   model: gpt-4o
-  baseUrl: https://api.openai.com/v1  # optional
+```
+
+Full config with all options:
+
+```yaml
+llm:
+  provider: openai
+  apiKey: sk-...
+  model: gpt-4o
+  baseUrl: https://api.openai.com/v1    # optional, for compatible endpoints
+  thinkingEnabled: true                  # native reasoning (Claude-style models)
+  enablePromptThinking: true             # prompt-level thinking (<think/> tags)
 
 agent:
   name: my-agent
@@ -84,6 +97,10 @@ skills:
   - ./skills
   - ~/.agentskillmania/colts/skills
 
+confirmTools:
+  - delete_file
+  - execute_command
+
 subAgents:
   - name: researcher
     description: Research specialist
@@ -94,36 +111,6 @@ subAgents:
     maxSteps: 5
     allowDelegation: false
 ```
-
-## Architecture
-
-Built with [Ink](https://github.com/vadimdemedes/ink) (React for terminals) and [@inkjs/ui](https://github.com/inkjs/ui):
-
-- **`index.ts`**: Entry point — loads config, creates `AgentRunner`, renders the TUI
-- **`app.tsx`**: Root React component — routes between the main TUI and the config prompt
-- **`config.ts`**: Configuration loading and saving using `@agentskillmania/settings-yaml`
-- **`session.ts`**: Session persistence — save, load, list, and delete agent states
-- **`hooks/use-agent.ts`**: Core agent interaction hook — manages timeline entries, execution modes, detail levels, and stream parsing
-- **`types/timeline.ts`**: Unified timeline entry types and visibility rules per detail level
-
-## Timeline Entries
-
-The TUI renders all agent activity as a unified timeline. Each entry type is visible at different detail levels:
-
-| Entry Type | Compact | Detail | Verbose |
-|------------|:-------:|:------:|:-------:|
-| `user` | ✅ | ✅ | ✅ |
-| `assistant` | ✅ | ✅ | ✅ |
-| `tool` | ✅ | ✅ | ✅ |
-| `run-complete` | ✅ | ✅ | ✅ |
-| `skill` | ✅ | ✅ | ✅ |
-| `subagent` | ✅ | ✅ | ✅ |
-| `system` | ✅ | ✅ | ✅ |
-| `error` | ✅ | ✅ | ✅ |
-| `step-start` / `step-end` | ❌ | ✅ | ✅ |
-| `compress` | ❌ | ✅ | ✅ |
-| `phase` | ❌ | ❌ | ✅ |
-| `thought` | ❌ | ❌ | ✅ |
 
 ## License
 
