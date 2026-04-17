@@ -16,13 +16,7 @@ let capturedOnConfirm: (() => void) | null = null;
 let capturedOnCancel: (() => void) | null = null;
 
 vi.mock('@inkjs/ui', () => ({
-  ConfirmInput: ({
-    onConfirm,
-    onCancel,
-  }: {
-    onConfirm: () => void;
-    onCancel: () => void;
-  }) => {
+  ConfirmInput: ({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) => {
     capturedOnConfirm = onConfirm;
     capturedOnCancel = onCancel;
     return React.createElement('confirm-input-mock');
@@ -52,7 +46,11 @@ describe('ConfirmDialog', () => {
   it('显示参数列表', () => {
     const onResult = vi.fn();
     const { lastFrame } = render(
-      <ConfirmDialog toolName="delete_file" args={{ path: '/tmp/test.txt', force: true }} onResult={onResult} />
+      <ConfirmDialog
+        toolName="delete_file"
+        args={{ path: '/tmp/test.txt', force: true }}
+        onResult={onResult}
+      />
     );
     expect(lastFrame()).toContain('path');
     expect(lastFrame()).toContain('/tmp/test.txt');
@@ -62,17 +60,13 @@ describe('ConfirmDialog', () => {
 
   it('显示确认提示标题', () => {
     const onResult = vi.fn();
-    const { lastFrame } = render(
-      <ConfirmDialog toolName="rm" args={{}} onResult={onResult} />
-    );
+    const { lastFrame } = render(<ConfirmDialog toolName="rm" args={{}} onResult={onResult} />);
     expect(lastFrame()).toContain('Confirm tool execution');
   });
 
   it('确认时调用 onResult(true)', () => {
     const onResult = vi.fn();
-    render(
-      <ConfirmDialog toolName="delete_file" args={{ path: '/tmp/x' }} onResult={onResult} />
-    );
+    render(<ConfirmDialog toolName="delete_file" args={{ path: '/tmp/x' }} onResult={onResult} />);
 
     expect(capturedOnConfirm).not.toBeNull();
     capturedOnConfirm!();
@@ -83,9 +77,7 @@ describe('ConfirmDialog', () => {
 
   it('取消时调用 onResult(false)', () => {
     const onResult = vi.fn();
-    render(
-      <ConfirmDialog toolName="delete_file" args={{ path: '/tmp/x' }} onResult={onResult} />
-    );
+    render(<ConfirmDialog toolName="delete_file" args={{ path: '/tmp/x' }} onResult={onResult} />);
 
     expect(capturedOnCancel).not.toBeNull();
     capturedOnCancel!();
@@ -96,9 +88,7 @@ describe('ConfirmDialog', () => {
 
   it('空参数不崩溃', () => {
     const onResult = vi.fn();
-    const { lastFrame } = render(
-      <ConfirmDialog toolName="ping" args={{}} onResult={onResult} />
-    );
+    const { lastFrame } = render(<ConfirmDialog toolName="ping" args={{}} onResult={onResult} />);
     expect(lastFrame()).toContain('ping');
   });
 
@@ -117,9 +107,7 @@ describe('ConfirmDialog', () => {
 
   it('unmount 不报错', () => {
     const onResult = vi.fn();
-    const { unmount } = render(
-      <ConfirmDialog toolName="test" args={{}} onResult={onResult} />
-    );
+    const { unmount } = render(<ConfirmDialog toolName="test" args={{}} onResult={onResult} />);
     expect(() => unmount()).not.toThrow();
   });
 });

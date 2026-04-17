@@ -57,10 +57,7 @@ export function AskHumanDialog({ questions, context, onAnswer }: AskHumanDialogP
       </Box>
 
       {current.type === 'text' && (
-        <TextInput
-          placeholder="Type your answer..."
-          onSubmit={(value) => handleAnswer(value)}
-        />
+        <TextInput placeholder="Type your answer..." onSubmit={(value) => handleAnswer(value)} />
       )}
 
       {current.type === 'number' && (

@@ -167,7 +167,13 @@ describe('useSession hook', () => {
     const sessionModule = await import('../../src/session.js');
     const origList = sessionModule.listSessions;
     vi.spyOn(sessionModule, 'listSessions').mockResolvedValueOnce([
-      { id: 'deleted-session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, lastMessage: 'test' },
+      {
+        id: 'deleted-session',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messageCount: 1,
+        lastMessage: 'test',
+      },
     ]);
 
     const { Wrapper, getHook } = createWrapper();

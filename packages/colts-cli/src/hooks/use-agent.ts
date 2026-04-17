@@ -19,6 +19,7 @@ import {
   loadSkill,
 } from '@agentskillmania/colts';
 import type { TimelineEntry, DetailLevel } from '../types/timeline.js';
+import { nextSeq } from '../types/timeline.js';
 import { TraceWriter } from '../trace-writer.js';
 import { StreamEventConsumer } from './stream-event-consumer.js';
 
@@ -195,12 +196,18 @@ export function useAgent(
 
   /** Add a system entry */
   const addSystemEntry = useCallback((content: string) => {
-    trimEntries((prev) => [...prev, { type: 'system', id: uid(), content, timestamp: Date.now() }]);
+    trimEntries((prev) => [
+      ...prev,
+      { type: 'system', id: uid(), seq: nextSeq(), content, timestamp: Date.now() },
+    ]);
   }, []);
 
   /** Add an error entry */
   const addErrorEntry = useCallback((message: string) => {
-    trimEntries((prev) => [...prev, { type: 'error', id: uid(), message, timestamp: Date.now() }]);
+    trimEntries((prev) => [
+      ...prev,
+      { type: 'error', id: uid(), seq: nextSeq(), message, timestamp: Date.now() },
+    ]);
   }, []);
 
   /**
@@ -308,7 +315,7 @@ export function useAgent(
             // Add user message entry
             trimEntries((prev) => [
               ...prev,
-              { type: 'user', id: uid(), content: userMsg, timestamp: Date.now() },
+              { type: 'user', id: uid(), seq: nextSeq(), content: userMsg, timestamp: Date.now() },
             ]);
             setIsRunning(true);
 
@@ -393,7 +400,7 @@ export function useAgent(
       // Add user message entry
       trimEntries((prev) => [
         ...prev,
-        { type: 'user', id: uid(), content: input.trim(), timestamp: Date.now() },
+        { type: 'user', id: uid(), seq: nextSeq(), content: input.trim(), timestamp: Date.now() },
       ]);
       setIsRunning(true);
 
@@ -546,7 +553,13 @@ async function executeRun(
           ...prev.map((e) =>
             e.type === 'assistant' && e.id === id ? { ...e, isStreaming: false } : e
           ),
-          { type: 'run-complete', id: uid(), result: runResult, timestamp: Date.now() },
+          {
+            type: 'run-complete',
+            id: uid(),
+            seq: nextSeq(),
+            result: runResult,
+            timestamp: Date.now(),
+          },
         ]);
       }
     }
@@ -636,6 +649,7 @@ export async function executeStep(
           {
             type: 'system',
             id: uid(),
+            seq: nextSeq(),
             content: 'Step complete. Press Enter to continue.',
             timestamp: Date.now(),
           },

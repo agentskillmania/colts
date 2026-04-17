@@ -1,5 +1,5 @@
 /**
- * @fileoverview TimelineEntry component unit tests — covering all 13 entry type renderings
+ * @fileoverview TimelineEntry 组件单元测试 — 覆盖全部 13 种 entry 类型的渲染
  */
 
 import React from 'react';
@@ -7,50 +7,80 @@ import { describe, it, expect } from 'vitest';
 import { render } from 'ink-testing-library';
 import { TimelineEntry } from '../../../src/components/timeline/timeline-entry.js';
 import type { TimelineEntry as TimelineEntryType } from '../../../src/types/timeline.js';
+import { ICONS } from '../../../src/utils/theme.js';
 
-/** Factory: create a user entry */
+// ── 工厂函数 ──
+
+let testSeq = 0;
+function seq(): number {
+  return ++testSeq;
+}
+
+/** 创建 user entry */
 function makeUser(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'user' }>>
 ): TimelineEntryType {
-  return { type: 'user', id: 'u1', content: 'Hello', timestamp: 1000, ...overrides };
+  return { type: 'user', id: 'u1', seq: seq(), content: 'Hello', timestamp: 1000, ...overrides };
 }
 
-/** Factory: create an assistant entry */
+/** 创建 assistant entry */
 function makeAssistant(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'assistant' }>>
 ): TimelineEntryType {
-  return { type: 'assistant', id: 'a1', content: 'Hi there', timestamp: 1000, ...overrides };
+  return {
+    type: 'assistant',
+    id: 'a1',
+    seq: seq(),
+    content: 'Hi there',
+    timestamp: 1000,
+    ...overrides,
+  };
 }
 
-/** Factory: create a tool entry */
+/** 创建 tool entry */
 function makeTool(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'tool' }>>
 ): TimelineEntryType {
-  return { type: 'tool', id: 't1', tool: 'read_file', timestamp: 1000, ...overrides };
+  return { type: 'tool', id: 't1', seq: seq(), tool: 'read_file', timestamp: 1000, ...overrides };
 }
 
-/** Factory: create a phase entry */
+/** 创建 phase entry */
 function makePhase(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'phase' }>>
 ): TimelineEntryType {
-  return { type: 'phase', id: 'p1', from: 'idle', to: 'preparing', timestamp: 1000, ...overrides };
+  return {
+    type: 'phase',
+    id: 'p1',
+    seq: seq(),
+    from: 'idle',
+    to: 'preparing',
+    timestamp: 1000,
+    ...overrides,
+  };
 }
 
-/** Factory: create a thought entry */
+/** 创建 thought entry */
 function makeThought(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'thought' }>>
 ): TimelineEntryType {
-  return { type: 'thought', id: 'th1', content: 'need to check', timestamp: 1000, ...overrides };
+  return {
+    type: 'thought',
+    id: 'th1',
+    seq: seq(),
+    content: 'need to check',
+    timestamp: 1000,
+    ...overrides,
+  };
 }
 
-/** Factory: create a step-start entry */
+/** 创建 step-start entry */
 function makeStepStart(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'step-start' }>>
 ): TimelineEntryType {
-  return { type: 'step-start', id: 'ss1', step: 0, timestamp: 1000, ...overrides };
+  return { type: 'step-start', id: 'ss1', seq: seq(), step: 0, timestamp: 1000, ...overrides };
 }
 
-/** Factory: create a step-end entry */
+/** 创建 step-end entry */
 function makeStepEnd(
   resultType: 'done' | 'continue' | 'error' = 'done',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'step-end' }>>
@@ -61,10 +91,18 @@ function makeStepEnd(
       : resultType === 'continue'
         ? { type: 'continue' as const, toolResult: 'file content' }
         : { type: 'error' as const, error: new Error('fail') };
-  return { type: 'step-end', id: 'se1', step: 0, result, timestamp: 1000, ...overrides };
+  return {
+    type: 'step-end',
+    id: 'se1',
+    seq: seq(),
+    step: 0,
+    result,
+    timestamp: 1000,
+    ...overrides,
+  };
 }
 
-/** Factory: create a run-complete entry */
+/** 创建 run-complete entry */
 function makeRunComplete(
   resultType: 'success' | 'max_steps' | 'error' = 'success',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'run-complete' }>>
@@ -75,51 +113,106 @@ function makeRunComplete(
       : resultType === 'max_steps'
         ? { type: 'max_steps' as const, totalSteps: 10 }
         : { type: 'error' as const, error: new Error('crash'), totalSteps: 2 };
-  return { type: 'run-complete', id: 'rc1', result, timestamp: 1000, ...overrides };
+  return { type: 'run-complete', id: 'rc1', seq: seq(), result, timestamp: 1000, ...overrides };
 }
 
-/** Factory: create a compress entry */
+/** 创建 compress entry */
 function makeCompress(
   status: 'compressing' | 'compressed' = 'compressing',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'compress' }>>
 ): TimelineEntryType {
-  return { type: 'compress', id: 'c1', status, timestamp: 1000, ...overrides };
+  return { type: 'compress', id: 'c1', seq: seq(), status, timestamp: 1000, ...overrides };
 }
 
-/** Factory: create a skill entry */
+/** 创建 skill entry */
 function makeSkill(
-  status: 'loading' | 'loaded' = 'loading',
+  status: 'loading' | 'loaded' | 'active' | 'completed' = 'loading',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'skill' }>>
 ): TimelineEntryType {
-  return { type: 'skill', id: 'sk1', name: 'my-skill', status, timestamp: 1000, ...overrides };
+  return {
+    type: 'skill',
+    id: 'sk1',
+    seq: seq(),
+    name: 'my-skill',
+    status,
+    timestamp: 1000,
+    ...overrides,
+  };
 }
 
-/** Factory: create a subagent entry */
+/** 创建 subagent entry */
 function makeSubagent(
   status: 'start' | 'end' = 'start',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'subagent' }>>
 ): TimelineEntryType {
-  return { type: 'subagent', id: 'sa1', name: 'researcher', status, timestamp: 1000, ...overrides };
+  return {
+    type: 'subagent',
+    id: 'sa1',
+    seq: seq(),
+    name: 'researcher',
+    status,
+    timestamp: 1000,
+    ...overrides,
+  };
 }
 
-/** Factory: create a system entry */
+/** 创建 system entry */
 function makeSystem(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'system' }>>
 ): TimelineEntryType {
   return {
     type: 'system',
     id: 'sy1',
+    seq: seq(),
     content: 'Switched to RUN mode',
     timestamp: 1000,
     ...overrides,
   };
 }
 
-/** Factory: create an error entry */
+/** 创建 error entry */
 function makeError(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'error' }>>
 ): TimelineEntryType {
-  return { type: 'error', id: 'e1', message: 'something broke', timestamp: 1000, ...overrides };
+  return {
+    type: 'error',
+    id: 'e1',
+    seq: seq(),
+    message: 'something broke',
+    timestamp: 1000,
+    ...overrides,
+  };
+}
+
+/** 创建 llm-request entry */
+function makeLlmRequest(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'llm-request' }>>
+): TimelineEntryType {
+  return {
+    type: 'llm-request',
+    id: 'lr1',
+    seq: seq(),
+    messageCount: 3,
+    tools: [],
+    skill: null,
+    timestamp: 1000,
+    ...overrides,
+  };
+}
+
+/** 创建 llm-response entry */
+function makeLlmResponse(
+  overrides?: Partial<Extract<TimelineEntryType, { type: 'llm-response' }>>
+): TimelineEntryType {
+  return {
+    type: 'llm-response',
+    id: 'lrs1',
+    seq: seq(),
+    textLength: 100,
+    toolCalls: null,
+    timestamp: 1000,
+    ...overrides,
+  };
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -127,10 +220,10 @@ function makeError(
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — user', () => {
-  it('renders user message content', () => {
+  it('renders user message with icon', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeUser({ content: 'Read main.ts' })} />);
     const frame = lastFrame();
-    expect(frame).toContain('You:');
+    expect(frame).toContain(ICONS.user);
     expect(frame).toContain('Read main.ts');
   });
 });
@@ -140,13 +233,12 @@ describe('TimelineEntry — user', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — assistant', () => {
-  it('renders assistant reply content (non-streaming)', () => {
+  it('renders assistant reply with icon (non-streaming)', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeAssistant({ content: 'Hello!', isStreaming: false })} />
     );
     expect(lastFrame()).toContain('Hello!');
-    expect(lastFrame()).toContain('Agent:');
-    // non-streaming should not have a cursor
+    expect(lastFrame()).toContain(ICONS.assistant);
     expect(lastFrame()).not.toContain('▌');
   });
 
@@ -157,9 +249,9 @@ describe('TimelineEntry — assistant', () => {
     expect(lastFrame()).toContain('▌');
   });
 
-  it('renders empty content', () => {
+  it('renders empty content with icon', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeAssistant({ content: '' })} />);
-    expect(lastFrame()).toContain('Agent:');
+    expect(lastFrame()).toContain(ICONS.assistant);
   });
 });
 
@@ -168,16 +260,17 @@ describe('TimelineEntry — assistant', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — tool', () => {
-  it('shows tool name and ellipsis while running', () => {
+  it('shows tool name with running icon while running', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: true })} />
     );
     const frame = lastFrame();
     expect(frame).toContain('read_file');
     expect(frame).toContain('...');
+    expect(frame).toContain(ICONS.toolRunning);
   });
 
-  it('shows tool name and result when completed', () => {
+  it('shows tool name with done icon and result when completed', () => {
     const { lastFrame } = render(
       <TimelineEntry
         entry={makeTool({ tool: 'read_file', isRunning: false, result: 'file content here' })}
@@ -187,6 +280,7 @@ describe('TimelineEntry — tool', () => {
     expect(frame).toContain('read_file');
     expect(frame).toContain('→');
     expect(frame).toContain('file content here');
+    expect(frame).toContain(ICONS.toolDone);
   });
 
   it('shows args when present', () => {
@@ -207,7 +301,6 @@ describe('TimelineEntry — tool', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeTool({ tool: 'read_file', isRunning: false, result: 'done' })} />
     );
-    // args not passed, should not contain arg line
     expect(lastFrame()).toContain('read_file');
     expect(lastFrame()).toContain('→ done');
   });
@@ -271,6 +364,24 @@ describe('TimelineEntry — tool', () => {
     );
     expect(lastFrame()).toContain('"key"');
   });
+
+  it('shows duration when present', () => {
+    const { lastFrame } = render(
+      <TimelineEntry
+        entry={makeTool({ tool: 'read_file', isRunning: false, result: 'ok', duration: 1500 })}
+      />
+    );
+    expect(lastFrame()).toContain('1.5s');
+  });
+
+  it('shows error icon for error results', () => {
+    const { lastFrame } = render(
+      <TimelineEntry
+        entry={makeTool({ tool: 'read_file', isRunning: false, result: 'Error: file not found' })}
+      />
+    );
+    expect(lastFrame()).toContain(ICONS.toolError);
+  });
 });
 
 // ──────────────────────────────────────────────────────────────
@@ -297,7 +408,7 @@ describe('TimelineEntry — thought', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeThought({ content: 'need to check file' })} />
     );
-    expect(lastFrame()).toContain('thought:');
+    expect(lastFrame()).toContain(ICONS.thought);
     expect(lastFrame()).toContain('need to check file');
   });
 });
@@ -307,10 +418,12 @@ describe('TimelineEntry — thought', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — step-start', () => {
-  it('shows step number', () => {
+  it('shows step number as separator', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeStepStart({ step: 3 })} />);
-    expect(lastFrame()).toContain('Step');
-    expect(lastFrame()).toContain('3');
+    const frame = lastFrame();
+    expect(frame).toContain('Step');
+    expect(frame).toContain('3');
+    expect(frame).toContain(ICONS.separator);
   });
 });
 
@@ -319,20 +432,28 @@ describe('TimelineEntry — step-start', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — step-end', () => {
-  it('shows final label for done result', () => {
+  it('shows done label for done result', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeStepEnd('done', { step: 1 })} />);
-    expect(lastFrame()).toContain('Step 1');
-    expect(lastFrame()).toContain('done (final)');
+    const frame = lastFrame();
+    expect(frame).toContain('Step 1');
+    expect(frame).toContain('done');
   });
 
   it('shows continue label for continue result', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeStepEnd('continue', { step: 2 })} />);
-    expect(lastFrame()).toContain('done (continue)');
+    expect(lastFrame()).toContain('Step 2');
+    expect(lastFrame()).toContain('continue');
   });
 
   it('shows continue label for error result (non-done branch)', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeStepEnd('error', { step: 0 })} />);
-    expect(lastFrame()).toContain('done (continue)');
+    expect(lastFrame()).toContain('Step 0');
+    expect(lastFrame()).toContain('continue');
+  });
+
+  it('shows answer preview for done result', () => {
+    const { lastFrame } = render(<TimelineEntry entry={makeStepEnd('done', { step: 1 })} />);
+    expect(lastFrame()).toContain('ok');
   });
 });
 
@@ -368,6 +489,7 @@ describe('TimelineEntry — compress', () => {
   it('shows compressing status', () => {
     const { lastFrame } = render(<TimelineEntry entry={makeCompress('compressing')} />);
     expect(lastFrame()).toContain('Compressing');
+    expect(lastFrame()).toContain(ICONS.compress);
   });
 
   it('shows removed count for compressed status', () => {
@@ -376,6 +498,15 @@ describe('TimelineEntry — compress', () => {
     );
     expect(lastFrame()).toContain('Compressed');
     expect(lastFrame()).toContain('5 messages removed');
+  });
+
+  it('shows summary when present', () => {
+    const { lastFrame } = render(
+      <TimelineEntry
+        entry={makeCompress('compressed', { removedCount: 3, summary: 'kept key info' })}
+      />
+    );
+    expect(lastFrame()).toContain('kept key info');
   });
 });
 
@@ -388,17 +519,41 @@ describe('TimelineEntry — skill', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeSkill('loading', { name: 'code-review' })} />
     );
-    expect(lastFrame()).toContain('Loading skill');
+    expect(lastFrame()).toContain('Loading');
     expect(lastFrame()).toContain('code-review');
+    expect(lastFrame()).toContain(ICONS.skill);
   });
 
   it('shows loaded status and char count', () => {
     const { lastFrame } = render(
       <TimelineEntry entry={makeSkill('loaded', { name: 'code-review', tokenCount: 1234 })} />
     );
-    expect(lastFrame()).toContain('Skill loaded');
+    expect(lastFrame()).toContain('Loaded');
     expect(lastFrame()).toContain('code-review');
     expect(lastFrame()).toContain('1234 chars');
+  });
+
+  it('shows active status', () => {
+    const { lastFrame } = render(<TimelineEntry entry={makeSkill('active', { name: 'search' })} />);
+    expect(lastFrame()).toContain('Activated');
+    expect(lastFrame()).toContain('search');
+  });
+
+  it('shows completed status with result', () => {
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeSkill('completed', { name: 'search', result: 'found 3 items' })} />
+    );
+    expect(lastFrame()).toContain('Completed');
+    expect(lastFrame()).toContain('search');
+    expect(lastFrame()).toContain('found 3 items');
+  });
+
+  it('truncates long results in completed status', () => {
+    const longResult = 'x'.repeat(100);
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeSkill('completed', { name: 'search', result: longResult })} />
+    );
+    expect(lastFrame()).toContain('...');
   });
 });
 
@@ -412,8 +567,8 @@ describe('TimelineEntry — subagent', () => {
       <TimelineEntry entry={makeSubagent('start', { name: 'researcher', task: 'search web' })} />
     );
     expect(lastFrame()).toContain('researcher');
-    expect(lastFrame()).toContain('Starting');
     expect(lastFrame()).toContain('search web');
+    expect(lastFrame()).toContain(ICONS.subagent);
   });
 
   it('shows done for end status', () => {
@@ -421,7 +576,14 @@ describe('TimelineEntry — subagent', () => {
       <TimelineEntry entry={makeSubagent('end', { name: 'researcher' })} />
     );
     expect(lastFrame()).toContain('researcher');
-    expect(lastFrame()).toContain('Done');
+    expect(lastFrame()).toContain('done');
+  });
+
+  it('shows result summary for end status', () => {
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeSubagent('end', { name: 'researcher', result: 'found 3 files' })} />
+    );
+    expect(lastFrame()).toContain('found 3 files');
   });
 });
 
@@ -435,6 +597,7 @@ describe('TimelineEntry — system', () => {
       <TimelineEntry entry={makeSystem({ content: 'Switched to RUN mode' })} />
     );
     expect(lastFrame()).toContain('Switched to RUN mode');
+    expect(lastFrame()).toContain(ICONS.system);
   });
 });
 
@@ -450,7 +613,80 @@ describe('TimelineEntry — error', () => {
 });
 
 // ──────────────────────────────────────────────────────────────
-// Edge cases & truncation
+// llm-request
+// ──────────────────────────────────────────────────────────────
+
+describe('TimelineEntry — llm-request', () => {
+  it('shows message count', () => {
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeLlmRequest({ messageCount: 5, tools: ['read_file', 'search'] })} />
+    );
+    expect(lastFrame()).toContain('5 messages');
+    expect(lastFrame()).toContain('read_file');
+    expect(lastFrame()).toContain('search');
+  });
+
+  it('shows skill context when present', () => {
+    const { lastFrame } = render(
+      <TimelineEntry
+        entry={makeLlmRequest({
+          messageCount: 3,
+          tools: [],
+          skill: { current: 'code-review', stack: ['root'] },
+        })}
+      />
+    );
+    expect(lastFrame()).toContain('skill: code-review');
+  });
+
+  it('hides tools line when empty', () => {
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeLlmRequest({ messageCount: 2, tools: [] })} />
+    );
+    expect(lastFrame()).toContain('2 messages');
+    expect(lastFrame()).not.toContain('tools:');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// llm-response
+// ──────────────────────────────────────────────────────────────
+
+describe('TimelineEntry — llm-response', () => {
+  it('shows text length', () => {
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeLlmResponse({ textLength: 256, toolCalls: null })} />
+    );
+    expect(lastFrame()).toContain('256 chars');
+  });
+
+  it('shows tool call names', () => {
+    const { lastFrame } = render(
+      <TimelineEntry
+        entry={makeLlmResponse({
+          textLength: 100,
+          toolCalls: [
+            { id: 'c1', name: 'read_file', arguments: { path: 'main.ts' } },
+            { id: 'c2', name: 'search', arguments: { query: 'test' } },
+          ],
+        })}
+      />
+    );
+    expect(lastFrame()).toContain('read_file');
+    expect(lastFrame()).toContain('search');
+    expect(lastFrame()).toContain('tool calls:');
+  });
+
+  it('hides tool calls line when null', () => {
+    const { lastFrame } = render(
+      <TimelineEntry entry={makeLlmResponse({ textLength: 50, toolCalls: null })} />
+    );
+    expect(lastFrame()).not.toContain('tool calls:');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// Tool arg truncation
 // ──────────────────────────────────────────────────────────────
 
 describe('TimelineEntry — tool arg truncation', () => {
@@ -466,7 +702,6 @@ describe('TimelineEntry — tool arg truncation', () => {
         })}
       />
     );
-    // should contain ... after truncation
     expect(lastFrame()).toContain('...');
   });
 
