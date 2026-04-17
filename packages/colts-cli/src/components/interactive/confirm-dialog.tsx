@@ -45,10 +45,7 @@ export function ConfirmDialog({ toolName, args, onResult }: ConfirmDialogProps) 
       </Box>
 
       <Box marginTop={1}>
-        <ConfirmInput
-          onConfirm={() => onResult(true)}
-          onCancel={() => onResult(false)}
-        />
+        <ConfirmInput onConfirm={() => onResult(true)} onCancel={() => onResult(false)} />
       </Box>
     </Box>
   );
