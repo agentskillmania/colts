@@ -8,6 +8,29 @@ import type { AgentState, Message } from './types.js';
 import type { ToolCall } from './parser.js';
 import type { DelegateResult } from './subagent/types.js';
 
+// ---------------------------------------------------------------------------
+// ToolPostEffect — handler 产出的生命周期副作用
+// ---------------------------------------------------------------------------
+
+/**
+ * 描述 handler 处理完一个 phase 后产出的单个副作用。
+ *
+ * 与旧版 ToolPostEffect 的区别：不再包含 `step:*` 控制类 effect。
+ * 控制流由 AdvanceResult 的 `phase` + `done` 决定。
+ */
+export type ToolPostEffect =
+  // Skill 生命周期
+  | { type: 'skill:start'; name: string; task: string; state: AgentState }
+  | { type: 'skill:end'; name: string; result: string; state: AgentState }
+  // SubAgent 生命周期
+  | { type: 'subagent:start'; name: string; task: string }
+  | { type: 'subagent:end'; name: string; result: unknown }
+  // Tool 完成
+  | { type: 'tool:end'; result: unknown }
+  | { type: 'tools:end'; results: Record<string, unknown> }
+  // 错误
+  | { type: 'error'; error: Error; context: { step: number } };
+
 /**
  * Action extracted from LLM response (represents a tool call)
  */
@@ -95,6 +118,8 @@ export interface AdvanceResult {
   phase: Phase;
   /** Whether execution is complete */
   done: boolean;
+  /** Side-effects produced by the handler (e.g. skill:start, tool:end) */
+  effects?: ToolPostEffect[];
 }
 
 /**
