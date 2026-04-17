@@ -135,6 +135,17 @@ export class StreamEventConsumer {
         break;
       }
 
+      case 'thinking': {
+        this.addEntry({
+          type: 'thought',
+          id: this.uid(),
+          seq: nextSeq(),
+          content: event.content,
+          timestamp: Date.now(),
+        });
+        break;
+      }
+
       case 'phase-change': {
         this.handlePhaseChange(event);
         break;

@@ -79,6 +79,8 @@ export interface AppConfig {
     apiKey: string;
     model: string;
     baseUrl?: string;
+    thinkingEnabled?: boolean;
+    enablePromptThinking?: boolean;
   };
   /** Agent configuration */
   agent?: {
