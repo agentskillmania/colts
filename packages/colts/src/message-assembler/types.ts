@@ -27,6 +27,8 @@ export interface BuildMessagesOptions {
   skillProvider?: ISkillProvider;
   /** Sub-agent config map for injecting sub-agent list into system prompt */
   subAgentConfigs?: Map<string, SubAgentConfig>;
+  /** Enable prompt-level thinking guidance */
+  enablePromptThinking?: boolean;
 }
 
 /**

@@ -34,10 +34,12 @@ export class CallingLLMHandler implements IPhaseHandler {
           systemPrompt: ctx.options.systemPrompt,
           model: ctx.options.model,
           skillProvider: ctx.skillProvider,
+          enablePromptThinking: ctx.options.enablePromptThinking,
         }),
       tools,
       priority: 0,
       requestTimeout: ctx.options.requestTimeout,
+      thinkingEnabled: ctx.options.thinkingEnabled,
       signal: options?.signal,
     });
 

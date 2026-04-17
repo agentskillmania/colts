@@ -41,6 +41,8 @@ export interface PhaseHandlerContext {
     systemPrompt?: string;
     requestTimeout?: number;
     maxSteps?: number;
+    thinkingEnabled?: boolean;
+    enablePromptThinking?: boolean;
   };
 }
 
