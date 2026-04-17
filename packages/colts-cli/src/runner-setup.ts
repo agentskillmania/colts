@@ -64,6 +64,8 @@ export function createRunnerFromConfig(config: AppConfig): AgentRunner | null {
     requestTimeout: config.requestTimeout,
     skillDirectories: config.skills,
     toolRegistry: registry,
+    thinkingEnabled: config.llm.thinkingEnabled,
+    enablePromptThinking: config.llm.enablePromptThinking,
   };
 
   const runner = new AgentRunner(runnerOptions);
