@@ -164,6 +164,14 @@ export async function* executeAdvanceStream(
 
   // For other phases, delegate to executeAdvance()
   const result = await executeAdvance(ctx, state, execState, registry, options);
+
+  // yield handler 产出的 effects（如 tool:end、skill:start 等）
+  if (result.effects && result.effects.length > 0) {
+    for (const effect of result.effects) {
+      yield effect as StreamEvent;
+    }
+  }
+
   yield { type: 'phase-change', from: fromPhase, to: result.phase };
 
   return result;
