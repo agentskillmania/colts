@@ -42,7 +42,6 @@ import { compressState, maybeCompress } from './runner-compression.js';
 import { executeAdvance, createRouter } from './runner-advance.js';
 import type { RunnerContext } from './runner-advance.js';
 import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './runner-stream.js';
-import { isSkillSignal, type SkillSignal } from './skills/types.js';
 import type { ISkillProvider } from './skills/types.js';
 import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
 import { createLoadSkillTool, createReturnSkillTool } from './skills/index.js';
@@ -50,9 +49,6 @@ import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from './subagen
 import { DefaultSubAgentFactory } from './subagent/types.js';
 import { createDelegateTool } from './subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
-import { processToolResult } from './runner-process-tool-result.js';
-import { applySkillSignal } from './skills/signal-handler.js';
-import type { ToolPostEffect } from './runner-process-tool-result.js';
 import type { IExecutionPolicy } from './policy/types.js';
 import { DefaultExecutionPolicy } from './policy/default-policy.js';
 
@@ -744,25 +740,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           this.emit('tools:start', { actions: result.phase.actions });
         }
       }
-      if (result.phase.type === 'tool-result') {
-        const keys = Object.keys(result.phase.results);
-        if (keys.length === 1) {
-          this.emit('tool:end', {
-            result: result.phase.results[keys[0]],
-            callId: keys[0],
-          });
-        } else {
-          this.emit('tools:end', { results: result.phase.results });
-        }
-
-        // advance() 路径独有：处理 skill signal 更新 skillState
-        // step()/run() 路径会走 processToolResult()，那里也会处理，不会走到这里
-        const firstKey = keys[0];
-        const firstResult = firstKey !== undefined ? result.phase.results[firstKey] : undefined;
-        if (isSkillSignal(firstResult)) {
-          const sig = firstResult as SkillSignal;
-          const [stateAfterSkill] = applySkillSignal(result.state, sig);
-          result.state = stateAfterSkill;
+      // Handler 产出的 effects 统一转发到 EventEmitter
+      if (result.effects && result.effects.length > 0) {
+        for (const effect of result.effects) {
+          this.emit(effect.type as keyof RunnerEventMap, effect as never);
         }
       }
       if (result.phase.type === 'error') {
@@ -879,77 +860,62 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         options?.signal?.throwIfAborted();
 
         const from = execState.phase;
-        const {
-          state: newState,
-          phase,
-          done,
-        } = await executeAdvance(this.ctx, currentState, execState, registry, options);
+        const result = await executeAdvance(this.ctx, currentState, execState, registry, options);
 
-        currentState = await maybeCompress(this.compressor, newState);
+        currentState = await maybeCompress(this.compressor, result.state);
 
-        // Emit corresponding StreamEvent based on phase type
-        if (phase.type === 'executing-tool') {
-          if (phase.actions.length === 1) {
-            this.emit('tool:start', { action: phase.actions[0] });
+        // Emit executing-tool 事件
+        if (result.phase.type === 'executing-tool') {
+          if (result.phase.actions.length === 1) {
+            this.emit('tool:start', { action: result.phase.actions[0] });
           } else {
-            this.emit('tools:start', { actions: phase.actions });
+            this.emit('tools:start', { actions: result.phase.actions });
           }
         }
-        this.emit('phase-change', { from, to: phase });
 
-        // Terminal: completed (direct answer, no tool call)
-        if (done && phase.type === 'completed') {
-          const result: StepResult = { type: 'done', answer: phase.answer };
-          this.emit('step:end', { step: stepIdx, result });
-          return { state: currentState, result };
-        }
-
-        // Terminal: error (LLM call failed)
-        if (done && phase.type === 'error') {
-          const result: StepResult = { type: 'error', error: phase.error };
-          this.emit('step:end', { step: stepIdx, result });
-          return { state: currentState, result };
-        }
-
-        // Tool-result: delegate to shared processToolResult
-        if (phase.type === 'tool-result') {
-          const outcome = await processToolResult(currentState, execState, registry);
-          currentState = await maybeCompress(this.compressor, outcome.state);
-
-          // Forward lifecycle effects to EventEmitter
-          for (const effect of outcome.effects) {
-            if ((effect.type as string).startsWith('step:')) continue;
+        // 转发 handler 产出的 effects
+        if (result.effects && result.effects.length > 0) {
+          for (const effect of result.effects) {
             this.emit(effect.type as keyof RunnerEventMap, effect as never);
           }
+        }
 
-          // Determine step control flow from effects
-          const stepEffect = outcome.effects.find((e): e is ToolPostEffect & { type: string } =>
-            (e.type as string).startsWith('step:')
-          );
+        this.emit('phase-change', { from, to: result.phase });
 
-          if (stepEffect?.type === 'step:continue') {
-            // Continue the while loop (e.g. skill loaded/returned)
-            continue;
-          }
-          if (stepEffect?.type === 'step:done') {
-            const answer = (stepEffect as { type: 'step:done'; answer: string }).answer;
-            const result: StepResult = { type: 'done', answer };
-            this.emit('step:end', { step: stepIdx, result });
-            return { state: currentState, result };
-          }
-          if (stepEffect?.type === 'step:error') {
-            const error = (stepEffect as { type: 'step:error'; error: Error }).error;
-            const result: StepResult = { type: 'error', error };
-            this.emit('step:end', { step: stepIdx, result });
-            return { state: currentState, result };
-          }
+        // 控制流由 phase + done 决定
+        if (result.done && result.phase.type === 'completed') {
+          const stepResult: StepResult = { type: 'done', answer: result.phase.answer };
+          this.emit('step:end', { step: stepIdx, result: stepResult });
+          return { state: currentState, result: stepResult };
+        }
 
-          // step:continue-return (same-skill, cyclic, plain tool)
-          const toolResult = (stepEffect as { type: 'step:continue-return'; toolResult: unknown })
-            .toolResult;
-          const result: StepResult = { type: 'continue', toolResult };
-          this.emit('step:end', { step: stepIdx, result });
-          return { state: currentState, result };
+        if (result.done && result.phase.type === 'error') {
+          const stepResult: StepResult = { type: 'error', error: result.phase.error };
+          this.emit('step:end', { step: stepIdx, result: stepResult });
+          return { state: currentState, result: stepResult };
+        }
+
+        // ToolResultHandler 已处理 tool-result phase（有 effects 表示已处理）
+        // 此时需要根据 handler 的输出来决定下一步
+        if (result.phase.type === 'tool-result' && result.effects && result.effects.length > 0) {
+          // same-skill/cyclic/plain tool → 返回 continue
+          const toolResult = execState.toolResult;
+          const stepResult: StepResult = { type: 'continue', toolResult };
+          this.emit('step:end', { step: stepIdx, result: stepResult });
+          return { state: currentState, result: stepResult };
+        }
+
+        // ExecutingToolHandler 返回的 tool-result（无 effects）→ 继续循环让 ToolResultHandler 处理
+        if (
+          result.phase.type === 'tool-result' &&
+          (!result.effects || result.effects.length === 0)
+        ) {
+          continue;
+        }
+
+        // skill loaded/returned → phase 被重置为 idle，继续循环
+        if (result.phase.type === 'idle') {
+          continue;
         }
       }
 

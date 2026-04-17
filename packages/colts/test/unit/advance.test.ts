@@ -435,10 +435,15 @@ describe('advance()', () => {
       expect(Object.values(result.phase.results)[0]).toBe('4');
     }
 
-    // Phase: tool-result -> completed
+    // 新架构：ToolResultHandler 处理 plain tool result 时返回 tool:end effect
+    // phase 保持 tool-result, done=false（advance() 不会自动转到 completed）
+    // advance() 用户通过 effects 获取 tool:end 事件
     result = await runner.advance(result.state, execState);
-    expect(result.phase.type).toBe('completed');
-    expect(result.done).toBe(true);
+    expect(result.phase.type).toBe('tool-result');
+    expect(result.done).toBe(false);
+    // handler 应产出 tool:end effect
+    expect(result.effects).toBeDefined();
+    expect(result.effects!.some((e) => e.type === 'tool:end')).toBe(true);
   });
 
   it('should format SWITCH_SKILL signal as LLM-friendly tool result', async () => {
@@ -747,6 +752,19 @@ describe('advance() skillState regression (CR P0-1)', () => {
     result = await runner.advance(result.state, execState); // parsing → parsed
     result = await runner.advance(result.state, execState, registry); // parsed → executing-tool
     result = await runner.advance(result.state, execState, registry); // executing-tool → tool-result
+
+    // executing-tool handler 写入 tool message 并注入 task user message
+    // 但 skillState 在此阶段还未更新（由 ToolResultHandler 处理）
+
+    // 再 advance 一次：ToolResultHandler 处理 SWITCH_SKILL signal
+    result = await runner.advance(result.state, execState);
+
+    // 新架构：ToolResultHandler 产出 skill:start + tool:end effects
+    // phase 变为 idle（表示 skill loaded，step 循环应继续）
+    expect(result.phase.type).toBe('idle');
+    expect(result.done).toBe(false);
+    expect(result.effects).toBeDefined();
+    expect(result.effects!.map((e) => e.type)).toContain('skill:start');
 
     // skillState.current 应该被 applySkillSignal 更新为 'test-skill'
     const skillState = result.state.context.skillState;
