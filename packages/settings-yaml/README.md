@@ -2,16 +2,15 @@
 
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
-A robust configuration management library for loading, merging, and persisting YAML-based settings with deep merge support, default value fallback, and runtime override capabilities.
+YAML configuration management with deep merge, default value fallback, and runtime overrides. Initialize in one line, read with dot notation, persist on demand.
 
-## Features
+## Highlights
 
-- **Deep Merge**: Recursively merges nested objects and arrays element-by-element
-- **Default Value Fallback**: Auto-creates config files from a default YAML template
-- **Runtime Overrides**: Apply temporary overrides (e.g., CLI arguments) with highest priority
-- **Immutable Values**: Returned configuration objects are frozen
-- **Path Support**: Accepts absolute paths, relative paths, and `~`-prefixed home directory paths
-- **Dot-Notation Access**: Read and update nested values via dot-separated key paths
+- **Deep Merge** — Recursively merges nested objects and arrays element-by-element
+- **Default Value Fallback** — Auto-creates config files from a default YAML template
+- **Runtime Overrides** — Apply temporary overrides (e.g., CLI arguments) with highest priority
+- **Immutable Values** — Returned configuration objects are frozen
+- **Dot-Notation Access** — Read and update nested values via `server.port` style paths
 
 ## Installation
 
@@ -24,14 +23,14 @@ pnpm add @agentskillmania/settings-yaml
 ```typescript
 import { Settings } from '@agentskillmania/settings-yaml';
 
-const settings = new Settings('/path/to/config.yaml');
+const settings = new Settings('~/.config/myapp/config.yaml');
 
 await settings.initialize({
   defaultYaml: `
-server:
-  port: 3000
-  host: localhost
-`,
+    server:
+      port: 3000
+      host: localhost
+  `,
 });
 
 const config = settings.getValues();
@@ -40,7 +39,7 @@ console.log(config.server.port); // 3000
 
 ## Merge Priority
 
-When initializing, values are merged in the following priority (highest to lowest):
+Values are merged in the following priority (highest to lowest):
 
 1. `override` object passed to `initialize()`
 2. Existing config file on disk
@@ -50,21 +49,15 @@ When initializing, values are merged in the following priority (highest to lowes
 
 ### `constructor(configPath: string)`
 
-Creates a `Settings` instance. Supported path formats:
+Creates a `Settings` instance. Supports absolute paths, relative paths, and `~/` home directory paths.
 
-- **Absolute path**: `/path/to/config.yaml`
-- **Relative path**: `./config.yaml` or `config.yaml`
-- **Home directory**: `~/.config/app/config.yaml`
+### `async initialize(options?): Promise<void>`
 
-### `async initialize(options?: InitializeOptions<T>): Promise<void>`
-
-Initializes the configuration:
-
-- If the config file does **not exist** and `defaultYaml` is provided: creates the file with defaults
-- If the config file does **not exist** and no `defaultYaml` is provided: throws an error
-- If the config file **exists**: reads and deep-merges it with `defaultYaml`
+- Config file does **not exist** + `defaultYaml` provided: creates the file with defaults
+- Config file does **not exist** + no `defaultYaml`: throws an error
+- Config file **exists**: reads and deep-merges with `defaultYaml`
+- `override` values take highest priority
 - Intermediate directories are created automatically
-- `override` values take the highest priority
 
 ### `getValues(): T`
 
@@ -75,17 +68,15 @@ Returns the merged configuration as a deeply frozen object.
 Checks whether a nested key exists using dot notation.
 
 ```typescript
-settings.has('server.port'); // true or false
-settings.has('database.host'); // true or false
+settings.has('server.port'); // true
 ```
 
 ### `set(keyPath: string, value: unknown): void`
 
-Updates a nested value using dot notation. Modifies the in-memory config only — call `save()` to persist.
+Updates a nested value in memory. Call `save()` to persist.
 
 ```typescript
 settings.set('server.port', 8080);
-settings.set('database.ssl.enabled', true);
 ```
 
 ### `toObject(): Record<string, unknown>`
@@ -94,7 +85,7 @@ Returns a mutable deep copy of the current configuration.
 
 ### `async save(): Promise<void>`
 
-Persists the current in-memory configuration back to the YAML file on disk. Parent directories are created if needed.
+Persists the current in-memory configuration to disk.
 
 ```typescript
 settings.set('llm.model', 'gpt-4o');
@@ -103,54 +94,20 @@ await settings.save();
 
 ## Examples
 
-### Defaults only
-
 ```typescript
-await settings.initialize({
-  defaultYaml: `server: { port: 3000 }`,
-});
-```
-
-### Override existing config
-
-```typescript
-await settings.initialize({
-  override: { server: { port: 9000 } },
-});
-```
-
-### Defaults + override
-
-```typescript
+// Defaults + runtime override
 await settings.initialize({
   defaultYaml: `server: { port: 3000 }`,
   override: { server: { port: 9000 } },
 });
 // Result: { server: { port: 9000 } }
-```
 
-### Read and modify
-
-```typescript
+// Read and modify
 await settings.initialize();
-
 if (settings.has('debug')) {
   settings.set('debug', false);
   await settings.save();
 }
-```
-
-## Development
-
-```bash
-# Build
-pnpm build
-
-# Run tests
-pnpm test
-
-# Run tests with coverage
-pnpm test:coverage
 ```
 
 ## License
