@@ -47,22 +47,16 @@ describe('AskHumanDialog', () => {
   beforeEach(resetCaptures);
 
   it('显示第一题（text 类型）', () => {
-    const questions: Question[] = [
-      { id: 'q1', question: 'What is your name?', type: 'text' },
-    ];
+    const questions: Question[] = [{ id: 'q1', question: 'What is your name?', type: 'text' }];
     const onAnswer = vi.fn();
-    const { lastFrame } = render(
-      <AskHumanDialog questions={questions} onAnswer={onAnswer} />
-    );
+    const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
     const frame = lastFrame();
     expect(frame).toContain('[1/1]');
     expect(frame).toContain('What is your name?');
   });
 
   it('显示 context 信息', () => {
-    const questions: Question[] = [
-      { id: 'q1', question: 'Name?', type: 'text' },
-    ];
+    const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
     const onAnswer = vi.fn();
     const { lastFrame } = render(
       <AskHumanDialog questions={questions} context="Need your info" onAnswer={onAnswer} />
@@ -71,21 +65,15 @@ describe('AskHumanDialog', () => {
   });
 
   it('不显示 context（无 context 时）', () => {
-    const questions: Question[] = [
-      { id: 'q1', question: 'Name?', type: 'text' },
-    ];
+    const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
     const onAnswer = vi.fn();
-    const { lastFrame } = render(
-      <AskHumanDialog questions={questions} onAnswer={onAnswer} />
-    );
+    const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
     // 只检查不崩溃，不含额外 context 文字
     expect(lastFrame()).toContain('Name?');
   });
 
   it('text 类型提交答案后调用 onAnswer', () => {
-    const questions: Question[] = [
-      { id: 'q1', question: 'Name?', type: 'text' },
-    ];
+    const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
     const onAnswer = vi.fn();
     render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
@@ -98,9 +86,7 @@ describe('AskHumanDialog', () => {
   });
 
   it('number 类型解析为数字', () => {
-    const questions: Question[] = [
-      { id: 'q1', question: 'How old?', type: 'number' },
-    ];
+    const questions: Question[] = [{ id: 'q1', question: 'How old?', type: 'number' }];
     const onAnswer = vi.fn();
     render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
@@ -111,9 +97,7 @@ describe('AskHumanDialog', () => {
   });
 
   it('number 类型无效输入保留原字符串', () => {
-    const questions: Question[] = [
-      { id: 'q1', question: 'How old?', type: 'number' },
-    ];
+    const questions: Question[] = [{ id: 'q1', question: 'How old?', type: 'number' }];
     const onAnswer = vi.fn();
     render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
@@ -128,9 +112,7 @@ describe('AskHumanDialog', () => {
       { id: 'q1', question: 'Pick one', type: 'single-select', options: ['A', 'B', 'C'] },
     ];
     const onAnswer = vi.fn();
-    const { lastFrame } = render(
-      <AskHumanDialog questions={questions} onAnswer={onAnswer} />
-    );
+    const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
     expect(lastFrame()).toContain('Pick one');
     expect(capturedSelectOnChange).not.toBeNull();
@@ -145,9 +127,7 @@ describe('AskHumanDialog', () => {
       { id: 'q1', question: 'Pick many', type: 'multi-select', options: ['X', 'Y', 'Z'] },
     ];
     const onAnswer = vi.fn();
-    const { lastFrame } = render(
-      <AskHumanDialog questions={questions} onAnswer={onAnswer} />
-    );
+    const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
     expect(lastFrame()).toContain('Pick many');
     expect(capturedMultiSelectOnSubmit).not.toBeNull();
@@ -163,9 +143,7 @@ describe('AskHumanDialog', () => {
       { id: 'q2', question: 'Age?', type: 'number' },
     ];
     const onAnswer = vi.fn();
-    const { lastFrame } = render(
-      <AskHumanDialog questions={questions} onAnswer={onAnswer} />
-    );
+    const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
     // 第一题
     expect(lastFrame()).toContain('[1/2]');
@@ -202,9 +180,7 @@ describe('AskHumanDialog', () => {
       { id: 'skills', question: 'Your skills?', type: 'multi-select', options: ['js', 'ts', 'go'] },
     ];
     const onAnswer = vi.fn();
-    const { lastFrame } = render(
-      <AskHumanDialog questions={questions} onAnswer={onAnswer} />
-    );
+    const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
     // 第一题（text）
     expect(lastFrame()).toContain('[1/3]');
@@ -233,13 +209,9 @@ describe('AskHumanDialog', () => {
   });
 
   it('unmount 不报错', () => {
-    const questions: Question[] = [
-      { id: 'q1', question: 'Name?', type: 'text' },
-    ];
+    const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
     const onAnswer = vi.fn();
-    const { unmount } = render(
-      <AskHumanDialog questions={questions} onAnswer={onAnswer} />
-    );
+    const { unmount } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
     expect(() => unmount()).not.toThrow();
   });
 });

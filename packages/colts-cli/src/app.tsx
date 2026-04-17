@@ -68,17 +68,20 @@ export function App({
    *
    * 保存配置 → 重新加载 → 创建 runner → 切换到 MainTUI
    */
-  const handleSetupComplete = useCallback(async (setup: { provider: string; apiKey: string; model: string }) => {
-    const { saveSetup, loadConfig } = await import('./config.js');
-    await saveSetup(setup);
-    const newConfig = await loadConfig();
-    const newRunner = createRunnerFromConfig(newConfig);
-    const newInitialState = createInitialStateFromConfig(newConfig);
+  const handleSetupComplete = useCallback(
+    async (setup: { provider: string; apiKey: string; model: string }) => {
+      const { saveSetup, loadConfig } = await import('./config.js');
+      await saveSetup(setup);
+      const newConfig = await loadConfig();
+      const newRunner = createRunnerFromConfig(newConfig);
+      const newInitialState = createInitialStateFromConfig(newConfig);
 
-    setConfig(newConfig);
-    setRunner(newRunner);
-    setAppInitialState(newInitialState);
-  }, []);
+      setConfig(newConfig);
+      setRunner(newRunner);
+      setAppInitialState(newInitialState);
+    },
+    []
+  );
 
   return (
     <ThemeProvider theme={coltsTheme}>
