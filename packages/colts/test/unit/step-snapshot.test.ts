@@ -256,6 +256,73 @@ describe('stepStream() streaming path - basic scenarios', () => {
     expect(effects).toContain('tool:end');
   });
 
+  it('should yield tools:start for parallel tool calls', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculator',
+      description: 'Calculates math',
+      parameters: z.object({ expr: z.string() }),
+      execute: async () => '42',
+    });
+    registry.register({
+      name: 'weather',
+      description: 'Get weather',
+      parameters: z.object({ city: z.string() }),
+      execute: async () => '25°C',
+    });
+
+    const client = createMockLLMClient([
+      {
+        content: '',
+        toolCalls: [
+          { id: 'tc1', name: 'calculator', arguments: { expr: '6*7' } },
+          { id: 'tc2', name: 'weather', arguments: { city: 'Beijing' } },
+        ],
+        tokens: mockTokens,
+        stopReason: 'toolUse',
+      },
+    ]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, toolRegistry: registry });
+    const state = createAgentState(defaultConfig);
+
+    const effects = await collectStreamingEffects(runner, state);
+
+    expect(effects).toContain('tools:start');
+    expect(effects).toContain('tools:end');
+    // 不应该出现单数形式
+    expect(effects).not.toContain('tool:start');
+  });
+
+  it('should yield error event and return error result when advance returns error phase', async () => {
+    // 创建一个 LLM 客户端，stream 会抛错
+    const client = {
+      call: vi.fn(),
+      stream: vi.fn().mockImplementation(async function* () {
+        throw new Error('LLM connection failed');
+      }),
+    } as unknown as LLMClient;
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const state = createAgentState(defaultConfig);
+
+    const events: Array<{ type: string; error?: Error }> = [];
+    let finalResult: import('../../src/execution.js').StepResult | undefined;
+    const iterator = runner.stepStream(state);
+    while (true) {
+      const { done, value } = await iterator.next();
+      if (done) {
+        finalResult = value!.result;
+        break;
+      }
+      events.push(value as { type: string; error?: Error });
+    }
+
+    expect(finalResult!.type).toBe('error');
+    if (finalResult!.type === 'error') {
+      expect(finalResult!.error.message).toContain('LLM connection failed');
+    }
+    expect(events.some((e) => e.type === 'error')).toBe(true);
+  });
+
   it('should return continue result for a plain tool call via stream', async () => {
     const registry = new ToolRegistry();
     registry.register({
