@@ -2,18 +2,27 @@
 
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
-统一 LLM 客户端，支持多提供商、三级并发控制、优先级队列、轮询密钥选择和完整的 Token 追踪。
+统一 LLM 客户端。三级并发控制、多 Key 负载均衡、优先级队列、内置重试。开箱即用支持 OpenAI、Anthropic、Google 及所有 OpenAI 兼容端点。
 
-## 特性
+## 特色
 
-- **多提供商支持**：通过 `@mariozechner/pi-ai` 库兼容 OpenAI、Anthropic、Google 等提供商
-- **三级并发控制**：Provider → API Key → Model 三级独立限制，防止级联故障
-- **优先级队列**：高优先级请求优先处理
-- **轮询密钥选择**：同一模型的多个 API Key 自动负载均衡
-- **指数退避重试**：针对速率限制（429）、服务端错误（5xx）和网络错误自动重试
-- **Token 追踪**：每次请求完整的输入/输出 Token 统计
-- **流式支持**：实时逐 token 响应，包含 `delta` 和 `accumulatedContent`
-- **状态透明**：通过事件和统计信息完整暴露队列状态、活跃请求和每个 Key 的健康状况
+- **三级并发控制** — Provider → API Key → Model 三级独立限制，防止级联故障
+- **多 Key 负载均衡** — 同一模型的多个 API Key 轮询分配
+- **优先级队列** — 高优先级请求优先处理
+- **自动重试** — 针对速率限制（429）、服务端错误（5xx）和网络错误指数退避重试
+- **流式输出** — 实时逐 token 响应，包含 `delta` 和累积内容
+- **Thinking / 推理** — 原生推理支持，适用于推理能力模型（如 Claude）
+- **Token 追踪** — 每次请求完整的输入/输出 Token 统计
+- **可观测性** — 通过事件和 `getStats()` 完整暴露队列状态、活跃请求和 Key 健康状况
+
+## 支持的提供商
+
+通过 `@mariozechner/pi-ai` 库支持所有主流提供商：
+
+- **OpenAI** — `gpt-4o`、`gpt-4`、`gpt-3.5-turbo` 等
+- **Anthropic** — `claude-sonnet-4-5-20250514`、`claude-opus-4-20250514` 等
+- **Google** — `gemini-pro` 等
+- **OpenAI 兼容端点** — 智谱 AI、DeepSeek、Ollama、vLLM 等，通过 `baseUrl` 配置
 
 ## 安装
 
@@ -26,42 +35,33 @@ pnpm add @agentskillmania/llm-client
 ```typescript
 import { LLMClient } from '@agentskillmania/llm-client';
 
-const client = new LLMClient();
-
-// 注册提供商
-client.registerProvider({
-  name: 'openai',
-  maxConcurrency: 10,
+const client = new LLMClient({
+  baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
 });
 
-// 注册 API Key
+client.registerProvider({ name: 'openai', maxConcurrency: 10 });
 client.registerApiKey({
-  key: process.env.OPENAI_API_KEY!,
+  key: 'your-api-key',
   provider: 'openai',
-  maxConcurrency: 5,
-  models: [
-    { modelId: 'gpt-4o', maxConcurrency: 2 },
-    { modelId: 'gpt-3.5-turbo', maxConcurrency: 5 },
-  ],
+  models: [{ modelId: 'glm-4', maxConcurrency: 2 }],
 });
 
-// 非流式调用
 const response = await client.call({
-  model: 'gpt-4o',
-  messages: [{ role: 'user', content: 'Hello!' }],
+  model: 'glm-4',
+  messages: [{ role: 'user', content: '你好！' }],
 });
 
-console.log(response.content);
-console.log(response.tokens); // { input: 9, output: 12 }
-console.log(response.stopReason);
+console.log(response.content);    // "你好！有什么可以帮你的？"
+console.log(response.tokens);     // { input: 9, output: 8 }
+console.log(response.stopReason); // "stop"
 ```
 
-## 流式使用
+## 流式输出
 
 ```typescript
 for await (const event of client.stream({
-  model: 'gpt-4o',
-  messages: [{ role: 'user', content: 'Tell me a story' }],
+  model: 'glm-4',
+  messages: [{ role: 'user', content: '讲个故事' }],
   priority: 1,
 })) {
   switch (event.type) {
@@ -69,25 +69,47 @@ for await (const event of client.stream({
       process.stdout.write(event.delta);
       break;
     case 'thinking':
-      console.log('Thinking:', event.thinking);
+      console.log('推理中:', event.thinking);
       break;
     case 'tool_call':
-      console.log('Tool call:', event.toolCall);
+      console.log('工具调用:', event.toolCall);
       break;
     case 'done':
-      console.log('\nDone!');
-      console.log('Total tokens:', event.roundTotalTokens);
+      console.log('\nToken 数:', event.roundTotalTokens);
       break;
-    case 'error':
-      console.error('Error:', event.error);
-      break;
+  }
+}
+```
+
+## Thinking / 推理模式
+
+对支持推理的模型启用思考过程输出：
+
+```typescript
+const response = await client.call({
+  model: 'claude-sonnet-4-5-20250514',
+  messages: [{ role: 'user', content: '请一步步解决这个问题：...' }],
+  thinkingEnabled: true,
+});
+
+console.log(response.thinking); // 模型的推理过程
+console.log(response.content);  // 最终答案
+
+// 流式
+for await (const event of client.stream({
+  model: 'claude-sonnet-4-5-20250514',
+  messages: [...],
+  thinkingEnabled: true,
+})) {
+  if (event.type === 'thinking') {
+    console.log('推理:', event.thinking);
   }
 }
 ```
 
 ## 自定义 Base URL
 
-适用于代理或 OpenAI 兼容端点（如智谱 AI）：
+适用于 OpenAI 兼容端点（智谱 AI、DeepSeek、Ollama 等）：
 
 ```typescript
 const client = new LLMClient({
@@ -98,8 +120,27 @@ client.registerProvider({ name: 'openai', maxConcurrency: 10 });
 client.registerApiKey({
   key: 'your-api-key',
   provider: 'openai',
+  models: [{ modelId: 'glm-4', maxConcurrency: 2 }],
+});
+```
+
+## 多 Key 负载均衡
+
+为同一模型注册多个 Key，请求通过轮询分配：
+
+```typescript
+client.registerApiKey({
+  key: 'sk-key1...',
+  provider: 'openai',
+  maxConcurrency: 3,
+  models: [{ modelId: 'glm-4', maxConcurrency: 2 }],
+});
+
+client.registerApiKey({
+  key: 'sk-key2...',
+  provider: 'openai',
   maxConcurrency: 5,
-  models: [{ modelId: 'GLM-4', maxConcurrency: 2 }],
+  models: [{ modelId: 'glm-4', maxConcurrency: 3 }],
 });
 ```
 
@@ -107,11 +148,11 @@ client.registerApiKey({
 
 ```typescript
 const response = await client.call({
-  model: 'gpt-4o',
+  model: 'glm-4',
   messages: [...],
   priority: 5,              // 数值越大优先级越高
-  requestTimeout: 30000,    // API 调用本身的 30 秒超时
-  totalTimeout: 60000,      // 包含队列等待在内的总 60 秒超时
+  requestTimeout: 30000,    // API 调用超时
+  totalTimeout: 60000,      // 包含队列等待的总超时
   retryOptions: {
     retries: 3,
     minTimeout: 1000,
@@ -123,96 +164,35 @@ const response = await client.call({
 
 ## 可观测性
 
-监听调度器生命周期事件：
-
 ```typescript
+// 生命周期事件
 client.on('state', (event) => {
   console.log(`[${event.requestId}] ${event.type}`);
-  // event.type: 'queued' | 'started' | 'retry' | 'completed' | 'failed'
+  // 'queued' | 'started' | 'retry' | 'completed' | 'failed'
 });
-```
 
-获取实时统计信息：
-
-```typescript
+// 实时统计
 const stats = client.getStats();
 console.log('队列大小:', stats.queueSize);
 console.log('活跃请求:', stats.activeRequests);
-console.log('Key 健康度:', stats.keyHealth); // Map<脱敏Key, { success, fail, lastError }>
-console.log('Provider 活跃数:', stats.providerActiveCounts);
-console.log('Key 活跃数:', stats.keyActiveCounts);
-```
-
-## 多 Key 负载均衡
-
-为同一模型注册多个 Key，请求会通过轮询 evenly 分配：
-
-```typescript
-client.registerApiKey({
-  key: 'sk-key1...',
-  provider: 'openai',
-  maxConcurrency: 3,
-  models: [{ modelId: 'gpt-4o', maxConcurrency: 2 }],
-});
-
-client.registerApiKey({
-  key: 'sk-key2...',
-  provider: 'openai',
-  maxConcurrency: 5,
-  models: [{ modelId: 'gpt-4o', maxConcurrency: 3 }],
-});
+console.log('Key 健康度:', stats.keyHealth);
 ```
 
 ## API 参考
 
 ### `LLMClient`
 
-#### 构造函数
-
 ```typescript
-new LLMClient(options?: LLMClientOptions)
+new LLMClient(options?: { baseUrl?, defaultProviderConcurrency?, defaultKeyConcurrency?, defaultModelConcurrency? })
 ```
 
-选项：
-
-- `baseUrl?: string` — 自定义 API 基础地址
-- `defaultProviderConcurrency?: number` — 默认 Provider 并发限制（默认：10）
-- `defaultKeyConcurrency?: number` — 默认 API Key 并发限制（默认：5）
-- `defaultModelConcurrency?: number` — 默认模型并发限制（默认：3）
-
-#### 方法
-
-- `registerProvider(config: ProviderConfig): void`
-- `registerApiKey(config: ApiKeyConfig): void`
-- `call(options: CallOptions): Promise<LLMResponse>`
-- `stream(options: CallOptions): AsyncIterable<StreamEvent>`
-- `getStats(): ClientStats`
-- `clear(): void`
-
-### `PiAiAdapter`
-
-底层适配器，桥接 `@mariozechner/pi-ai` 与重试、Token 追踪逻辑：
-
-```typescript
-import { PiAiAdapter } from '@agentskillmania/llm-client';
-
-const adapter = new PiAiAdapter({ baseUrl: '...' });
-const response = await adapter.complete('gpt-4o', 'sk-...', { messages: [...] });
-```
-
-### `RequestScheduler`
-
-独立的请求调度器，可用于自定义请求编排场景：
-
-```typescript
-import { RequestScheduler } from '@agentskillmania/llm-client';
-
-const scheduler = new RequestScheduler({
-  defaultProviderConcurrency: 10,
-  defaultKeyConcurrency: 5,
-  defaultModelConcurrency: 3,
-});
-```
+方法：
+- `registerProvider(config)` — 注册提供商并设置并发限制
+- `registerApiKey(config)` — 注册 API Key 并设置模型级并发限制
+- `call(options): Promise<LLMResponse>` — 非流式补全
+- `stream(options): AsyncIterable<StreamEvent>` — 流式补全
+- `getStats(): ClientStats` — 实时队列和健康统计
+- `clear(): void` — 重置所有状态
 
 ## License
 
