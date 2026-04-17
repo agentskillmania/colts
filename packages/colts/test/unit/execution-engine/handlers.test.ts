@@ -981,6 +981,57 @@ describe('Execution Policy integration', () => {
   });
 
   // T3: 回归测试 — onParseError ignore 时 fallbackText 应保留到 execState.llmResponse (CR P0-3)
+  describe('CallingLLMHandler onParseError fail path', () => {
+    it('should throw error when policy decides to fail on parse error', async () => {
+      const handler = new CallingLLMHandler();
+      const state = createMockState();
+      const execState = createExecutionState();
+      execState.phase = { type: 'calling-llm' };
+      execState.preparedMessages = [{ role: 'user', content: 'test' }];
+
+      const parseError = new Error('Unrecoverable parse failure');
+      const onParseError = vi.fn().mockResolvedValue({
+        decision: 'fail',
+        error: parseError,
+      });
+
+      const ctx = createMockCtx({
+        llmProvider: {
+          call: vi.fn().mockResolvedValue({
+            content: 'response with bad tool call',
+            toolCalls: [{ id: 'tc-1', name: 'someTool', arguments: {} }],
+            tokens: { input: 10, output: 5 },
+            stopReason: 'tool_calls',
+          }),
+          stream: vi.fn(),
+        } as never,
+        executionPolicy: {
+          shouldStop: () => ({ decision: 'continue' }),
+          onToolError: (error: Error) => ({
+            decision: 'continue' as const,
+            sanitizedResult: `Error: ${error.message}`,
+          }),
+          onParseError,
+        },
+      });
+
+      // 让 toolCallToAction 抛错以触发 onParseError
+      const executionModule = await import('../../../src/execution.js');
+      vi.spyOn(executionModule, 'toolCallToAction').mockImplementation(() => {
+        throw new Error('Simulated parse failure');
+      });
+
+      try {
+        await expect(handler.execute(ctx, state, execState)).rejects.toThrow(
+          'Unrecoverable parse failure'
+        );
+        expect(onParseError).toHaveBeenCalled();
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+  });
+
   describe('CallingLLMHandler onParseError ignore regression (CR P0-3)', () => {
     it('should preserve fallbackText in execState.llmResponse when policy ignores parse error', async () => {
       const handler = new CallingLLMHandler();
