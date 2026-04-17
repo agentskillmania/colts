@@ -703,6 +703,53 @@ describe('advanceStream()', () => {
     expect(events.some((e) => e.type === 'error')).toBe(true);
     expect(events.some((e) => e.type === 'phase-change')).toBe(true);
   });
+
+  // P1 回归：advanceStream() 必须能产出 ToolResultHandler 的 effects
+  it('should yield tool:end effect when advanceStream reaches tool-result phase', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculator',
+      description: 'Calculates math',
+      parameters: z.object({ expr: z.string() }),
+      execute: async () => '42',
+    });
+
+    const mockResponse: LLMResponse = {
+      content: '',
+      toolCalls: [{ id: 'tc1', name: 'calculator', arguments: { expr: '6*7' } }],
+      tokens: mockTokens,
+      stopReason: 'toolUse',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      toolRegistry: registry,
+    });
+
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+
+    // 从 idle 开始推进，每步用 advanceStream 收集 events
+    const eventTypes: string[] = [];
+    let currentState = state;
+    for (let i = 0; i < 20; i++) {
+      const events: { type: string }[] = [];
+      for await (const event of runner.advanceStream(currentState, execState)) {
+        events.push({ type: event.type });
+      }
+      eventTypes.push(...events.map((e) => e.type));
+
+      // 用 blocking advance 推进 execState
+      const result = await runner.advance(currentState, execState);
+      currentState = result.state;
+      if (isTerminalPhase(result.phase)) break;
+    }
+
+    // 应该产出 tool:end effect（由 ToolResultHandler 产生）
+    expect(eventTypes).toContain('tool:end');
+  });
 });
 
 // T1: 回归测试 — advance() 路径 SWITCH_SKILL 后 skillState 应更新
