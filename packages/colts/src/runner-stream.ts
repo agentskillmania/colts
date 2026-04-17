@@ -20,8 +20,6 @@ import { buildMessagesFromCtx } from './runner-advance.js';
 import { getToolsForLLM } from './tools/llm-format.js';
 import { maybeCompress } from './runner-compression.js';
 import type { IContextCompressor } from './types.js';
-import { processToolResult } from './runner-process-tool-result.js';
-import type { ToolPostEffect } from './runner-process-tool-result.js';
 
 /**
  * Stream LLM response during calling-llm phase.
@@ -219,6 +217,7 @@ export async function* executeStepStream(
       state: newState,
       phase,
       done,
+      effects,
     } = await executeAdvance(ctx, currentState, execState, registry, options);
     currentState = await maybeCompress(compressor, newState);
 
@@ -231,43 +230,16 @@ export async function* executeStepStream(
       }
     }
 
-    yield { type: 'phase-change', from: fromPhase, to: phase };
-
-    // Tool-result: delegate to shared processToolResult
-    if (phase.type === 'tool-result') {
-      const outcome = await processToolResult(currentState, execState, registry);
-      currentState = await maybeCompress(compressor, outcome.state);
-
-      // Yield lifecycle effects, skip step-control effects
-      for (const effect of outcome.effects) {
-        if ((effect.type as string).startsWith('step:')) continue;
+    // 转发 handler 产出的 effects
+    if (effects && effects.length > 0) {
+      for (const effect of effects) {
         yield effect as StreamEvent;
       }
-
-      // Determine step control flow from effects
-      const stepEffect = outcome.effects.find((e): e is ToolPostEffect & { type: string } =>
-        (e.type as string).startsWith('step:')
-      );
-
-      if (stepEffect?.type === 'step:continue') {
-        // Continue the while loop (e.g. skill loaded/returned)
-        continue;
-      }
-      if (stepEffect?.type === 'step:done') {
-        const answer = (stepEffect as { type: 'step:done'; answer: string }).answer;
-        return { state: currentState, result: { type: 'done', answer } };
-      }
-      if (stepEffect?.type === 'step:error') {
-        const error = (stepEffect as { type: 'step:error'; error: Error }).error;
-        return { state: currentState, result: { type: 'error', error } };
-      }
-
-      // step:continue-return (same-skill, cyclic, plain tool)
-      const toolResult = (stepEffect as { type: 'step:continue-return'; toolResult: unknown })
-        .toolResult;
-      return { state: currentState, result: { type: 'continue', toolResult } };
     }
 
+    yield { type: 'phase-change', from: fromPhase, to: phase };
+
+    // 控制流由 phase + done 决定
     if (done && phase.type === 'completed') {
       return {
         state: currentState,
@@ -278,6 +250,25 @@ export async function* executeStepStream(
     if (done && phase.type === 'error') {
       yield { type: 'error', error: phase.error, context: { step: 0 } };
       return { state: currentState, result: { type: 'error', error: phase.error } };
+    }
+
+    // ToolResultHandler 已处理 tool-result phase（有 effects 表示已处理）
+    if (phase.type === 'tool-result' && effects && effects.length > 0) {
+      // same-skill/cyclic/plain tool → 返回 continue
+      return {
+        state: currentState,
+        result: { type: 'continue', toolResult: execState.toolResult },
+      };
+    }
+
+    // ExecutingToolHandler 返回的 tool-result（无 effects）→ 继续循环让 ToolResultHandler 处理
+    if (phase.type === 'tool-result' && (!effects || effects.length === 0)) {
+      continue;
+    }
+
+    // skill loaded/returned → phase 被重置为 idle，继续循环
+    if (phase.type === 'idle') {
+      continue;
     }
   }
 
