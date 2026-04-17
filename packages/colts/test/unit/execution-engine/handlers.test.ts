@@ -801,46 +801,29 @@ describe('ToolResultHandler', () => {
     expect(handler.canHandle('completed')).toBe(false);
   });
 
-  it('should transition to completed with thought as answer', () => {
+  it('should produce tool:end effect and keep phase=tool-result for plain result', () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.thought = 'Processing result';
     execState.phase = { type: 'tool-result', results: { tc1: 'some result' } };
     const ctx = createMockCtx();
 
     const result = handler.execute(ctx, state, execState);
 
-    expect(result.phase.type).toBe('completed');
-    expect(result.done).toBe(true);
-    if (result.phase.type === 'completed') {
-      expect(result.phase.answer).toBe('Processing result');
-    }
+    expect(result.phase.type).toBe('tool-result');
+    expect(result.done).toBe(false);
+    expect(result.effects).toBeDefined();
+    expect(result.effects!.map((e) => e.type)).toEqual(['tool:end']);
   });
 
-  it('should use empty string when thought is undefined', () => {
+  it('should throw if phase is not tool-result', () => {
     const state = createMockState();
     const execState = createExecutionState();
+    // phase 默认是 idle
     const ctx = createMockCtx();
 
-    const result = handler.execute(ctx, state, execState);
-
-    if (result.phase.type === 'completed') {
-      expect(result.phase.answer).toBe('');
-    }
-  });
-
-  it('should fall back to llmResponse when thought is undefined', () => {
-    const state = createMockState();
-    const execState = createExecutionState();
-    execState.llmResponse = 'fallback from LLM';
-    // thought is undefined
-    const ctx = createMockCtx();
-
-    const result = handler.execute(ctx, state, execState);
-
-    if (result.phase.type === 'completed') {
-      expect(result.phase.answer).toBe('fallback from LLM');
-    }
+    expect(() => handler.execute(ctx, state, execState)).toThrow(
+      'ToolResultHandler expects phase type "tool-result"'
+    );
   });
 });
 
