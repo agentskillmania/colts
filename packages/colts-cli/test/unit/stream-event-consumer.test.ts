@@ -815,6 +815,22 @@ describe('StreamEventConsumer', () => {
       expect(entries.setter.mock.calls.length).toBe(callCount);
     });
 
+    it('thinking 事件产生 thought entry', () => {
+      const consumer = new StreamEventConsumer(entries.setter, state.setter);
+
+      consumer.consume({
+        type: 'thinking',
+        content: 'Let me reason about this...',
+      } as RunStreamEvent);
+
+      const thought = entries.lastEntries.find((e) => e.type === 'thought');
+      expect(thought).toBeDefined();
+      if (thought?.type === 'thought') {
+        expect(thought.content).toBe('Let me reason about this...');
+        expect(thought.seq).toBeGreaterThan(0);
+      }
+    });
+
     it('llm:request 事件产生 llm-request entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 

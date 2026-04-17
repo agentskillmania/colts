@@ -27,17 +27,17 @@ describe('Integration: App multi-turn chat with real LLM', () => {
       // First turn
       await submitMessage('My favorite color is blue.');
       let frame = await waitForIdle(lastFrame, 90000);
-      expect(frame).toContain('You:');
+      expect(frame).toContain('❯');
       expect(frame).toContain('My favorite color is blue.');
-      expect(frame).toContain('Agent:');
+      expect(frame).toContain('◀');
       expect(frame).not.toContain('Agent is thinking');
 
       // Second turn
       await submitMessage('What is my favorite color?');
       frame = await waitForIdle(lastFrame, 90000);
-      expect(frame).toContain('You:');
+      expect(frame).toContain('❯');
       expect(frame).toContain('What is my favorite color?');
-      expect(frame).toContain('Agent:');
+      expect(frame).toContain('◀');
       expect(frame.toLowerCase()).toContain('blue');
 
       unmount();
@@ -56,9 +56,9 @@ describe('Integration: App multi-turn chat with real LLM', () => {
 
       await submitMessage('Say hello.');
       frame = await waitForIdle(lastFrame, 90000);
-      expect(frame).toContain('You:');
+      expect(frame).toContain('❯');
       expect(frame).toContain('Say hello.');
-      expect(frame).toContain('Agent:');
+      expect(frame).toContain('◀');
       expect(frame.toLowerCase()).toContain('hello');
 
       unmount();

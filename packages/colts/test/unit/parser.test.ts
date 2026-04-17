@@ -15,8 +15,8 @@ import type { LLMResponse } from '@agentskillmania/llm-client';
 
 describe('Response Parser (Step 2)', () => {
   describe('parseResponse', () => {
-    it('should parse final answer (no tool calls)', () => {
-      // Given: LLM response with content only
+    it('should parse final answer (no tool calls, no thinking)', () => {
+      // Given: LLM response with content only, no thinking indicator
       const response: LLMResponse = {
         content: 'The answer is 42.',
         tokens: { input: 10, output: 5 },
@@ -26,8 +26,8 @@ describe('Response Parser (Step 2)', () => {
       // When: Parse response
       const result = parseResponse(response);
 
-      // Then: Recognized as final answer
-      expect(result.thought).toBe('The answer is 42.');
+      // Then: No thinking, recognized as final answer
+      expect(result.thought).toBe('');
       expect(result.toolCalls).toHaveLength(0);
       expect(result.isFinalAnswer).toBe(true);
     });
@@ -50,8 +50,8 @@ describe('Response Parser (Step 2)', () => {
       // When: Parse response
       const result = parseResponse(response);
 
-      // Then: Extract tool call correctly
-      expect(result.thought).toBe('I will calculate that for you.');
+      // Then: No thinking (content is not a thought), extract tool call correctly
+      expect(result.thought).toBe('');
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0]).toEqual({
         id: 'call_abc123',
@@ -165,9 +165,57 @@ describe('Response Parser (Step 2)', () => {
       // When: Parse response
       const result = parseResponse(response);
 
-      // Then: Empty thought (fallback to empty string)
+      // Then: No thinking
       expect(result.thought).toBe('');
       expect(result.isFinalAnswer).toBe(true);
+    });
+
+    it('should extract thought from <think/> tags', () => {
+      const response: LLMResponse = {
+        content: '<think>Let me analyze this step by step.</think>The answer is 42.',
+        tokens: { input: 10, output: 20 },
+        stopReason: 'stop',
+      };
+
+      const result = parseResponse(response);
+
+      expect(result.thought).toBe('Let me analyze this step by step.');
+      expect(result.isFinalAnswer).toBe(true);
+    });
+
+    it('should extract thought from <think/> tags with tool calls', () => {
+      const response: LLMResponse = {
+        content: '<think>I need to search for that.</think>Now let me search.',
+        tokens: { input: 15, output: 20 },
+        stopReason: 'tool_calls',
+        toolCalls: [
+          {
+            id: 'call_1',
+            name: 'search',
+            arguments: '{"query": "test"}',
+          },
+        ],
+      };
+
+      const result = parseResponse(response);
+
+      expect(result.thought).toBe('I need to search for that.');
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('search');
+      expect(result.isFinalAnswer).toBe(false);
+    });
+
+    it('native thinking takes priority over <think/> tags', () => {
+      const response: LLMResponse = {
+        content: '<think>Tag thinking.</think>Tag thinking.',
+        thinking: 'Native thinking content',
+        tokens: { input: 10, output: 20 },
+        stopReason: 'stop',
+      };
+
+      const result = parseResponse(response);
+
+      expect(result.thought).toBe('Native thinking content');
     });
 
     it('should handle null content', () => {

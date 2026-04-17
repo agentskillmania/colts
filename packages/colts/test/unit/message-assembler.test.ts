@@ -279,4 +279,42 @@ describe('DefaultMessageAssembler', () => {
       expect(messages).toHaveLength(0);
     });
   });
+
+  describe('enablePromptThinking', () => {
+    it('should inject thinking guidance when enabled', () => {
+      const state = createMockState();
+      const messages = assembler.build(state, {
+        model: 'gpt-4',
+        enablePromptThinking: true,
+      });
+      const systemMessage = messages.find(
+        (m) => m.role === 'user' && typeof m.content === 'string'
+      );
+
+      expect(systemMessage?.content).toContain('think step by step');
+    });
+
+    it('should not inject thinking guidance when disabled', () => {
+      const state = createMockState();
+      const messages = assembler.build(state, {
+        model: 'gpt-4',
+        enablePromptThinking: false,
+      });
+      const systemMessage = messages.find(
+        (m) => m.role === 'user' && typeof m.content === 'string'
+      );
+
+      expect(systemMessage?.content).not.toContain('think step by step');
+    });
+
+    it('should not inject thinking guidance when option is absent', () => {
+      const state = createMockState();
+      const messages = assembler.build(state, { model: 'gpt-4' });
+      const systemMessage = messages.find(
+        (m) => m.role === 'user' && typeof m.content === 'string'
+      );
+
+      expect(systemMessage?.content).not.toContain('think step by step');
+    });
+  });
 });
