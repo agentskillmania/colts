@@ -1,6 +1,6 @@
 {
   "name": "@agentskillmania/colts",
-  "version": "0.1.1",
+  "version": "0.2.1",
   "description": "Core runtime utilities and base types for agent debugging and development workflows.",
   "type": "module",
   "main": "dist/index.js",
