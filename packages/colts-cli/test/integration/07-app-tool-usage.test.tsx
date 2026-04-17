@@ -30,9 +30,9 @@ describe('Integration: App tool usage with real LLM', () => {
       const frame = await waitForIdle(lastFrame, 90000);
 
       // 用户消息和 agent 回复
-      expect(frame).toContain('You:');
+      expect(frame).toContain('❯');
       expect(frame).toContain('What is 25 times 37?');
-      expect(frame).toContain('Agent:');
+      expect(frame).toContain('◀');
 
       // 工具调用应该可见（compact 模式也显示 tool）
       expect(frame.toLowerCase()).toContain('calculator');

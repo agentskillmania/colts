@@ -27,7 +27,7 @@ describe('Integration: App /clear command with real LLM', () => {
       // 先发一条消息建立对话历史
       await submitMessage('Say exactly "banana" and nothing else.');
       const frameWithMessage = await waitForIdle(lastFrame, 90000);
-      expect(frameWithMessage).toContain('You:');
+      expect(frameWithMessage).toContain('❯');
       expect(frameWithMessage.toLowerCase()).toContain('banana');
 
       // 执行 /clear

@@ -45,9 +45,9 @@ describe('Integration: App step/advance mode with real LLM', () => {
         await submitMessage('');
       }
 
-      expect(frame).toContain('You:');
+      expect(frame).toContain('❯');
       expect(frame).toContain('What is 2+2?');
-      expect(frame).toContain('Agent:');
+      expect(frame).toContain('◀');
       expect(frame).toMatch(/4/);
 
       unmount();
@@ -75,7 +75,7 @@ describe('Integration: App step/advance mode with real LLM', () => {
         await submitMessage(''); // resume from pause
       }
 
-      expect(frame).toContain('You:');
+      expect(frame).toContain('❯');
       expect(frame).toContain('42');
 
       unmount();

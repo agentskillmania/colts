@@ -30,7 +30,7 @@ describe('Integration: App max_steps stop with real LLM', () => {
       const frame = await waitForIdle(lastFrame, 90000);
 
       // 用户消息可见
-      expect(frame).toContain('You:');
+      expect(frame).toContain('❯');
       expect(frame).toContain('What is 25 times 37?');
 
       // 工具应该被调用了（第一轮 LLM 会调 calculator）

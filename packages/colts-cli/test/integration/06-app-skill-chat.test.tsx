@@ -51,9 +51,9 @@ describe('Integration: App skill chat with real LLM', () => {
       const frame = await waitForIdle(lastFrame, 90000);
 
       expect(frame).toContain('poet');
-      expect(frame).toContain('You:');
+      expect(frame).toContain('❯');
       expect(frame).toContain('Write a poem about the moon');
-      expect(frame).toContain('Agent:');
+      expect(frame).toContain('◀');
       expect(frame.toLowerCase()).toContain('moon');
 
       unmount();

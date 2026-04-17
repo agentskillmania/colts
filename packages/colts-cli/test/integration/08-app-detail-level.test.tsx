@@ -33,7 +33,7 @@ describe('Integration: App detail level switching with real LLM', () => {
       const verboseFrame = await waitForIdle(lastFrame, 90000);
 
       // verbose 模式下应该看到 agent 回复
-      expect(verboseFrame).toContain('Agent:');
+      expect(verboseFrame).toContain('◀');
       expect(verboseFrame.toLowerCase()).toContain('hello');
 
       // 切回 compact 模式
@@ -44,7 +44,7 @@ describe('Integration: App detail level switching with real LLM', () => {
       const compactFrame = await waitForIdle(lastFrame, 90000);
 
       // compact 模式下也能看到回复
-      expect(compactFrame).toContain('Agent:');
+      expect(compactFrame).toContain('◀');
       expect(compactFrame.toLowerCase()).toContain('world');
 
       unmount();
