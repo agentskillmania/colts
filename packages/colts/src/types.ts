@@ -174,6 +174,7 @@ export interface ILLMProvider {
     tools?: LLMTool[];
     priority?: number;
     requestTimeout?: number;
+    thinkingEnabled?: boolean;
     signal?: AbortSignal;
   }): Promise<LLMResponse>;
 
@@ -189,6 +190,7 @@ export interface ILLMProvider {
     tools?: LLMTool[];
     priority?: number;
     requestTimeout?: number;
+    thinkingEnabled?: boolean;
     signal?: AbortSignal;
   }): AsyncIterable<StreamEvent>;
 }

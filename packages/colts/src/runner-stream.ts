@@ -72,6 +72,7 @@ export async function* streamCallingLLM(
     tools,
     priority: 0,
     requestTimeout: ctx.options.requestTimeout,
+    thinkingEnabled: ctx.options.thinkingEnabled,
     signal,
   })) {
     if (signal?.aborted) break;
@@ -79,6 +80,8 @@ export async function* streamCallingLLM(
     if (event.type === 'text') {
       accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
       yield { type: 'token', token: event.delta ?? '' };
+    } else if (event.type === 'thinking') {
+      yield { type: 'thinking', content: event.delta ?? '' };
     } else if (event.type === 'tool_call' && event.toolCall) {
       responseToolCalls = responseToolCalls ?? [];
       responseToolCalls.push({

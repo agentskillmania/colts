@@ -88,6 +88,14 @@ export class DefaultMessageAssembler implements IMessageAssembler {
       }
     }
 
+    // Prompt-level thinking guidance
+    if (opts.enablePromptThinking) {
+      systemParts.push(
+        'Before answering or using tools, please think step by step inside <think>...</think> tags. ' +
+          'After the closing </think> tag, provide your final response or tool calls.'
+      );
+    }
+
     // Inject sub-agent list into system prompt
     if (opts.subAgentConfigs && opts.subAgentConfigs.size > 0) {
       const subAgentLines = Array.from(opts.subAgentConfigs.values()).map(

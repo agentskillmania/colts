@@ -38,6 +38,8 @@ export interface RunnerContext {
     systemPrompt?: string;
     requestTimeout?: number;
     maxSteps?: number;
+    thinkingEnabled?: boolean;
+    enablePromptThinking?: boolean;
   };
 }
 
@@ -106,5 +108,6 @@ export function buildMessagesFromCtx(
     model: ctx.options.model,
     skillProvider: ctx.skillProvider,
     subAgentConfigs: ctx.subAgentConfigs,
+    enablePromptThinking: ctx.options.enablePromptThinking,
   });
 }

@@ -62,11 +62,19 @@ export class ParseError extends Error {
  * ```
  */
 export function parseResponse(response: LLMResponse): ParseResult {
-  // Extract thought from response
-  // Priority: thinking > content
-  const thought = response.thinking ?? response.content ?? '';
+  const rawContent = response.content ?? '';
 
-  // Extract tool calls from response
+  // 1. Native thinking from supported models (e.g. Claude)
+  let thought = response.thinking ?? '';
+  // 2. Prompt-level thinking: extract<think>...</think>
+  if (!thought) {
+    const thinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/);
+    if (thinkMatch) {
+      thought = thinkMatch[1].trim();
+    }
+  }
+
+  // Extract tool calls from response (use original toolCalls metadata)
   const toolCalls: ToolCall[] = [];
 
   if (response.toolCalls && response.toolCalls.length > 0) {

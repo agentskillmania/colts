@@ -96,7 +96,8 @@ export type StreamEvent =
       type: 'llm:response';
       text: string;
       toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
-    };
+    }
+  | { type: 'thinking'; content: string };
 
 /**
  * Options for advance execution

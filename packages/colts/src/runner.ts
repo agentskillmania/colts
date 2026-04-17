@@ -123,6 +123,8 @@ export interface RunnerEventMap {
     text: string;
     toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
   };
+  /** Thinking/reasoning content during streaming */
+  thinking: { content: string };
 }
 
 /**
@@ -175,6 +177,12 @@ export interface RunnerOptions {
   subAgentFactory?: ISubAgentFactory;
   /** Execution policy for stop conditions and error handling (defaults to DefaultExecutionPolicy) */
   executionPolicy?: IExecutionPolicy;
+
+  /** Enable thinking/reasoning mode for supported models (native thinking) */
+  thinkingEnabled?: boolean;
+
+  /** Enable prompt-level thinking guidance for models without native thinking support */
+  enablePromptThinking?: boolean;
 }
 
 /**
