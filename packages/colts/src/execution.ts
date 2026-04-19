@@ -20,6 +20,8 @@ import type { DelegateResult } from './subagent/types.js';
  */
 export type ToolPostEffect =
   // Skill 生命周期
+  | { type: 'skill:loading'; name: string }
+  | { type: 'skill:loaded'; name: string; tokenCount: number }
   | { type: 'skill:start'; name: string; task: string; state: AgentState }
   | { type: 'skill:end'; name: string; result: string; state: AgentState }
   // SubAgent 生命周期

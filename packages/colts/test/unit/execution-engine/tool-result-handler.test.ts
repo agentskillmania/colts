@@ -122,9 +122,14 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
 
     expect(result.done).toBe(false);
     expect(result.phase.type).toBe('idle');
-    expect(result.effects!.map((e) => e.type)).toEqual(['skill:start', 'tool:end']);
+    expect(result.effects!.map((e) => e.type)).toEqual([
+      'skill:loading',
+      'skill:loaded',
+      'skill:start',
+      'tool:end',
+    ]);
 
-    const skillStart = result.effects![0] as {
+    const skillStart = result.effects![2] as {
       type: 'skill:start';
       name: string;
       task: string;
@@ -134,8 +139,17 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     expect(skillStart.task).toBe('Find sources about X');
     expect(skillStart.state.context.skillState?.current).toBe('research');
 
-    const toolEnd = result.effects![1] as { type: 'tool:end'; result: unknown };
+    const toolEnd = result.effects![3] as { type: 'tool:end'; result: unknown };
     expect(toolEnd.result).toBe("Skill 'research' loaded");
+
+    // skill:loaded 应包含 token 数量
+    const skillLoaded = result.effects![1] as {
+      type: 'skill:loaded';
+      name: string;
+      tokenCount: number;
+    };
+    expect(skillLoaded.name).toBe('research');
+    expect(skillLoaded.tokenCount).toBeGreaterThan(0);
 
     // execState.phase 应被重置为 idle
     expect(execState.phase.type).toBe('idle');
@@ -171,7 +185,7 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     const result = await handler.execute(createMockCtx(), state, execState);
 
     expect(result.phase.type).toBe('idle');
-    const skillStart = result.effects![0] as {
+    const skillStart = result.effects![2] as {
       type: 'skill:start';
       name: string;
       state: AgentState;
@@ -290,8 +304,9 @@ describe('ToolResultHandler — RETURN_SKILL', () => {
 
     const result = await handler.execute(createMockCtx(), state, execState);
 
-    expect(result.done).toBe(true);
-    expect(result.phase.type).toBe('completed');
+    // 顶级 skill return 后不直接结束，让 LLM 有机会向用户输出结果
+    expect(result.done).toBe(false);
+    expect(result.phase.type).toBe('idle');
     expect(result.effects!.map((e) => e.type)).toEqual(['skill:end', 'tool:end']);
 
     const skillEnd = result.effects![0] as {
@@ -305,9 +320,8 @@ describe('ToolResultHandler — RETURN_SKILL', () => {
     const toolEnd = result.effects![1] as { type: 'tool:end'; result: unknown };
     expect(toolEnd.result).toBe('Found 3 relevant papers');
 
-    if (result.phase.type === 'completed') {
-      expect(result.phase.answer).toBe('Found 3 relevant papers');
-    }
+    // execState.phase 应被重置为 idle
+    expect(execState.phase.type).toBe('idle');
   });
 
   it('should produce skill:end + tool:end + phase=idle for nested return', async () => {
@@ -468,6 +482,8 @@ describe('ToolResultHandler — delegate tools', () => {
 
     expect(result.effects!.map((e) => e.type)).toEqual([
       'subagent:start',
+      'skill:loading',
+      'skill:loaded',
       'skill:start',
       'tool:end',
       'subagent:end',
@@ -476,10 +492,10 @@ describe('ToolResultHandler — delegate tools', () => {
     const subStart = result.effects![0] as { type: 'subagent:start'; name: string };
     expect(subStart.name).toBe('research-agent');
 
-    const skillStart = result.effects![1] as { type: 'skill:start'; name: string };
+    const skillStart = result.effects![3] as { type: 'skill:start'; name: string };
     expect(skillStart.name).toBe('research');
 
-    const subEnd = result.effects![3] as { type: 'subagent:end'; name: string };
+    const subEnd = result.effects![5] as { type: 'subagent:end'; name: string };
     expect(subEnd.name).toBe('research-agent');
   });
 
@@ -555,8 +571,9 @@ describe('ToolResultHandler — delegate tools', () => {
 
     const result = await handler.execute(createMockCtx(), state, execState);
 
-    expect(result.done).toBe(true);
-    expect(result.phase.type).toBe('completed');
+    // 顶级 skill return 后不直接结束
+    expect(result.done).toBe(false);
+    expect(result.phase.type).toBe('idle');
     expect(result.effects!.map((e) => e.type)).toEqual([
       'subagent:start',
       'skill:end',

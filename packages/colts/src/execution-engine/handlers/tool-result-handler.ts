@@ -17,11 +17,7 @@ import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult, ToolPostEffect } from '../../execution.js';
 import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
-import {
-  applySkillSignal,
-  formatSkillToolResult,
-  formatSkillAnswer,
-} from '../../skills/signal-handler.js';
+import { applySkillSignal, formatSkillToolResult } from '../../skills/signal-handler.js';
 
 export class ToolResultHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {
@@ -59,6 +55,19 @@ export class ToolResultHandler implements IPhaseHandler {
 
       switch (sigResult.action) {
         case 'loaded': {
+          // 技能加载事件（用于 UI 展示加载进度）
+          effects.push({
+            type: 'skill:loading',
+            name: sigResult.skillName,
+          });
+          const instructions =
+            (result as SkillSignal & { instructions?: string }).instructions ?? '';
+          const tokenCount = instructions.length > 0 ? Math.ceil(instructions.length / 4) : 0;
+          effects.push({
+            type: 'skill:loaded',
+            name: sigResult.skillName,
+            tokenCount,
+          });
           effects.push({
             type: 'skill:start',
             name: sigResult.skillName,
@@ -112,9 +121,9 @@ export class ToolResultHandler implements IPhaseHandler {
               result,
             });
           }
-          const answer = formatSkillAnswer(result);
-          execState.phase = { type: 'completed', answer };
-          return { state: currentState, phase: execState.phase, done: true, effects };
+          // 顶级 skill return 后不直接结束，让 LLM 有机会向用户输出结果
+          execState.phase = { type: 'idle' };
+          return { state: currentState, phase: execState.phase, done: false, effects };
         }
 
         case 'same-skill': {
