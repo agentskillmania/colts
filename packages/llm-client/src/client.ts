@@ -229,7 +229,7 @@ export class LLMClient extends EventEmitter {
    * ```
    */
   async call(options: CallOptions): Promise<LLMResponse> {
-    const { model, priority = 0, totalTimeout, requestId } = options;
+    const { model, priority = 0, totalTimeout, requestId, signal } = options;
 
     const execute = async (key: { key: string }): Promise<LLMResponse> => {
       // Emit retry through scheduler
@@ -240,7 +240,7 @@ export class LLMClient extends EventEmitter {
       return this.adapter.complete(model, key.key, options, onRetry);
     };
 
-    const promise = this.scheduler.execute(model, priority, execute, requestId);
+    const promise = this.scheduler.execute(model, priority, execute, requestId, signal);
 
     if (totalTimeout) {
       return pTimeout(promise, {
@@ -293,7 +293,7 @@ export class LLMClient extends EventEmitter {
    * ```
    */
   async *stream(options: CallOptions): AsyncIterable<StreamEvent> {
-    const { model, priority = 0, totalTimeout, requestId } = options;
+    const { model, priority = 0, totalTimeout, requestId, signal } = options;
 
     // Create a promise that resolves to the stream
     const streamPromise = this.scheduler.execute(
@@ -307,7 +307,8 @@ export class LLMClient extends EventEmitter {
         // Return the async iterable directly
         return this.adapter.streamWithRetry(model, key.key, options, onRetry);
       },
-      requestId
+      requestId,
+      signal
     );
 
     // Apply total timeout
