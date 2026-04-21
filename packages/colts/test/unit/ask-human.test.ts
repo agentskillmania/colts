@@ -343,4 +343,79 @@ describe('Step 11: ask_human Tool', () => {
       ).rejects.toThrow('User cancelled');
     });
   });
+
+  describe('AbortSignal support', () => {
+    it('应该将 signal 传递给 handler', async () => {
+      const handler = vi.fn().mockResolvedValue({
+        q1: { type: 'direct', value: 'hello' },
+      });
+
+      const tool = createAskHumanTool(handler);
+      const controller = new AbortController();
+
+      await tool.execute(
+        { questions: [{ id: 'q1', question: 'Say something', type: 'text' }] },
+        { signal: controller.signal }
+      );
+
+      expect(handler).toHaveBeenCalledWith({
+        questions: [{ id: 'q1', question: 'Say something', type: 'text' }],
+        context: undefined,
+        signal: controller.signal,
+      });
+    });
+
+    it('无 options 时 signal 应为 undefined', async () => {
+      const handler = vi.fn().mockResolvedValue({});
+
+      const tool = createAskHumanTool(handler);
+
+      await tool.execute({
+        questions: [{ id: 'q1', question: 'OK?', type: 'text' }],
+      });
+
+      expect(handler).toHaveBeenCalledWith({
+        questions: [{ id: 'q1', question: 'OK?', type: 'text' }],
+        context: undefined,
+        signal: undefined,
+      });
+    });
+
+    it('信号已 abort 时 handler 不应被调用', async () => {
+      const handler = vi.fn().mockResolvedValue({});
+      const tool = createAskHumanTool(handler);
+
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        tool.execute(
+          { questions: [{ id: 'q1', question: 'OK?', type: 'text' }] },
+          { signal: controller.signal }
+        )
+      ).rejects.toThrow();
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('handler 可通过 signal 实现 abort 感知', async () => {
+      const receivedSignals: (AbortSignal | undefined)[] = [];
+      const handler = vi.fn().mockImplementation(async ({ signal }) => {
+        receivedSignals.push(signal);
+        return { q1: { type: 'direct', value: 'ok' } };
+      });
+
+      const tool = createAskHumanTool(handler);
+      const controller = new AbortController();
+
+      await tool.execute(
+        { questions: [{ id: 'q1', question: 'OK?', type: 'text' }] },
+        { signal: controller.signal }
+      );
+
+      expect(receivedSignals).toHaveLength(1);
+      expect(receivedSignals[0]).toBe(controller.signal);
+      expect(receivedSignals[0]!.aborted).toBe(false);
+    });
+  });
 });
