@@ -160,4 +160,78 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
     },
     90000
   );
+
+  // ============================================================
+  // AbortSignal — 取消排队中的请求
+  // ============================================================
+  describe('AbortSignal cancellation in queue', () => {
+    itif(testConfig.enabled)(
+      'should reject queued request when signal is aborted',
+      async () => {
+        // 创建并发限制为 1 的客户端，确保第二个请求一定排队
+        const singleClient = new LLMClient({
+          baseUrl: testConfig.baseUrl,
+        });
+
+        singleClient.registerProvider({
+          name: testConfig.provider,
+          maxConcurrency: 1,
+        });
+
+        singleClient.registerApiKey({
+          key: testConfig.apiKey,
+          provider: testConfig.provider,
+          maxConcurrency: 1,
+          models: [{ modelId: testConfig.testModel, maxConcurrency: 1 }],
+        });
+
+        const controller = new AbortController();
+
+        // 第一个请求占满并发槽位
+        const first = singleClient.call({
+          model: testConfig.testModel,
+          messages: [{ role: 'user', content: 'Count from 1 to 10 slowly.' }],
+          requestTimeout: 90000,
+        });
+
+        // 第二个请求排队等待，稍后 abort
+        const second = singleClient.call({
+          model: testConfig.testModel,
+          messages: [{ role: 'user', content: 'Say hello' }],
+          requestTimeout: 90000,
+          signal: controller.signal,
+        });
+
+        // 等待第二个请求进入队列
+        await new Promise((r) => setTimeout(r, 200));
+        controller.abort();
+
+        // 第二个请求应被 AbortError 拒绝
+        await expect(second).rejects.toThrow();
+
+        // 第一个请求应正常完成
+        const result = await first;
+        expect(result.content).toBeDefined();
+      },
+      120000
+    );
+
+    itif(testConfig.enabled)(
+      'should reject immediately when signal is already aborted',
+      async () => {
+        const controller = new AbortController();
+        controller.abort();
+
+        await expect(
+          client.call({
+            model: testConfig.testModel,
+            messages: [{ role: 'user', content: 'Test' }],
+            requestTimeout: 60000,
+            signal: controller.signal,
+          })
+        ).rejects.toThrow();
+      },
+      90000
+    );
+  });
 });
