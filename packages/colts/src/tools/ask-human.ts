@@ -51,12 +51,13 @@ export type HumanResponse = Record<string, Answer>;
 /**
  * Handler function provided by the user to implement UI interaction
  *
- * @param params - Questions and optional context
+ * @param params - Questions, optional context, and optional abort signal
  * @returns Mapping of question ids to answers
  */
 export type AskHumanHandler = (params: {
   questions: Question[];
   context?: string;
+  signal?: AbortSignal;
 }) => Promise<HumanResponse>;
 
 // ============================================================
@@ -123,7 +124,7 @@ export function createAskHumanTool(handler: AskHumanHandler): Tool<typeof askHum
       // Check abort signal before calling handler
       options?.signal?.throwIfAborted();
 
-      const result = await handler({ questions, context });
+      const result = await handler({ questions, context, signal: options?.signal });
 
       // Check abort signal after handler completes
       options?.signal?.throwIfAborted();
