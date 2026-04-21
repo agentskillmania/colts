@@ -18,7 +18,8 @@ import { createRealLLMClient } from './helpers.js';
 import { AgentRunner } from '../../src/runner.js';
 import { createAgentState } from '../../src/state.js';
 import type { AgentConfig } from '../../src/types.js';
-import { ToolRegistry, calculatorTool } from '../../src/index.js';
+import { ToolRegistry, calculatorTool, createAskHumanTool } from '../../src/index.js';
+import { addUserMessage } from '../../src/state.js';
 
 describe('User Story: AbortSignal Cancellation', () => {
   let client: ReturnType<typeof createRealLLMClient>;
@@ -129,6 +130,57 @@ describe('User Story: AbortSignal Cancellation', () => {
         expect(result.type).toBe('success');
         if (result.type === 'success') {
           expect(result.answer).toBeTruthy();
+        }
+      },
+      120000
+    );
+  });
+
+  // ============================================================
+  // User Story 4: Signal propagation through tool execution
+  // ============================================================
+  describe('User Story 4: Signal Propagation to ask_human', () => {
+    itif(testConfig.enabled)(
+      'should pass signal to ask_human handler',
+      async () => {
+        let receivedSignal: AbortSignal | undefined;
+
+        const askHuman = createAskHumanTool(async ({ signal }) => {
+          receivedSignal = signal;
+          return { name: { type: 'direct' as const, value: 'World' } };
+        });
+
+        const registry = new ToolRegistry();
+        registry.register(askHuman);
+
+        const runner = new AgentRunner({
+          model: testConfig.testModel,
+          llmClient: client,
+          toolRegistry: registry,
+          systemPrompt:
+            'CRITICAL RULE: You MUST use the ask_human tool to ask questions. NEVER ask in plain text. ' +
+            'If you need information from the user, call the ask_human tool. ' +
+            'After receiving the tool result, use it in your response.',
+        });
+
+        const config: AgentConfig = {
+          name: 'signal-test-agent',
+          instructions:
+            'Use the ask_human tool to ask the user for their name (id: "name", type: text). ' +
+            'Do NOT ask in plain text - use the tool. ' +
+            'After getting the answer, greet them.',
+          tools: [{ name: 'ask_human', description: 'Ask the human questions' }],
+        };
+
+        const state = createAgentState(config);
+        const stateWithMsg = addUserMessage(state, 'Hello!');
+
+        const controller = new AbortController();
+        const { result } = await runner.run(stateWithMsg, { signal: controller.signal });
+
+        // 如果 LLM 使用了 ask_human，handler 应该收到 signal
+        if (result.type === 'success' && result.totalSteps > 1) {
+          expect(receivedSignal).toBeDefined();
         }
       },
       120000
