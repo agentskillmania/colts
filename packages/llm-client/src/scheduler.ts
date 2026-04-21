@@ -53,20 +53,52 @@ class Semaphore {
   /**
    * Acquire a permit, blocking if necessary.
    *
+   * @param signal - Optional AbortSignal to cancel the acquisition
    * @returns Promise that resolves when a permit is acquired
    *
    * @remarks
    * If the current count is below max, the permit is granted immediately.
    * Otherwise, the call waits in a FIFO queue until a permit becomes available.
+   * 当 signal 被 abort 时，自动从队列中移除并拒绝 Promise，避免死等。
    */
-  async acquire(): Promise<void> {
+  async acquire(signal?: AbortSignal): Promise<void> {
     if (this.count < this.max) {
       this.count++;
       return;
     }
 
-    return new Promise((resolve) => {
-      this.queue.push(resolve);
+    // 已经 abort 的信号直接拒绝
+    if (signal?.aborted) {
+      const err = new Error('The operation was aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        // 从队列中移除等待者
+        const idx = this.queue.indexOf(resolveFn);
+        if (idx !== -1) {
+          this.queue.splice(idx, 1);
+        }
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        reject(err);
+      };
+
+      const resolveFn = () => {
+        if (settled) return;
+        settled = true;
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      };
+
+      this.queue.push(resolveFn);
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 
@@ -378,7 +410,8 @@ export class RequestScheduler extends EventEmitter {
     modelId: string,
     priority: number,
     executor: (key: TrackedApiKey) => Promise<T>,
-    requestId?: string
+    requestId?: string,
+    signal?: AbortSignal
   ): Promise<T> {
     const finalRequestId = requestId ?? this.generateRequestId();
 
@@ -399,6 +432,13 @@ export class RequestScheduler extends EventEmitter {
 
     const result = await this.queue.add(
       async (): Promise<T> => {
+        // 早期 abort 检查 — 快速失败，避免无谓的 semaphore 获取
+        if (signal?.aborted) {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          throw err;
+        }
+
         // Select key at execution time (round-robin)
         const selectedKey = this.selectKey(modelId);
         if (!selectedKey) {
@@ -423,12 +463,12 @@ export class RequestScheduler extends EventEmitter {
 
         // Atomically acquire all three semaphores
         // Note: We acquire in order: provider -> key -> model to avoid deadlock
-        await providerSem.acquire();
+        await providerSem.acquire(signal);
         let providerReleased = false;
         try {
-          await keySem.acquire();
+          await keySem.acquire(signal);
           try {
-            await modelSem.acquire();
+            await modelSem.acquire(signal);
             try {
               // Update active counts
               provider.activeCount++;

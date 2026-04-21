@@ -2,7 +2,7 @@
  * RequestScheduler unit tests
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestScheduler } from '../../src/scheduler';
 
 describe('RequestScheduler', () => {
@@ -295,5 +295,202 @@ describe('concurrent request cleanup (CR T4)', () => {
       totalActive += count;
     }
     expect(totalActive).toBe(0);
+  });
+});
+
+describe('AbortSignal support', () => {
+  let scheduler: RequestScheduler;
+
+  beforeEach(() => {
+    scheduler = new RequestScheduler();
+  });
+
+  it('应该在信号已 abort 时立即拒绝 (PQueue 早期检查)', async () => {
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      scheduler.execute('gpt-4', 0, async () => 'result', undefined, controller.signal)
+    ).rejects.toThrow();
+  });
+
+  it('应该在排队等待 semaphore 时响应 abort (Semaphore 中断)', async () => {
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 1 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 1,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 1 }],
+    });
+
+    const controller = new AbortController();
+    let resolveBlock!: () => void;
+    const blockPromise = new Promise<void>((r) => {
+      resolveBlock = r;
+    });
+
+    // 占满并发槽位
+    const running = scheduler.execute('gpt-4', 0, async () => {
+      await blockPromise;
+      return 'blocked';
+    });
+
+    // 排队等待，稍后 abort
+    const abortPromise = scheduler.execute(
+      'gpt-4',
+      0,
+      async () => 'should-not-reach',
+      undefined,
+      controller.signal
+    );
+
+    // 确保排队请求已进入等待状态
+    await new Promise((r) => setTimeout(r, 50));
+    controller.abort();
+
+    try {
+      await abortPromise;
+      expect.unreachable('应该抛出 AbortError');
+    } catch (e) {
+      expect(e).toBeInstanceOf(Error);
+      expect((e as Error).name).toBe('AbortError');
+    }
+
+    // 释放阻塞请求
+    resolveBlock();
+    await running;
+  });
+
+  it('abort 后 semaphore 不应泄漏 — 后续请求正常执行', async () => {
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 1 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 1,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 1 }],
+    });
+
+    const controller = new AbortController();
+    let resolveBlock!: () => void;
+    const blockPromise = new Promise<void>((r) => {
+      resolveBlock = r;
+    });
+
+    // 占满
+    const running = scheduler.execute('gpt-4', 0, async () => {
+      await blockPromise;
+      return 'blocked';
+    });
+
+    // abort 排队请求
+    const abortPromise = scheduler.execute(
+      'gpt-4',
+      0,
+      async () => 'should-not-reach',
+      undefined,
+      controller.signal
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+    controller.abort();
+    await expect(abortPromise).rejects.toThrow();
+
+    // 释放阻塞
+    resolveBlock();
+    await running;
+
+    // 后续请求应正常执行
+    const result = await scheduler.execute('gpt-4', 0, async () => 'ok');
+    expect(result).toBe('ok');
+
+    // activeRequests 应归零
+    const stats = scheduler.getStats();
+    let totalActive = 0;
+    for (const [, count] of stats.providerActiveCounts) {
+      totalActive += count;
+    }
+    expect(totalActive).toBe(0);
+  });
+
+  it('无 signal 时 execute 应正常工作 (向后兼容)', async () => {
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    const result = await scheduler.execute('gpt-4', 0, async () => 'result');
+    expect(result).toBe('result');
+  });
+
+  it('signal 在 semaphore 等待过程中 abort 应正确释放已获取的 semaphore', async () => {
+    // 用不同的 provider/key/model 并发限制来测试中间层 semaphore 释放
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 1 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 1,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 1 }],
+    });
+
+    // 注册第二个 key 以确保 round-robin 不会干扰
+    scheduler.registerApiKey({
+      key: 'sk-test2',
+      provider: 'openai',
+      maxConcurrency: 1,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 1 }],
+    });
+
+    const controller = new AbortController();
+    let resolveBlock!: () => void;
+    const blockPromise = new Promise<void>((r) => {
+      resolveBlock = r;
+    });
+
+    // 占满 sk-test 的槽位
+    const running = scheduler.execute(
+      'gpt-4',
+      0,
+      async () => {
+        await blockPromise;
+        return 'blocked';
+      },
+      undefined
+    );
+
+    // 排队等待 sk-test 的槽位，然后 abort
+    const abortPromise = scheduler.execute(
+      'gpt-4',
+      0,
+      async () => 'should-not-reach',
+      undefined,
+      controller.signal
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+    controller.abort();
+    await expect(abortPromise).rejects.toThrow();
+
+    resolveBlock();
+    await running;
+
+    // 两次请求后所有 semaphore 应归零
+    const stats = scheduler.getStats();
+    for (const [, count] of stats.providerActiveCounts) {
+      expect(count).toBe(0);
+    }
+    for (const [, count] of stats.keyActiveCounts) {
+      expect(count).toBe(0);
+    }
   });
 });
