@@ -28,6 +28,17 @@ function createMockLLMClient(responses: LLMResponse[]): LLMClient {
       }
       const response = responses[callIndex];
 
+      // Yield thinking tokens if present
+      if (response.thinking) {
+        const thinkingTokens = response.thinking.split(' ');
+        for (let i = 0; i < thinkingTokens.length; i++) {
+          yield {
+            type: 'thinking',
+            delta: thinkingTokens[i] + (i < thinkingTokens.length - 1 ? ' ' : ''),
+          };
+        }
+      }
+
       // Yield content as tokens
       const content = response.content;
       const tokens = content.split(' ');
@@ -966,5 +977,209 @@ describe('Execution Policy injection', () => {
     if (result.type === 'max_steps') {
       expect(result.totalSteps).toBe(1000);
     }
+  });
+});
+
+describe('Thinking mechanism', () => {
+  it('should save native thinking as thought message in blocking mode', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'The answer is 42.',
+      thinking: 'Let me reason through this.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const state = createAgentState(defaultConfig);
+
+    const { state: finalState } = await runner.run(state);
+
+    const messages = finalState.context.messages;
+    const thoughtMsg = messages.find((m) => m.type === 'thought');
+    const textMsg = messages.find((m) => m.type === 'text');
+
+    expect(thoughtMsg).toBeDefined();
+    expect(thoughtMsg!.content).toBe('Let me reason through this.');
+    expect(textMsg).toBeDefined();
+    expect(textMsg!.content).toBe('The answer is 42.');
+  });
+
+  it('should extract <think> tag and clean content in blocking mode', async () => {
+    const mockResponse: LLMResponse = {
+      content: '<think>I need to calculate this.</think>The answer is 42.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const state = createAgentState(defaultConfig);
+
+    const { state: finalState } = await runner.run(state);
+
+    const messages = finalState.context.messages;
+    const thoughtMsg = messages.find((m) => m.type === 'thought');
+    const textMsg = messages.find((m) => m.type === 'text');
+
+    expect(thoughtMsg).toBeDefined();
+    expect(thoughtMsg!.content).toBe('I need to calculate this.');
+    expect(textMsg).toBeDefined();
+    expect(textMsg!.content).toBe('The answer is 42.');
+    expect(textMsg!.content).not.toContain('<think>');
+  });
+
+  it('should save native thinking with action in blocking mode', async () => {
+    const toolCallResponse: LLMResponse = {
+      content: 'Let me search.',
+      thinking: 'The user wants weather info.',
+      toolCalls: [{ id: 'call-1', name: 'search', arguments: { query: 'weather' } }],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+
+    const finalResponse: LLMResponse = {
+      content: 'It is sunny.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([toolCallResponse, finalResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'search',
+      description: 'Search',
+      parameters: z.object({ query: z.string() }),
+      execute: async ({ query }) => `Results for ${query}`,
+    });
+
+    const state = createAgentState(defaultConfig);
+    const { state: finalState } = await runner.run(state, undefined, registry);
+
+    const messages = finalState.context.messages;
+    const thoughtMsgs = messages.filter((m) => m.type === 'thought');
+
+    expect(thoughtMsgs.length).toBe(1);
+    expect(thoughtMsgs[0].content).toBe('The user wants weather info.');
+  });
+
+  it('should NOT create thought message when no thinking exists', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'The answer is 42.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const state = createAgentState(defaultConfig);
+
+    const { state: finalState } = await runner.run(state);
+
+    const messages = finalState.context.messages;
+    const thoughtMsg = messages.find((m) => m.type === 'thought');
+
+    expect(thoughtMsg).toBeUndefined();
+  });
+
+  it('should yield thinking events in stream mode', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'The answer is 42.',
+      thinking: 'Let me think about this.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const state = createAgentState(defaultConfig);
+
+    const events: Array<{ type: string; content?: string }> = [];
+    for await (const event of runner.runStream(state)) {
+      if (event.type === 'thinking') {
+        events.push({ type: 'thinking', content: event.content });
+      }
+    }
+
+    // Should have yielded thinking events
+    expect(events.length).toBeGreaterThan(0);
+    expect(events[0].type).toBe('thinking');
+  });
+
+  it('should save thinking from stream via stepStream', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'The answer is 42.',
+      thinking: 'Let me think about this.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const state = createAgentState(defaultConfig);
+
+    // Consume all events from stepStream
+    const iterator = runner.stepStream(state);
+    let result = await iterator.next();
+    while (!result.done) {
+      result = await iterator.next();
+    }
+
+    const finalState = result.value.state;
+    const messages = finalState.context.messages;
+    const thoughtMsg = messages.find((m) => m.type === 'thought');
+    const textMsg = messages.find((m) => m.type === 'text');
+
+    expect(thoughtMsg).toBeDefined();
+    expect(thoughtMsg!.content).toBe('Let me think about this.');
+    expect(textMsg).toBeDefined();
+    expect(textMsg!.content).toBe('The answer is 42.');
+  });
+
+  it('should handle <think> tag with action in blocking mode', async () => {
+    const toolCallResponse: LLMResponse = {
+      content: '<think>I need to search.</think>',
+      toolCalls: [{ id: 'call-1', name: 'search', arguments: { query: 'weather' } }],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+
+    const finalResponse: LLMResponse = {
+      content: 'It is sunny.',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([toolCallResponse, finalResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'search',
+      description: 'Search',
+      parameters: z.object({ query: z.string() }),
+      execute: async ({ query }) => `Results for ${query}`,
+    });
+
+    const state = createAgentState(defaultConfig);
+    const { state: finalState } = await runner.run(state, undefined, registry);
+
+    const messages = finalState.context.messages;
+    const thoughtMsgs = messages.filter((m) => m.type === 'thought');
+    const actionMsgs = messages.filter((m) => m.type === 'action');
+
+    expect(thoughtMsgs.length).toBe(1);
+    expect(thoughtMsgs[0].content).toBe('I need to search.');
+    expect(actionMsgs.length).toBe(1);
+    expect(actionMsgs[0].content).toBe('');
   });
 });

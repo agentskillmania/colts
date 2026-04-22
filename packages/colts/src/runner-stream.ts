@@ -61,6 +61,7 @@ export async function* streamCallingLLM(
   };
 
   let accumulatedContent = '';
+  let accumulatedThinking = ''; // Accumulate thinking tokens across the stream
   let responseContent = '';
   let responseToolCalls:
     | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
@@ -81,6 +82,7 @@ export async function* streamCallingLLM(
       accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
       yield { type: 'token', token: event.delta ?? '' };
     } else if (event.type === 'thinking') {
+      accumulatedThinking += event.delta ?? '';
       yield { type: 'thinking', content: event.delta ?? '' };
     } else if (event.type === 'tool_call' && event.toolCall) {
       responseToolCalls = responseToolCalls ?? [];
@@ -103,6 +105,7 @@ export async function* streamCallingLLM(
 
   // Store complete response, fallback to accumulatedContent if 'done' event was missed
   execState.llmResponse = responseContent || accumulatedContent;
+  execState.llmThinking = accumulatedThinking; // Preserve accumulated thinking for downstream parsing
   if (responseToolCalls && responseToolCalls.length > 0) {
     const toolCall = responseToolCalls[0];
     execState.action = {

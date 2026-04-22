@@ -59,6 +59,7 @@ export {
 // Parser
 export {
   parseResponse,
+  extractThinkingAndContent,
   requiresToolExecution,
   formatToolCalls,
   ParseError,

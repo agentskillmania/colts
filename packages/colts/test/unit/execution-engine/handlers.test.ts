@@ -293,7 +293,7 @@ describe('ParsingHandler', () => {
   it('should extract thought and transition to parsed with action', () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.llmResponse = 'I need to calculate something';
+    execState.llmResponse = '<think>I need to calculate something</think>';
     execState.action = createAction();
 
     const ctx = createMockCtx();
@@ -305,13 +305,14 @@ describe('ParsingHandler', () => {
       expect(result.phase.action).toBeDefined();
     }
     expect(execState.thought).toBe('I need to calculate something');
+    expect(execState.cleanedContent).toBe('');
     expect(result.done).toBe(false);
   });
 
   it('should transition to parsed without action when no tool call', () => {
     const state = createMockState();
     const execState = createExecutionState();
-    execState.llmResponse = 'Here is the answer';
+    execState.llmResponse = '<think>Here is the answer</think>';
     // No action set
 
     const ctx = createMockCtx();
@@ -322,6 +323,7 @@ describe('ParsingHandler', () => {
       expect(result.phase.thought).toBe('Here is the answer');
       expect(result.phase.action).toBeUndefined();
     }
+    expect(execState.cleanedContent).toBe('');
   });
 
   it('should use empty string when llmResponse is undefined', () => {
@@ -333,9 +335,35 @@ describe('ParsingHandler', () => {
     const result = handler.execute(ctx, state, execState);
 
     expect(execState.thought).toBe('');
+    expect(execState.cleanedContent).toBe('');
     if (result.phase.type === 'parsed') {
       expect(result.phase.thought).toBe('');
     }
+  });
+
+  it('should prefer native thinking over content', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.llmResponse = '<think>Tag thinking</think>Some content';
+    execState.llmThinking = 'Native thinking';
+
+    const ctx = createMockCtx();
+    handler.execute(ctx, state, execState);
+
+    expect(execState.thought).toBe('Native thinking');
+    expect(execState.cleanedContent).toBe('<think>Tag thinking</think>Some content');
+  });
+
+  it('should have empty thought when no explicit thinking exists', () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.llmResponse = 'Plain content without thinking';
+
+    const ctx = createMockCtx();
+    handler.execute(ctx, state, execState);
+
+    expect(execState.thought).toBe('');
+    expect(execState.cleanedContent).toBe('Plain content without thinking');
   });
 });
 

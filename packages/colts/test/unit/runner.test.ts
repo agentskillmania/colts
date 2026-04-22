@@ -493,7 +493,7 @@ describe('AgentRunner', () => {
           messages: [
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Thinking about it', type: 'thought' },
-            { role: 'assistant', content: 'Final response', type: 'final' },
+            { role: 'assistant', content: 'Final response', type: 'text' },
           ],
         },
       };
@@ -680,11 +680,11 @@ describe('AgentRunner', () => {
       // Create state with compression metadata
       let state = createAgentState(defaultConfig);
       state = addUserMessage(state, 'Old message 1');
-      state = addAssistantMessage(state, 'Old response 1', { type: 'final' });
+      state = addAssistantMessage(state, 'Old response 1', { type: 'text' });
       state = addUserMessage(state, 'Old message 2');
-      state = addAssistantMessage(state, 'Old response 2', { type: 'final' });
+      state = addAssistantMessage(state, 'Old response 2', { type: 'text' });
       state = addUserMessage(state, 'Recent message');
-      state = addAssistantMessage(state, 'Recent response', { type: 'final' });
+      state = addAssistantMessage(state, 'Recent response', { type: 'text' });
 
       // Set compression: anchor=4, meaning messages[0..3] are compressed
       state = {

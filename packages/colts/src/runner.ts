@@ -513,7 +513,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     // 4. Add assistant message to state
     newState = addAssistantMessage(newState, response.content, {
-      type: 'final',
+      type: 'text',
     });
 
     // 5. Increment step count
@@ -609,7 +609,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             // Finalize state with complete response
             let finalState = incrementStepCount(
               addAssistantMessage(currentState, accumulatedContent, {
-                type: 'final',
+                type: 'text',
               })
             );
             // Clean up stale skill state on completion
