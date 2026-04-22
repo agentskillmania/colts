@@ -33,7 +33,7 @@ describe('User Story: AbortSignal Cancellation', () => {
   // ============================================================
   describe('User Story 1: Pre-aborted Signal', () => {
     itif(testConfig.enabled)(
-      'should throw immediately when signal is already aborted',
+      'should return abort immediately when signal is already aborted',
       async () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
@@ -50,7 +50,8 @@ describe('User Story: AbortSignal Cancellation', () => {
         const controller = new AbortController();
         controller.abort();
 
-        await expect(runner.run(state, { signal: controller.signal })).rejects.toThrow();
+        const { result } = await runner.run(state, { signal: controller.signal });
+        expect(result.type).toBe('abort');
       },
       120000
     );
