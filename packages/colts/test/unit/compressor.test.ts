@@ -337,7 +337,7 @@ describe('DefaultContextCompressor - generateSummary', () => {
     // 4 messages, keepRecent=1 → anchor=3 → compress messages[0..2]
     state.context.messages.push(
       { role: 'user', content: 'Hello', type: 'text' },
-      { role: 'assistant', content: 'Hi there', type: 'final' },
+      { role: 'assistant', content: 'Hi there', type: 'text' },
       { role: 'tool', content: 'Result: 42', type: 'tool-result' },
       { role: 'user', content: 'Follow up', type: 'text' }
     );
@@ -371,9 +371,9 @@ describe('DefaultContextCompressor - generateSummary', () => {
     });
     state.context.messages.push(
       { role: 'user', content: 'Q1', type: 'text' },
-      { role: 'assistant', content: 'A1', type: 'final' },
+      { role: 'assistant', content: 'A1', type: 'text' },
       { role: 'user', content: 'Q2', type: 'text' },
-      { role: 'assistant', content: 'A2', type: 'final' }
+      { role: 'assistant', content: 'A2', type: 'text' }
     );
     state.context.compression = { summary: 'Previous summary', anchor: 2 };
 
@@ -407,7 +407,7 @@ describe('DefaultContextCompressor - message type formatting', () => {
     state.context.messages.push(
       { role: 'user', content: 'User message', type: 'text' },
       { role: 'assistant', content: 'Thought process', type: 'thought' },
-      { role: 'assistant', content: 'Final answer', type: 'final' },
+      { role: 'assistant', content: 'Final answer', type: 'text' },
       { role: 'tool', content: 'Tool output', type: 'tool-result', toolCallId: 'tc1' },
       { role: 'user', content: 'Follow up', type: 'text' }
     );

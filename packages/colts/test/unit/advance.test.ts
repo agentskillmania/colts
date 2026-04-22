@@ -332,7 +332,8 @@ describe('advance()', () => {
     expect(result.phase.type).toBe('parsed');
     expect(result.done).toBe(false);
     if (result.phase.type === 'parsed') {
-      expect(result.phase.thought).toBe('The answer is 42');
+      // No explicit thinking in the response, so thought is empty
+      expect(result.phase.thought).toBe('');
       expect(result.phase.action).toBeUndefined();
     }
 

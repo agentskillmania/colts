@@ -1,13 +1,15 @@
 /**
  * @fileoverview Parsing Phase Handler
  *
- * Transitions from parsing to parsed. Extracts thought from execState.llmResponse
- * and sets it in execState.thought (matches original advanceToParsed).
+ * Transitions from parsing to parsed. Extracts explicit thinking from
+ * execState.llmThinking (native) or execState.llmResponse (<think> tags),
+ * cleans the content, and sets both execState.thought and execState.cleanedContent.
  */
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution.js';
+import { extractThinkingAndContent } from '../../parser.js';
 
 export class ParsingHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {
@@ -15,9 +17,13 @@ export class ParsingHandler implements IPhaseHandler {
   }
 
   execute(_ctx: PhaseHandlerContext, state: AgentState, execState: ExecutionState): AdvanceResult {
-    // Extract thought from LLM response (matches original advanceToParsed)
-    const thought = execState.llmResponse ?? '';
+    const rawContent = execState.llmResponse ?? '';
+    const nativeThinking = execState.llmThinking ?? '';
+
+    const { thought, cleanedContent } = extractThinkingAndContent(rawContent, nativeThinking);
+
     execState.thought = thought;
+    execState.cleanedContent = cleanedContent;
 
     if (execState.action) {
       execState.phase = { type: 'parsed', thought, action: execState.action };

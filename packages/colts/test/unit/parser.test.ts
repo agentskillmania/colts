@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseResponse,
+  extractThinkingAndContent,
   requiresToolExecution,
   formatToolCalls,
   ParseError,
@@ -14,6 +15,70 @@ import {
 import type { LLMResponse } from '@agentskillmania/llm-client';
 
 describe('Response Parser (Step 2)', () => {
+  describe('extractThinkingAndContent', () => {
+    it('should extract native thinking and keep content unchanged', () => {
+      const result = extractThinkingAndContent('The answer is 42.', 'Let me think about this.');
+
+      expect(result.thought).toBe('Let me think about this.');
+      expect(result.cleanedContent).toBe('The answer is 42.');
+    });
+
+    it('should extract <think> tag and clean content', () => {
+      const result = extractThinkingAndContent(
+        '<think>Let me analyze this step by step.</think>The answer is 42.',
+        undefined
+      );
+
+      expect(result.thought).toBe('Let me analyze this step by step.');
+      expect(result.cleanedContent).toBe('The answer is 42.');
+      expect(result.cleanedContent).not.toContain('<think>');
+    });
+
+    it('should return empty thought when no thinking exists', () => {
+      const result = extractThinkingAndContent('Plain content without thinking.', undefined);
+
+      expect(result.thought).toBe('');
+      expect(result.cleanedContent).toBe('Plain content without thinking.');
+    });
+
+    it('should handle multiple <think> tags (extract first only)', () => {
+      const result = extractThinkingAndContent(
+        '<think>First thought.</think>Some text<think>Second thought.</think>',
+        undefined
+      );
+
+      expect(result.thought).toBe('First thought.');
+      expect(result.cleanedContent).toBe('Some text<think>Second thought.</think>');
+    });
+
+    it('should prefer native thinking over <think> tags', () => {
+      const result = extractThinkingAndContent(
+        '<think>Tag thinking.</think>Some content.',
+        'Native thinking content'
+      );
+
+      expect(result.thought).toBe('Native thinking content');
+      expect(result.cleanedContent).toBe('<think>Tag thinking.</think>Some content.');
+    });
+
+    it('should handle empty <think> tag', () => {
+      const result = extractThinkingAndContent('<think></think>The answer is 42.', undefined);
+
+      expect(result.thought).toBe('');
+      expect(result.cleanedContent).toBe('The answer is 42.');
+    });
+
+    it('should handle <think> tag with newlines', () => {
+      const result = extractThinkingAndContent(
+        '<think>\n  Multi-line\n  thinking content\n</think>Answer here.',
+        undefined
+      );
+
+      expect(result.thought).toBe('Multi-line\n  thinking content');
+      expect(result.cleanedContent).toBe('Answer here.');
+    });
+  });
+
   describe('parseResponse', () => {
     it('should parse final answer (no tool calls, no thinking)', () => {
       // Given: LLM response with content only, no thinking indicator

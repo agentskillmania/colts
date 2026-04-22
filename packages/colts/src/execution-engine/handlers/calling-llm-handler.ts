@@ -43,8 +43,9 @@ export class CallingLLMHandler implements IPhaseHandler {
       signal: options?.signal,
     });
 
-    const responseText = response.content;
+    const responseText = response.content ?? '';
     execState.llmResponse = responseText;
+    execState.llmThinking = response.thinking ?? ''; // Preserve native thinking from the LLM API
 
     if (response.toolCalls && response.toolCalls.length > 0) {
       try {
