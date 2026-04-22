@@ -236,6 +236,9 @@ function RunCompleteEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'ru
   if (r.type === 'max_steps') {
     return <Alert variant="warning">Max steps reached ({r.totalSteps})</Alert>;
   }
+  if (r.type === 'abort') {
+    return <Alert variant="warning">Aborted ({r.totalSteps} steps)</Alert>;
+  }
   return <Alert variant="error">Run error: {r.error.message}</Alert>;
 }
 

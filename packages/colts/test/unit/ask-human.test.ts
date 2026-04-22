@@ -381,21 +381,22 @@ describe('Step 11: ask_human Tool', () => {
       });
     });
 
-    it('handler should not be called when signal is already aborted', async () => {
+    it('handler receives aborted signal when pre-aborted', async () => {
       const handler = vi.fn().mockResolvedValue({});
       const tool = createAskHumanTool(handler);
 
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
-        tool.execute(
-          { questions: [{ id: 'q1', question: 'OK?', type: 'text' }] },
-          { signal: controller.signal }
-        )
-      ).rejects.toThrow();
+      // Tool no longer throws on abort; it delegates to the handler
+      const result = await tool.execute(
+        { questions: [{ id: 'q1', question: 'OK?', type: 'text' }] },
+        { signal: controller.signal }
+      );
 
-      expect(handler).not.toHaveBeenCalled();
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler.mock.calls[0][0].signal?.aborted).toBe(true);
+      expect(result).toBeDefined();
     });
 
     it('handler can detect abort via signal', async () => {

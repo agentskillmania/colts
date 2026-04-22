@@ -1161,7 +1161,7 @@ describe('createDelegateTool', () => {
       expect(result.answer).toBe('Task result');
     });
 
-    it('should respect abort signal when aborted before execution', async () => {
+    it('should return abort result when aborted before execution', async () => {
       const localParentRegistry = new ToolRegistry();
       const localConfigs = new Map<string, SubAgentConfig>([
         [
@@ -1187,9 +1187,14 @@ describe('createDelegateTool', () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
-        tool.execute({ agent: 'default', task: 'Do something' }, { signal: controller.signal })
-      ).rejects.toThrow();
+      const result = (await tool.execute(
+        { agent: 'default', task: 'Do something' },
+        { signal: controller.signal }
+      )) as DelegateResult;
+
+      expect(result.answer).toBe('Aborted');
+      expect(result.totalSteps).toBe(0);
+      expect(result.finalState).toBeNull();
     });
   });
 });

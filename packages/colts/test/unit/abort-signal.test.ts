@@ -123,7 +123,7 @@ describe('AbortSignal (Step 16)', () => {
   // step()
   // ============================================================
   describe('step()', () => {
-    it('should throw when signal is pre-aborted', async () => {
+    it('should return abort when signal is pre-aborted', async () => {
       const client = createMockClient();
       const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
       const state = createAgentState(defaultConfig);
@@ -131,7 +131,8 @@ describe('AbortSignal (Step 16)', () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(runner.step(state, undefined, { signal: controller.signal })).rejects.toThrow();
+      const { result } = await runner.step(state, undefined, { signal: controller.signal });
+      expect(result.type).toBe('abort');
     });
 
     it('should complete normally without signal', async () => {
@@ -148,7 +149,7 @@ describe('AbortSignal (Step 16)', () => {
   // run()
   // ============================================================
   describe('run()', () => {
-    it('should throw when signal is pre-aborted', async () => {
+    it('should return abort when signal is pre-aborted', async () => {
       const client = createMockClient();
       const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
       const state = createAgentState(defaultConfig);
@@ -156,7 +157,8 @@ describe('AbortSignal (Step 16)', () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(runner.run(state, { signal: controller.signal })).rejects.toThrow();
+      const { result } = await runner.run(state, { signal: controller.signal });
+      expect(result.type).toBe('abort');
     });
 
     it('should complete normally without signal', async () => {

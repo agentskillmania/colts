@@ -67,7 +67,8 @@ export type Phase =
 export type StepResult =
   | { type: 'continue'; toolResult: unknown }
   | { type: 'done'; answer: string }
-  | { type: 'error'; error: Error };
+  | { type: 'error'; error: Error }
+  | { type: 'abort' };
 
 /**
  * Events emitted during step/advance stream
@@ -189,7 +190,8 @@ export function isTerminalPhase(phase: Phase): boolean {
 export type RunResult =
   | { type: 'success'; answer: string; totalSteps: number }
   | { type: 'max_steps'; totalSteps: number }
-  | { type: 'error'; error: Error; totalSteps: number };
+  | { type: 'error'; error: Error; totalSteps: number }
+  | { type: 'abort'; totalSteps: number };
 
 /**
  * Events emitted during runStream()

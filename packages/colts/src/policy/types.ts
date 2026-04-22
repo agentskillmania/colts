@@ -16,7 +16,7 @@ export type StopDecision =
   | {
       decision: 'stop';
       reason: string;
-      runResultType: 'success' | 'error' | 'max_steps';
+      runResultType: 'success' | 'error' | 'max_steps' | 'abort';
     };
 
 /**

@@ -88,6 +88,8 @@ export interface RunnerEventMap {
   'tools:end': { results: Record<string, unknown> };
   /** Execution error */
   error: { error: Error; context: { toolName?: string; step: number } };
+  /** Execution was aborted by caller */
+  abort: { step?: number; totalSteps?: number };
 
   // ── Context compression (aligned with StreamEvent) ──
   /** Compression started */
@@ -865,10 +867,18 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     try {
       while (!isTerminalPhase(execState.phase)) {
-        options?.signal?.throwIfAborted();
+        if (options?.signal?.aborted) {
+          this.emit('abort', { step: stepIdx });
+          return { state: currentState, result: { type: 'abort' } };
+        }
 
         const from = execState.phase;
         const result = await executeAdvance(this.ctx, currentState, execState, registry, options);
+
+        if (options?.signal?.aborted) {
+          this.emit('abort', { step: stepIdx });
+          return { state: currentState, result: { type: 'abort' } };
+        }
 
         currentState = await maybeCompress(this.compressor, result.state);
 
@@ -1006,7 +1016,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     try {
       while (totalSteps < RUN_HARD_LIMIT) {
-        options?.signal?.throwIfAborted();
+        if (options?.signal?.aborted) {
+          const runResult: RunResult = { type: 'abort', totalSteps };
+          this.emit('abort', { totalSteps });
+          this.emit('run:end', { state: currentState, result: runResult });
+          return { state: currentState, result: runResult };
+        }
 
         // Call step() to get full event propagation (advance → step → run)
         const { state: newState, result } = await this.step(
@@ -1015,6 +1030,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           options,
           totalSteps
         );
+
+        if (result.type === 'abort') {
+          const runResult: RunResult = { type: 'abort', totalSteps: totalSteps + 1 };
+          this.emit('run:end', { state: newState, result: runResult });
+          return { state: newState, result: runResult };
+        }
+
         currentState = newState;
         totalSteps++;
 
@@ -1041,6 +1063,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               totalSteps,
             };
             this.emit('error', { error: runResult.error, context: { step: totalSteps - 1 } });
+          } else if (decision.runResultType === 'abort') {
+            runResult = { type: 'abort', totalSteps };
+            this.emit('abort', { totalSteps });
           } else {
             runResult = { type: 'max_steps', totalSteps };
           }
@@ -1110,7 +1135,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     try {
       while (totalSteps < RUN_HARD_LIMIT) {
-        options?.signal?.throwIfAborted();
+        if (options?.signal?.aborted) {
+          const runResult: RunResult = { type: 'abort', totalSteps };
+          this.emit('abort', { totalSteps });
+          this.emit('run:end', { state: currentState, result: runResult });
+          yield { type: 'complete', result: runResult };
+          return { state: currentState, result: runResult };
+        }
 
         // Step start
         this.emit('step:start', { step: totalSteps, state: currentState });
@@ -1135,6 +1166,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           // Uniform forwarding: emit using the yield event's type and payload
           this.emit(value.type as keyof RunnerEventMap, value as never);
           yield value as RunStreamEvent;
+        }
+
+        if (stepResult.result.type === 'abort') {
+          const runResult: RunResult = { type: 'abort', totalSteps: totalSteps + 1 };
+          this.emit('run:end', { state: stepResult.state, result: runResult });
+          yield { type: 'complete', result: runResult };
+          return { state: stepResult.state, result: runResult };
         }
 
         currentState = stepResult.state;
@@ -1189,6 +1227,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               error: runResult.error,
               context: { step: totalSteps - 1 },
             });
+          } else if (decision.runResultType === 'abort') {
+            runResult = { type: 'abort', totalSteps };
+            this.emit('abort', { totalSteps });
           } else {
             runResult = { type: 'max_steps', totalSteps };
           }
