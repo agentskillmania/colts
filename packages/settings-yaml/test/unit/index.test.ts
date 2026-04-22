@@ -615,7 +615,7 @@ server:
       expect(() => settings.set('key', 'value')).toThrow('Settings not initialized');
     });
 
-    // T5: 回归测试 — set() 不覆盖 falsy primitive 值 (CR SY-1)
+    // T5: Regression test — set() does not overwrite falsy primitive values (CR SY-1)
     it('should not overwrite falsy primitive values when creating intermediate objects', async () => {
       const configPath = path.join(tempDir, 'config.yaml');
       const settings = new Settings(configPath);
@@ -628,7 +628,7 @@ flags:
 `,
       });
 
-      // 在 flags 下设置一个新 key，不应覆盖已有的 falsy 值
+      // Setting a new key under flags should not overwrite existing falsy values
       settings.set('flags.newKey', 'value');
       const values = settings.getValues();
       expect((values as { flags: { enabled: boolean } }).flags.enabled).toBe(false);

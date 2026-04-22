@@ -1,5 +1,7 @@
 # @agentskillmania/settings-yaml
 
+[![npm version](https://img.shields.io/npm/v/@agentskillmania/settings-yaml.svg)](https://www.npmjs.com/package/@agentskillmania/settings-yaml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
 YAML configuration management with deep merge, default value fallback, and runtime overrides. Initialize in one line, read with dot notation, persist on demand.
