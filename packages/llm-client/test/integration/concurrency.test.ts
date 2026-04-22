@@ -162,13 +162,13 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
   );
 
   // ============================================================
-  // AbortSignal — 取消排队中的请求
+  // AbortSignal — cancel queued requests
   // ============================================================
   describe('AbortSignal cancellation in queue', () => {
     itif(testConfig.enabled)(
       'should reject queued request when signal is aborted',
       async () => {
-        // 创建并发限制为 1 的客户端，确保第二个请求一定排队
+        // Create client with concurrency limit 1 to ensure second request queues
         const singleClient = new LLMClient({
           baseUrl: testConfig.baseUrl,
         });
@@ -187,14 +187,14 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
 
         const controller = new AbortController();
 
-        // 第一个请求占满并发槽位
+        // First request fills all concurrency slots
         const first = singleClient.call({
           model: testConfig.testModel,
           messages: [{ role: 'user', content: 'Count from 1 to 10 slowly.' }],
           requestTimeout: 90000,
         });
 
-        // 第二个请求排队等待，稍后 abort
+        // Second request queues and aborts later
         const second = singleClient.call({
           model: testConfig.testModel,
           messages: [{ role: 'user', content: 'Say hello' }],
@@ -202,14 +202,14 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
           signal: controller.signal,
         });
 
-        // 等待第二个请求进入队列
+        // Wait for second request to enter queue
         await new Promise((r) => setTimeout(r, 200));
         controller.abort();
 
-        // 第二个请求应被 AbortError 拒绝
+        // Second request should be rejected with AbortError
         await expect(second).rejects.toThrow();
 
-        // 第一个请求应正常完成
+        // First request should complete normally
         const result = await first;
         expect(result.content).toBeDefined();
       },

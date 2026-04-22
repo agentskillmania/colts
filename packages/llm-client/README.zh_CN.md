@@ -1,5 +1,7 @@
 # @agentskillmania/llm-client
 
+[![npm version](https://img.shields.io/npm/v/@agentskillmania/llm-client.svg)](https://www.npmjs.com/package/@agentskillmania/llm-client)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
 统一 LLM 客户端。三级并发控制、多 Key 负载均衡、优先级队列、内置重试。开箱即用支持 OpenAI、Anthropic、Google 及所有 OpenAI 兼容端点。
