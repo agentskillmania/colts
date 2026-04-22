@@ -138,15 +138,26 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
       }
 
       // Check abort signal before running
-      options?.signal?.throwIfAborted();
+      if (options?.signal?.aborted) {
+        return {
+          answer: 'Aborted',
+          totalSteps: 0,
+          finalState: null,
+        } satisfies DelegateResult;
+      }
 
       // Run until completion with signal support
       const { state: finalState, result } = await subRunner.run(stateWithTask, {
         signal: options?.signal,
       });
 
-      // Check abort signal after running
-      options?.signal?.throwIfAborted();
+      if (result.type === 'abort') {
+        return {
+          answer: 'Aborted',
+          totalSteps: result.totalSteps,
+          finalState,
+        } satisfies DelegateResult;
+      }
 
       if (result.type === 'success') {
         return {

@@ -94,6 +94,11 @@ export async function* streamCallingLLM(
     }
   }
 
+  // Guard: if aborted, do not mutate execState or yield stale llm:response
+  if (signal?.aborted) {
+    return;
+  }
+
   // Yield llm:response event after LLM response, carrying the full output
   yield {
     type: 'llm:response',
@@ -230,6 +235,11 @@ export async function* executeStepStream(
       done,
       effects,
     } = await executeAdvance(ctx, currentState, execState, registry, options);
+
+    if (options?.signal?.aborted) {
+      return { state: currentState, result: { type: 'abort' } };
+    }
+
     currentState = await maybeCompress(compressor, newState);
 
     // Emit tool events based on phase transitions

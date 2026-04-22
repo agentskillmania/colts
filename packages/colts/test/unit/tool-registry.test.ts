@@ -502,13 +502,16 @@ describe('Tool Registry (Step 3)', () => {
       expect(result).toBe('2');
     });
 
-    it('should throw when aborted before execution', async () => {
+    it('should complete normally even when aborted before execution', async () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
-        calculatorTool.execute({ expression: '1 + 1' }, { signal: controller.signal })
-      ).rejects.toThrow();
+      // Tool no longer throws on abort; runner handles abort at outer loop
+      const result = await calculatorTool.execute(
+        { expression: '1 + 1' },
+        { signal: controller.signal }
+      );
+      expect(result).toBe('2');
     });
   });
 });

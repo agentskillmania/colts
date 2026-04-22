@@ -121,14 +121,7 @@ export function createAskHumanTool(handler: AskHumanHandler): Tool<typeof askHum
       'Use text/number for open-ended answers, single-select for one choice, multi-select for multiple choices.',
     parameters: askHumanParameters,
     execute: async ({ questions, context }, options) => {
-      // Check abort signal before calling handler
-      options?.signal?.throwIfAborted();
-
       const result = await handler({ questions, context, signal: options?.signal });
-
-      // Check abort signal after handler completes
-      options?.signal?.throwIfAborted();
-
       return result;
     },
   };

@@ -363,10 +363,8 @@ export function useAgent(
                 );
               }
             } catch (error) {
-              if (!signal.aborted) {
-                const msg = error instanceof Error ? error.message : String(error);
-                addErrorEntry(msg);
-              }
+              const msg = error instanceof Error ? error.message : String(error);
+              addErrorEntry(msg);
             } finally {
               setIsRunning(false);
               setIsPaused(false);
@@ -545,6 +543,15 @@ async function executeRun(
 
       if (runResult.type === 'success') {
         consumer.finalizeAssistant(consumer.getAccumulatedContent() || runResult.answer);
+      } else if (runResult.type === 'abort') {
+        // Aborted: silently clean up without adding error entry
+        consumer.flush();
+        const id = consumer.getAssistantId();
+        setEntries((prev) =>
+          prev.map((e) =>
+            e.type === 'assistant' && e.id === id ? { ...e, isStreaming: false } : e
+          )
+        );
       } else {
         // max_steps or error
         consumer.flush();
@@ -564,7 +571,6 @@ async function executeRun(
       }
     }
   } catch (error) {
-    if (signal.aborted) return;
     const msg = error instanceof Error ? error.message : String(error);
     setEntries((prev) =>
       prev.map((e) =>
@@ -613,8 +619,6 @@ export async function executeStep(
   let continueLoop = true;
 
   while (continueLoop) {
-    if (signal.aborted) return;
-
     consumer.resetAssistant();
 
     try {
@@ -639,6 +643,12 @@ export async function executeStep(
           break;
         }
 
+        if (stepResult.type === 'abort') {
+          // Aborted: silently exit
+          continueLoop = false;
+          break;
+        }
+
         // Step complete but needs to continue — pause and wait for user to press Enter
         consumer.flush();
         const id = consumer.getAssistantId();
@@ -658,7 +668,6 @@ export async function executeStep(
         await pauseFn();
       }
     } catch (error) {
-      if (signal.aborted) return;
       const msg = error instanceof Error ? error.message : String(error);
       setEntries((prev) =>
         prev.map((e) =>
@@ -716,8 +725,6 @@ export async function executeAdvance(
 
   try {
     while (!isTerminalPhase(currentPhase)) {
-      signal.throwIfAborted();
-
       const gen = runner.advanceStream(effectiveState, currentExecState, undefined, { signal });
       let iterResult = await gen.next();
 
@@ -759,7 +766,6 @@ export async function executeAdvance(
       }
     }
   } catch (error) {
-    if (signal.aborted) return;
     const msg = error instanceof Error ? error.message : String(error);
     setEntries((prev) =>
       prev.map((e) =>

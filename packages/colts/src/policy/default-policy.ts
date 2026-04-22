@@ -35,6 +35,13 @@ export class DefaultExecutionPolicy implements IExecutionPolicy {
         runResultType: 'error',
       };
     }
+    if (stepResult.type === 'abort') {
+      return {
+        decision: 'stop',
+        reason: 'Aborted',
+        runResultType: 'abort',
+      };
+    }
     if (meta.stepCount >= meta.maxSteps) {
       return {
         decision: 'stop',
