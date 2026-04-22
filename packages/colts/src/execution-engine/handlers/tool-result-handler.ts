@@ -1,13 +1,13 @@
 /**
  * @fileoverview Tool-Result Phase Handler
  *
- * 处理 tool-result phase 的完整逻辑，包括：
- * - Skill signal 处理（applySkillSignal 唯一调用点）
- * - Delegate tool 检测
- * - 普通 tool 结果
+ * Full logic for handling the tool-result phase, including:
+ * - Skill signal processing (sole call site of applySkillSignal)
+ * - Delegate tool detection
+ * - Plain tool results
  *
- * 产出 AdvanceResult 含 effects 数组，控制流由 phase + done 决定：
- * - loaded/returned → phase=idle, done=false（继续循环）
+ * Produces AdvanceResult with effects array; control flow is determined by phase + done:
+ * - loaded/returned → phase=idle, done=false (continue loop)
  * - top-level return → phase=completed, done=true
  * - same-skill/cyclic/plain → phase=tool-result, done=false
  * - not-found → phase=error, done=true
@@ -33,12 +33,12 @@ export class ToolResultHandler implements IPhaseHandler {
     const effects: ToolPostEffect[] = [];
     const results = phase.results;
     const resultKeys = Object.keys(results);
-    // 取第一个结果用于 skill signal 检测和向后兼容
+    // Use first result for skill signal detection and backward compatibility
     const result = resultKeys.length > 0 ? results[resultKeys[0]] : undefined;
     const action = execState.action;
     let currentState = state;
 
-    // 1. Delegate 检测 — 搜索 allActions，fallback 到 single action
+    // 1. Delegate detection — search allActions, fallback to single action
     const delegateAction =
       execState.allActions?.find((a) => a.tool === 'delegate') ??
       (action?.tool === 'delegate' ? action : undefined);
@@ -48,14 +48,14 @@ export class ToolResultHandler implements IPhaseHandler {
       effects.push({ type: 'subagent:start', name: agentName, task: taskDesc });
     }
 
-    // 2. Skill signal 处理 — applySkillSignal 唯一调用点
+    // 2. Skill signal processing — sole call site of applySkillSignal
     if (isSkillSignal(result)) {
       const [newState, sigResult] = applySkillSignal(currentState, result as SkillSignal);
       currentState = newState;
 
       switch (sigResult.action) {
         case 'loaded': {
-          // 技能加载事件（用于 UI 展示加载进度）
+          // Skill loading event (for UI to show loading progress)
           effects.push({
             type: 'skill:loading',
             name: sigResult.skillName,
@@ -75,7 +75,7 @@ export class ToolResultHandler implements IPhaseHandler {
             state: currentState,
           });
           effects.push({ type: 'tool:end', result: formatSkillToolResult(result) });
-          // delegate 后置 subagent:end
+          // Delegate post-processing: subagent:end
           if (delegateAction) {
             effects.push({
               type: 'subagent:end',
@@ -121,7 +121,7 @@ export class ToolResultHandler implements IPhaseHandler {
               result,
             });
           }
-          // 顶级 skill return 后不直接结束，让 LLM 有机会向用户输出结果
+          // Top-level skill return does not end directly; let LLM output results to user
           execState.phase = { type: 'idle' };
           return { state: currentState, phase: execState.phase, done: false, effects };
         }
@@ -171,7 +171,7 @@ export class ToolResultHandler implements IPhaseHandler {
       }
     }
 
-    // 3. 普通 tool 结果
+    // 3. Plain tool result
     if (resultKeys.length <= 1) {
       effects.push({ type: 'tool:end', result });
     } else {

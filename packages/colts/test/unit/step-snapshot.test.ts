@@ -1,8 +1,8 @@
 /**
- * @fileoverview step() / stepStream() 集成测试
+ * @fileoverview step() / stepStream() integration tests
  *
- * 直接测 processToolResult 的单元测试已迁移到 tool-result-handler.test.ts。
- * 本文件保留 step()/stepStream() 路径的快照测试。
+ * Unit tests for processToolResult have been migrated to tool-result-handler.test.ts.
+ * This file keeps snapshot tests for the step()/stepStream() path.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -164,7 +164,7 @@ describe('step() blocking path - basic scenarios', () => {
       'phase-change', // parsing → parsed
       'tool:start', // parsed → executing-tool
       'phase-change', // executing-tool → tool-result (ExecutingToolHandler)
-      'phase-change', // tool-result → tool-result (ToolResultHandler 处理)
+      'phase-change', // tool-result → tool-result (ToolResultHandler processing)
       'tool:end', // ToolResultHandler: plain tool → tool:end effect
       'phase-change', // tool-result → tool-result (ToolResultHandler phase-change emit)
     ]);
@@ -289,12 +289,12 @@ describe('stepStream() streaming path - basic scenarios', () => {
 
     expect(effects).toContain('tools:start');
     expect(effects).toContain('tools:end');
-    // 不应该出现单数形式
+    // Singular form should not appear
     expect(effects).not.toContain('tool:start');
   });
 
   it('should yield error event and return error result when advance returns error phase', async () => {
-    // 创建一个 LLM 客户端，stream 会抛错
+    // Create an LLM client whose stream throws
     const client = {
       call: vi.fn(),
       stream: vi.fn().mockImplementation(async function* () {

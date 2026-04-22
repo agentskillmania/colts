@@ -9,28 +9,28 @@ import type { ToolCall } from './parser.js';
 import type { DelegateResult } from './subagent/types.js';
 
 // ---------------------------------------------------------------------------
-// ToolPostEffect — handler 产出的生命周期副作用
+// ToolPostEffect — lifecycle side effects produced by handler
 // ---------------------------------------------------------------------------
 
 /**
- * 描述 handler 处理完一个 phase 后产出的单个副作用。
+ * Describes a single side effect produced after handler processes a phase.
  *
- * 与旧版 ToolPostEffect 的区别：不再包含 `step:*` 控制类 effect。
- * 控制流由 AdvanceResult 的 `phase` + `done` 决定。
+ * Difference from old ToolPostEffect: no longer contains `step:*` control effects.
+ * Control flow is determined by AdvanceResult's `phase` + `done`.
  */
 export type ToolPostEffect =
-  // Skill 生命周期
+  // Skill lifecycle
   | { type: 'skill:loading'; name: string }
   | { type: 'skill:loaded'; name: string; tokenCount: number }
   | { type: 'skill:start'; name: string; task: string; state: AgentState }
   | { type: 'skill:end'; name: string; result: string; state: AgentState }
-  // SubAgent 生命周期
+  // SubAgent lifecycle
   | { type: 'subagent:start'; name: string; task: string }
   | { type: 'subagent:end'; name: string; result: unknown }
-  // Tool 完成
+  // Tool completion
   | { type: 'tool:end'; result: unknown }
   | { type: 'tools:end'; results: Record<string, unknown> }
-  // 错误
+  // Error
   | { type: 'error'; error: Error; context: { step: number } };
 
 /**

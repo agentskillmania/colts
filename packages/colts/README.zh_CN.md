@@ -1,5 +1,7 @@
 # @agentskillmania/colts
 
+[![npm version](https://img.shields.io/npm/v/@agentskillmania/colts.svg)](https://www.npmjs.com/package/@agentskillmania/colts)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
 无状态 ReAct Agent 框架。流式优先的 API 设计、三级执行控制、可插拔的上下文工程。一个 Runner 实例可安全服务多个并发 Agent。

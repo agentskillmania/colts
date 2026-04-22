@@ -272,7 +272,7 @@ export interface ChatStreamChunk {
  * ```
  */
 
-/** run() / runStream() 的硬上限安全网，防止无限循环 */
+/** Hard ceiling safety net for run() / runStream() to prevent infinite loops */
 const RUN_HARD_LIMIT = 1000;
 
 export class AgentRunner extends EventEmitter<RunnerEventMap> {
@@ -748,7 +748,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           this.emit('tools:start', { actions: result.phase.actions });
         }
       }
-      // Handler 产出的 effects 统一转发到 EventEmitter
+      // Forward effects produced by handler to EventEmitter
       if (result.effects && result.effects.length > 0) {
         for (const effect of result.effects) {
           this.emit(effect.type as keyof RunnerEventMap, effect as never);
@@ -872,7 +872,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         currentState = await maybeCompress(this.compressor, result.state);
 
-        // Emit executing-tool 事件
+        // Emit executing-tool event
         if (result.phase.type === 'executing-tool') {
           if (result.phase.actions.length === 1) {
             this.emit('tool:start', { action: result.phase.actions[0] });
@@ -881,7 +881,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           }
         }
 
-        // 转发 handler 产出的 effects
+        // Forward effects produced by handler
         if (result.effects && result.effects.length > 0) {
           for (const effect of result.effects) {
             this.emit(effect.type as keyof RunnerEventMap, effect as never);
@@ -890,7 +890,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         this.emit('phase-change', { from, to: result.phase });
 
-        // 控制流由 phase + done 决定
+        // Control flow is determined by phase + done
         if (result.done && result.phase.type === 'completed') {
           const stepResult: StepResult = { type: 'done', answer: result.phase.answer };
           this.emit('step:end', { step: stepIdx, result: stepResult });
@@ -903,17 +903,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           return { state: currentState, result: stepResult };
         }
 
-        // ToolResultHandler 已处理 tool-result phase（有 effects 表示已处理）
-        // 此时需要根据 handler 的输出来决定下一步
+        // ToolResultHandler has processed tool-result phase (effects indicate processed)
+        // Next step depends on handler output
         if (result.phase.type === 'tool-result' && result.effects && result.effects.length > 0) {
-          // same-skill/cyclic/plain tool → 返回 continue
+          // same-skill/cyclic/plain tool → return continue
           const toolResult = execState.toolResult;
           const stepResult: StepResult = { type: 'continue', toolResult };
           this.emit('step:end', { step: stepIdx, result: stepResult });
           return { state: currentState, result: stepResult };
         }
 
-        // ExecutingToolHandler 返回的 tool-result（无 effects）→ 继续循环让 ToolResultHandler 处理
+        // ExecutingToolHandler returned tool-result (no effects) → continue loop for ToolResultHandler
         if (
           result.phase.type === 'tool-result' &&
           (!result.effects || result.effects.length === 0)
@@ -921,7 +921,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           continue;
         }
 
-        // skill loaded/returned → phase 被重置为 idle，继续循环
+        // Skill loaded/returned → phase reset to idle, continue loop
         if (result.phase.type === 'idle') {
           continue;
         }

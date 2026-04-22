@@ -345,7 +345,7 @@ describe('Step 11: ask_human Tool', () => {
   });
 
   describe('AbortSignal support', () => {
-    it('应该将 signal 传递给 handler', async () => {
+    it('should pass signal to handler', async () => {
       const handler = vi.fn().mockResolvedValue({
         q1: { type: 'direct', value: 'hello' },
       });
@@ -365,7 +365,7 @@ describe('Step 11: ask_human Tool', () => {
       });
     });
 
-    it('无 options 时 signal 应为 undefined', async () => {
+    it('signal should be undefined without options', async () => {
       const handler = vi.fn().mockResolvedValue({});
 
       const tool = createAskHumanTool(handler);
@@ -381,7 +381,7 @@ describe('Step 11: ask_human Tool', () => {
       });
     });
 
-    it('信号已 abort 时 handler 不应被调用', async () => {
+    it('handler should not be called when signal is already aborted', async () => {
       const handler = vi.fn().mockResolvedValue({});
       const tool = createAskHumanTool(handler);
 
@@ -398,7 +398,7 @@ describe('Step 11: ask_human Tool', () => {
       expect(handler).not.toHaveBeenCalled();
     });
 
-    it('handler 可通过 signal 实现 abort 感知', async () => {
+    it('handler can detect abort via signal', async () => {
       const receivedSignals: (AbortSignal | undefined)[] = [];
       const handler = vi.fn().mockImplementation(async ({ signal }) => {
         receivedSignals.push(signal);

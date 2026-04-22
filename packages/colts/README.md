@@ -1,5 +1,7 @@
 # @agentskillmania/colts
 
+[![npm version](https://img.shields.io/npm/v/@agentskillmania/colts.svg)](https://www.npmjs.com/package/@agentskillmania/colts)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
 A stateless ReAct agent framework with streaming-first APIs, three-level execution control, and pluggable context engineering. One runner instance safely serves multiple concurrent agents.

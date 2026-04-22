@@ -178,7 +178,7 @@ describe('User Story: AbortSignal Cancellation', () => {
         const controller = new AbortController();
         const { result } = await runner.run(stateWithMsg, { signal: controller.signal });
 
-        // 如果 LLM 使用了 ask_human，handler 应该收到 signal
+        // If LLM used ask_human, handler should receive signal
         if (result.type === 'success' && result.totalSteps > 1) {
           expect(receivedSignal).toBeDefined();
         }

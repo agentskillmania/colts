@@ -130,7 +130,7 @@ Do NOT just say you are done — always use return_skill.`,
           // If poet was used, answer should be roughly 3 lines
           const lines = result.answer.split('\n').filter((l) => l.trim().length > 0);
           expect(lines.length).toBeGreaterThanOrEqual(2);
-          // run 成功结束时 cleanupStaleSkillState 会清空 current，验证 cleanup 正确执行
+          // On successful run completion, cleanupStaleSkillState clears current; verify cleanup
           expect(finalState.context.skillState?.current).toBeNull();
         }
       },
