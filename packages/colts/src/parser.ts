@@ -44,6 +44,48 @@ export class ParseError extends Error {
 }
 
 /**
+ * Extract explicit thinking and cleaned content from an LLM response.
+ *
+ * Priority:
+ * 1. Native thinking from the {@code thinking} field (e.g. Claude extended thinking).
+ * 2. {@code <think>} tag extracted from the content text.
+ * 3. No thinking — returns empty {@code thought} and raw content as {@code cleanedContent}.
+ *
+ * When multiple {@code <think>} blocks are present, only the first one is extracted.
+ * The first tag (and its content) is removed from {@code cleanedContent}; subsequent tags are left intact.
+ *
+ * @param rawContent - The raw content text from the LLM response
+ * @param nativeThinking - Optional native thinking provided by the LLM API
+ * @returns An object containing the extracted {@code thought} and {@code cleanedContent}
+ */
+export function extractThinkingAndContent(
+  rawContent: string,
+  nativeThinking?: string
+): { thought: string; cleanedContent: string } {
+  // 1. Native thinking has the highest priority.
+  if (nativeThinking) {
+    return {
+      thought: nativeThinking,
+      cleanedContent: rawContent,
+    };
+  }
+
+  // 2. Extract <think> tag from content.
+  const thinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/);
+  if (thinkMatch) {
+    const thought = thinkMatch[1].trim();
+    const cleanedContent = rawContent.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    return { thought, cleanedContent };
+  }
+
+  // 3. No explicit thinking found.
+  return {
+    thought: '',
+    cleanedContent: rawContent,
+  };
+}
+
+/**
  * Parse LLM response to extract thought and tool calls
  *
  * @param response - LLM response from llm-client
@@ -64,15 +106,8 @@ export class ParseError extends Error {
 export function parseResponse(response: LLMResponse): ParseResult {
   const rawContent = response.content ?? '';
 
-  // 1. Native thinking from supported models (e.g. Claude)
-  let thought = response.thinking ?? '';
-  // 2. Prompt-level thinking: extract<think>...</think>
-  if (!thought) {
-    const thinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/);
-    if (thinkMatch) {
-      thought = thinkMatch[1].trim();
-    }
-  }
+  // Extract thinking using the shared logic.
+  const { thought } = extractThinkingAndContent(rawContent, response.thinking);
 
   // Extract tool calls from response (use original toolCalls metadata)
   const toolCalls: ToolCall[] = [];
