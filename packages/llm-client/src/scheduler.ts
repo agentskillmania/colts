@@ -59,7 +59,7 @@ class Semaphore {
    * @remarks
    * If the current count is below max, the permit is granted immediately.
    * Otherwise, the call waits in a FIFO queue until a permit becomes available.
-   * 当 signal 被 abort 时，自动从队列中移除并拒绝 Promise，避免死等。
+   * When signal is aborted, automatically remove from queue and reject Promise to avoid deadlock.
    */
   async acquire(signal?: AbortSignal): Promise<void> {
     if (this.count < this.max) {
@@ -67,7 +67,7 @@ class Semaphore {
       return;
     }
 
-    // 已经 abort 的信号直接拒绝
+    // Already aborted signal is rejected immediately
     if (signal?.aborted) {
       const err = new Error('The operation was aborted');
       err.name = 'AbortError';
@@ -80,7 +80,7 @@ class Semaphore {
       const onAbort = () => {
         if (settled) return;
         settled = true;
-        // 从队列中移除等待者
+        // Remove waiter from queue
         const idx = this.queue.indexOf(resolveFn);
         if (idx !== -1) {
           this.queue.splice(idx, 1);
@@ -432,7 +432,7 @@ export class RequestScheduler extends EventEmitter {
 
     const result = await this.queue.add(
       async (): Promise<T> => {
-        // 早期 abort 检查 — 快速失败，避免无谓的 semaphore 获取
+        // Early abort check — fail fast to avoid unnecessary semaphore acquisition
         if (signal?.aborted) {
           const err = new Error('The operation was aborted');
           err.name = 'AbortError';

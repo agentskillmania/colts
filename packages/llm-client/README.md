@@ -1,5 +1,7 @@
 # @agentskillmania/llm-client
 
+[![npm version](https://img.shields.io/npm/v/@agentskillmania/llm-client.svg)](https://www.npmjs.com/package/@agentskillmania/llm-client)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
 A unified LLM client with three-level concurrency control, multi-key load balancing, priority queuing, and built-in retry. Works with OpenAI, Anthropic, Google, and any OpenAI-compatible endpoint out of the box.
