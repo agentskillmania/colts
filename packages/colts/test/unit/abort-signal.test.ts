@@ -181,7 +181,33 @@ describe('AbortSignal (Step 16)', () => {
   });
 
   // ============================================================
-  // Streaming abort
+  // runStream abort
+  // ============================================================
+  describe('runStream abort', () => {
+    it('should return abort result when signal is pre-aborted', async () => {
+      const client = createMockClient();
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+      const controller = new AbortController();
+      controller.abort();
+
+      const gen = runner.runStream(state, { signal: controller.signal });
+
+      // First event is 'complete' with abort result
+      const { done: done1, value: value1 } = await gen.next();
+      expect(done1).toBe(false);
+      expect(value1.type).toBe('complete');
+      expect(value1.result.type).toBe('abort');
+
+      // Generator returns final state
+      const { done: done2, value: value2 } = await gen.next();
+      expect(done2).toBe(true);
+      expect(value2.result.type).toBe('abort');
+    });
+  });
+
+  // ============================================================
+  // stepStream abort
   // ============================================================
   describe('stepStream abort', () => {
     it('should stop yielding tokens when signal is aborted during stream', async () => {
@@ -212,15 +238,11 @@ describe('AbortSignal (Step 16)', () => {
         signal: controller.signal,
       });
 
-      try {
-        for await (const event of iterator) {
-          if (event.type === 'token') {
-            tokens.push(event.token ?? '');
-            controller.abort();
-          }
+      for await (const event of iterator) {
+        if (event.type === 'token') {
+          tokens.push(event.token ?? '');
+          controller.abort();
         }
-      } catch {
-        // AbortError is expected — signal.throwIfAborted() throws on next loop iteration
       }
 
       expect(tokens.length).toBeGreaterThanOrEqual(1);
