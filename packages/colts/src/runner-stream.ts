@@ -208,7 +208,9 @@ export async function* executeStepStream(
 
   let currentState = state;
   while (!isTerminalPhase(execState.phase)) {
-    options?.signal?.throwIfAborted();
+    if (options?.signal?.aborted) {
+      return { state: currentState, result: { type: 'abort' } };
+    }
     const fromPhase = execState.phase;
 
     // TODO(M3): same calling-llm bypass as executeAdvanceStream above, see plan there

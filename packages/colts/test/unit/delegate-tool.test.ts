@@ -1161,6 +1161,65 @@ describe('createDelegateTool', () => {
       expect(result.answer).toBe('Task result');
     });
 
+    it('should return abort result when sub-agent is aborted mid-run', async () => {
+      const localParentRegistry = new ToolRegistry();
+      const localConfigs = new Map<string, SubAgentConfig>([
+        [
+          'default',
+          {
+            name: 'default',
+            description: 'Default agent',
+            config: { name: 'default', instructions: 'Test agent', tools: [] },
+            maxSteps: 3,
+            allowDelegation: false,
+          },
+        ],
+      ]);
+
+      // Create a mock client that stays pending until resolved externally
+      let resolveLLM: ((value: LLMResponse) => void) | undefined;
+      const client = {
+        call: vi.fn().mockImplementation(() => {
+          return new Promise<LLMResponse>((resolve) => {
+            resolveLLM = resolve;
+            // Abort as soon as the LLM call is in-flight
+            controller.abort();
+          });
+        }),
+        stream: vi.fn(),
+      } as unknown as LLMClient;
+
+      const tool = createDelegateTool({
+        parentToolRegistry: localParentRegistry,
+        subAgentConfigs: localConfigs,
+        llmProvider: client,
+      });
+
+      const controller = new AbortController();
+
+      const executePromise = tool.execute(
+        { agent: 'default', task: 'Do something' },
+        { signal: controller.signal }
+      );
+
+      // Wait for the mock client's call to have been invoked
+      // (it will resolve the promise and abort the controller)
+      await vi.waitFor(() => expect(client.call).toHaveBeenCalled(), {
+        timeout: 2000,
+      });
+
+      // Resolve the LLM call so the sub-agent can finish its step
+      resolveLLM!({
+        content: 'Done',
+        tokens: mockTokens,
+        stopReason: 'stop',
+      });
+
+      const result = (await executePromise) as DelegateResult;
+
+      expect(result.answer).toBe('Aborted');
+    });
+
     it('should return abort result when aborted before execution', async () => {
       const localParentRegistry = new ToolRegistry();
       const localConfigs = new Map<string, SubAgentConfig>([
