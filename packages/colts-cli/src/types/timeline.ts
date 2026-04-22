@@ -19,14 +19,14 @@ export type DetailLevel = 'compact' | 'detail' | 'verbose';
 /**
  * Timeline entry — converted from StreamEvent / RunStreamEvent
  *
- * 所有 entry 共享 seq 字段（全局单调递增序号），用于保证渲染顺序。
- * 即使 React 批量更新合并了中间状态，按 seq 排序后条目顺序始终正确。
+ * All entries share the seq field (globally monotonically increasing number) to guarantee render order.
+ * Even if React batch updates merge intermediate states, sorting by seq ensures correct entry order.
  */
 export type TimelineEntry =
   | {
       type: 'user';
       id: string;
-      /** 全局单调递增序号，保证渲染顺序 */
+      /** Globally monotonically increasing number, guarantees render order */
       seq: number;
       content: string;
       timestamp: number;
@@ -47,7 +47,7 @@ export type TimelineEntry =
       args?: unknown;
       result?: unknown;
       isRunning?: boolean;
-      /** 工具执行耗时（毫秒） */
+      /** Tool execution duration (milliseconds) */
       duration?: number;
       timestamp: number;
     }
@@ -105,7 +105,7 @@ export type TimelineEntry =
       status: 'loading' | 'loaded' | 'active' | 'completed';
       tokenCount?: number;
       result?: string;
-      /** Skill 任务描述 */
+      /** Skill task description */
       task?: string;
       timestamp: number;
     }
@@ -137,11 +137,11 @@ export type TimelineEntry =
       type: 'llm-request';
       id: string;
       seq: number;
-      /** 发送给 LLM 的消息数量 */
+      /** Number of messages sent to LLM */
       messageCount: number;
-      /** 可用工具列表 */
+      /** Available tool list */
       tools: string[];
-      /** 当前 skill 上下文 */
+      /** Current skill context */
       skill: { current: string | null; stack: string[] } | null;
       timestamp: number;
     }
@@ -149,9 +149,9 @@ export type TimelineEntry =
       type: 'llm-response';
       id: string;
       seq: number;
-      /** LLM 返回的文本长度 */
+      /** Length of text returned by LLM */
       textLength: number;
-      /** 工具调用列表 */
+      /** Tool call list */
       toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
       timestamp: number;
     };
@@ -202,17 +202,17 @@ export function filterByDetailLevel(entries: TimelineEntry[], level: DetailLevel
 }
 
 /**
- * 全局 seq 计数器
+ * Global seq counter
  *
- * 保证所有 TimelineEntry 的 seq 单调递增，用于渲染排序。
- * 跨 StreamEventConsumer 和 useAgent 共享。
+ * Ensures all TimelineEntry seq values monotonically increase, used for render sorting.
+ * Shared across StreamEventConsumer and useAgent.
  */
 let globalSeq = 0;
 
 /**
- * 分配下一个 seq 序号
+ * Allocate next seq number
  *
- * @returns 单调递增的序号
+ * @returns Monotonically increasing number
  */
 export function nextSeq(): number {
   return ++globalSeq;

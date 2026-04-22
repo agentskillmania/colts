@@ -1,8 +1,8 @@
 /**
- * @fileoverview AskHuman 对话框 — agent 请求用户回答问题
+ * @fileoverview AskHuman dialog — agent asks user to answer questions
  *
- * 支持 text、number、single-select、multi-select 四种题型。
- * 逐题展示，答完所有题后一次性返回。
+ * Supports text, number, single-select, and multi-select question types.
+ * Shows one question at a time; returns all answers after completion.
  */
 
 import React, { useState } from 'react';
@@ -18,9 +18,9 @@ interface AskHumanDialogProps {
 }
 
 /**
- * AskHuman 对话框组件
+ * AskHuman dialog component
  *
- * 逐题展示，收集答案后通过 onAnswer 返回 HumanResponse。
+ * Shows questions one by a time; returns HumanResponse via onAnswer after collecting answers.
  */
 export function AskHumanDialog({ questions, context, onAnswer }: AskHumanDialogProps) {
   const [currentIndex, setCurrentIndex] = useState(0);

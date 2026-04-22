@@ -1,7 +1,7 @@
 /**
- * @fileoverview 会话持久化 — 保存、加载、列出、删除会话
+ * @fileoverview Session persistence — save, load, list, delete sessions
  *
- * 会话文件格式 v1：
+ * Session file format v1:
  * ```json
  * {
  *   "version": 1,
@@ -10,7 +10,7 @@
  * }
  * ```
  *
- * 向后兼容：没有 version 字段的旧格式（裸 AgentState JSON）也能正确加载和列出。
+ * Backward compatible: old format without version field (raw AgentState JSON) can also be loaded and listed correctly.
  */
 
 import * as fs from 'node:fs/promises';
@@ -20,47 +20,47 @@ import type { AgentState } from '@agentskillmania/colts';
 import { deserializeState } from '@agentskillmania/colts';
 
 /**
- * 会话元数据
+ * Session metadata
  */
 export interface SessionMeta {
-  /** 会话唯一标识 */
+  /** Session unique identifier */
   id: string;
-  /** 创建时间（毫秒时间戳） */
+  /** Creation time (millisecond timestamp) */
   createdAt: number;
-  /** 最后更新时间（毫秒时间戳） */
+  /** Last update time (millisecond timestamp) */
   updatedAt: number;
-  /** 消息数量 */
+  /** Message count */
   messageCount: number;
-  /** 最后一条消息预览（截断到 50 字符） */
+  /** Preview of last message (truncated to 50 characters) */
   lastMessage: string;
 }
 
 /**
- * 会话文件格式 v1
+ * Session file format v1
  */
 interface SessionFile {
-  /** 格式版本号 */
+  /** Format version number */
   version: number;
-  /** 元数据（用于快速列出，不解析完整 state） */
+  /** Metadata (for fast listing without parsing full state) */
   meta: SessionMeta;
-  /** 完整 AgentState 快照 */
+  /** Full AgentState snapshot */
   state: AgentState;
 }
 
-/** 会话文件默认存储目录 */
+/** Default session file storage directory */
 const DEFAULT_BASE_DIR = path.join(os.homedir(), '.agentskillmania', 'colts', 'sessions');
 
-/** lastMessage 预览最大长度 */
+/** Maximum length of lastMessage preview */
 const PREVIEW_MAX_LENGTH = 50;
 
-/** 当前会话文件格式版本 */
+/** Current session file format version */
 const SESSION_VERSION = 1;
 
 /**
- * 从 AgentState 提取元数据
+ * Extract metadata from AgentState
  *
- * @param state - AgentState 快照
- * @returns 元数据
+ * @param state - AgentState snapshot
+ * @returns Metadata
  */
 function extractMeta(state: AgentState): SessionMeta {
   const messages = state.context?.messages ?? [];
@@ -84,23 +84,23 @@ function extractMeta(state: AgentState): SessionMeta {
 }
 
 /**
- * 获取会话存储目录路径
+ * Get session storage directory path
  *
- * @param baseDir - 可选自定义根目录（用于测试隔离）
- * @returns 会话文件存储目录的绝对路径
+ * @param baseDir - Optional custom root directory (for test isolation)
+ * @returns Absolute path to session file storage directory
  */
 export function getSessionDir(baseDir?: string): string {
   return baseDir ?? DEFAULT_BASE_DIR;
 }
 
 /**
- * 列出所有会话及其元数据
+ * List all sessions and their metadata
  *
- * 扫描会话目录下的所有 `.json` 文件并提取元数据。
- * 目录不存在时返回空数组。
+ * Scans all `.json` files in the session directory and extracts metadata.
+ * Returns empty array when directory does not exist.
  *
- * @param baseDir - 可选自定义根目录
- * @returns 按更新时间降序排列的会话元数据列表
+ * @param baseDir - Optional custom root directory
+ * @returns Session metadata list sorted by update time descending
  */
 export async function listSessions(baseDir?: string): Promise<SessionMeta[]> {
   const sessionDir = getSessionDir(baseDir);
@@ -122,10 +122,10 @@ export async function listSessions(baseDir?: string): Promise<SessionMeta[]> {
       const data = JSON.parse(content) as Record<string, unknown>;
 
       if (data.version === SESSION_VERSION && data.meta) {
-        // v1 格式：直接读 meta 字段
+        // v1 format: read meta field directly
         metas.push(data.meta as SessionMeta);
       } else {
-        // 旧格式（裸 AgentState）：从 state 中提取元数据
+        // Old format (raw AgentState): extract metadata from state
         const state = data as unknown as AgentState;
         const messages = state.context?.messages ?? [];
         const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
@@ -145,24 +145,24 @@ export async function listSessions(baseDir?: string): Promise<SessionMeta[]> {
         });
       }
     } catch {
-      // 文件损坏或格式异常，跳过
+      // File corrupted or format abnormal, skip
     }
   }
 
-  // 按更新时间降序排列（最新的在前）
+  // Sort by update time descending (newest first)
   metas.sort((a, b) => b.updatedAt - a.updatedAt);
 
   return metas;
 }
 
 /**
- * 保存会话到文件
+ * Save session to file
  *
- * 将 AgentState 包装为 v1 格式写入文件。
- * 自动创建会话目录。
+ * Wraps AgentState as v1 format and writes to file.
+ * Auto-creates session directory.
  *
- * @param state - 要保存的 AgentState
- * @param baseDir - 可选自定义根目录
+ * @param state - AgentState to save
+ * @param baseDir - Optional custom root directory
  */
 export async function saveSession(state: AgentState, baseDir?: string): Promise<void> {
   const sessionDir = getSessionDir(baseDir);
@@ -181,14 +181,14 @@ export async function saveSession(state: AgentState, baseDir?: string): Promise<
 }
 
 /**
- * 加载会话
+ * Load session
  *
- * 读取并反序列化 AgentState。自动兼容 v1 格式和旧格式。
+ * Reads and deserializes AgentState. Automatically compatible with v1 and old formats.
  *
- * @param sessionId - 要加载的会话 ID
- * @param baseDir - 可选自定义根目录
- * @returns 反序列化后的 AgentState
- * @throws 会话文件不存在时抛出异常
+ * @param sessionId - Session ID to load
+ * @param baseDir - Optional custom root directory
+ * @returns Deserialized AgentState
+ * @throws When session file does not exist
  */
 export async function loadSession(sessionId: string, baseDir?: string): Promise<AgentState> {
   const sessionDir = getSessionDir(baseDir);
@@ -198,21 +198,21 @@ export async function loadSession(sessionId: string, baseDir?: string): Promise<
   const data = JSON.parse(content) as Record<string, unknown>;
 
   if (data.version === SESSION_VERSION && data.state) {
-    // v1 格式：取 state 字段
+    // v1 format: take state field
     return data.state as AgentState;
   }
 
-  // 旧格式（裸 AgentState）：直接返回
+  // Old format (raw AgentState): return directly
   return deserializeState(content);
 }
 
 /**
- * 删除会话
+ * Delete session
  *
- * 删除会话的持久化文件。文件不存在时静默忽略。
+ * Deletes session persistence file. Silently ignored when file does not exist.
  *
- * @param sessionId - 要删除的会话 ID
- * @param baseDir - 可选自定义根目录
+ * @param sessionId - Session ID to delete
+ * @param baseDir - Optional custom root directory
  */
 export async function deleteSession(sessionId: string, baseDir?: string): Promise<void> {
   const sessionDir = getSessionDir(baseDir);
@@ -221,6 +221,6 @@ export async function deleteSession(sessionId: string, baseDir?: string): Promis
   try {
     await fs.unlink(filePath);
   } catch {
-    // 文件不存在，静默忽略
+    // File does not exist, silently ignore
   }
 }

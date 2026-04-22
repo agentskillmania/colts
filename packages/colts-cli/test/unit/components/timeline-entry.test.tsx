@@ -1,5 +1,5 @@
 /**
- * @fileoverview TimelineEntry 组件单元测试 — 覆盖全部 13 种 entry 类型的渲染
+ * @fileoverview TimelineEntry component unit tests — covers rendering of all 13 entry types
  */
 
 import React from 'react';
@@ -9,21 +9,21 @@ import { TimelineEntry } from '../../../src/components/timeline/timeline-entry.j
 import type { TimelineEntry as TimelineEntryType } from '../../../src/types/timeline.js';
 import { ICONS } from '../../../src/utils/theme.js';
 
-// ── 工厂函数 ──
+// ── Factory functions ──
 
 let testSeq = 0;
 function seq(): number {
   return ++testSeq;
 }
 
-/** 创建 user entry */
+/** Create user entry */
 function makeUser(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'user' }>>
 ): TimelineEntryType {
   return { type: 'user', id: 'u1', seq: seq(), content: 'Hello', timestamp: 1000, ...overrides };
 }
 
-/** 创建 assistant entry */
+/** Create assistant entry */
 function makeAssistant(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'assistant' }>>
 ): TimelineEntryType {
@@ -37,14 +37,14 @@ function makeAssistant(
   };
 }
 
-/** 创建 tool entry */
+/** Create tool entry */
 function makeTool(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'tool' }>>
 ): TimelineEntryType {
   return { type: 'tool', id: 't1', seq: seq(), tool: 'read_file', timestamp: 1000, ...overrides };
 }
 
-/** 创建 phase entry */
+/** Create phase entry */
 function makePhase(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'phase' }>>
 ): TimelineEntryType {
@@ -59,7 +59,7 @@ function makePhase(
   };
 }
 
-/** 创建 thought entry */
+/** Create thought entry */
 function makeThought(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'thought' }>>
 ): TimelineEntryType {
@@ -73,14 +73,14 @@ function makeThought(
   };
 }
 
-/** 创建 step-start entry */
+/** Create step-start entry */
 function makeStepStart(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'step-start' }>>
 ): TimelineEntryType {
   return { type: 'step-start', id: 'ss1', seq: seq(), step: 0, timestamp: 1000, ...overrides };
 }
 
-/** 创建 step-end entry */
+/** Create step-end entry */
 function makeStepEnd(
   resultType: 'done' | 'continue' | 'error' = 'done',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'step-end' }>>
@@ -102,7 +102,7 @@ function makeStepEnd(
   };
 }
 
-/** 创建 run-complete entry */
+/** Create run-complete entry */
 function makeRunComplete(
   resultType: 'success' | 'max_steps' | 'error' = 'success',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'run-complete' }>>
@@ -116,7 +116,7 @@ function makeRunComplete(
   return { type: 'run-complete', id: 'rc1', seq: seq(), result, timestamp: 1000, ...overrides };
 }
 
-/** 创建 compress entry */
+/** Create compress entry */
 function makeCompress(
   status: 'compressing' | 'compressed' = 'compressing',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'compress' }>>
@@ -124,7 +124,7 @@ function makeCompress(
   return { type: 'compress', id: 'c1', seq: seq(), status, timestamp: 1000, ...overrides };
 }
 
-/** 创建 skill entry */
+/** Create skill entry */
 function makeSkill(
   status: 'loading' | 'loaded' | 'active' | 'completed' = 'loading',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'skill' }>>
@@ -140,7 +140,7 @@ function makeSkill(
   };
 }
 
-/** 创建 subagent entry */
+/** Create subagent entry */
 function makeSubagent(
   status: 'start' | 'end' = 'start',
   overrides?: Partial<Extract<TimelineEntryType, { type: 'subagent' }>>
@@ -156,7 +156,7 @@ function makeSubagent(
   };
 }
 
-/** 创建 system entry */
+/** Create system entry */
 function makeSystem(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'system' }>>
 ): TimelineEntryType {
@@ -170,7 +170,7 @@ function makeSystem(
   };
 }
 
-/** 创建 error entry */
+/** Create error entry */
 function makeError(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'error' }>>
 ): TimelineEntryType {
@@ -184,7 +184,7 @@ function makeError(
   };
 }
 
-/** 创建 llm-request entry */
+/** Create llm-request entry */
 function makeLlmRequest(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'llm-request' }>>
 ): TimelineEntryType {
@@ -200,7 +200,7 @@ function makeLlmRequest(
   };
 }
 
-/** 创建 llm-response entry */
+/** Create llm-response entry */
 function makeLlmResponse(
   overrides?: Partial<Extract<TimelineEntryType, { type: 'llm-response' }>>
 ): TimelineEntryType {

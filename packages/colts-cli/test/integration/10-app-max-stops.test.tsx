@@ -25,18 +25,18 @@ describe('Integration: App max_steps stop with real LLM', () => {
     async () => {
       const { lastFrame, unmount } = renderApp({ runner });
 
-      // 问一个需要工具调用的问题，强制 LLM 调 calculator
+      // Ask a question requiring tool calls, forcing LLM to call calculator
       await submitMessage('What is 25 times 37? Use the calculator tool.');
       const frame = await waitForIdle(lastFrame, 90000);
 
-      // 用户消息可见
+      // User message visible
       expect(frame).toContain('❯');
       expect(frame).toContain('What is 25 times 37?');
 
-      // 工具应该被调用了（第一轮 LLM 会调 calculator）
+      // Tool should have been called (first round LLM calls calculator)
       expect(frame.toLowerCase()).toContain('calculator');
 
-      // agent 不应该处于运行中状态（已停止）
+      // Agent should not be in running state (stopped)
       expect(frame).not.toContain('Running');
 
       unmount();

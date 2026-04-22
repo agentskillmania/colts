@@ -1,9 +1,9 @@
 /**
- * @fileoverview AskHumanDialog 组件单元测试
+ * @fileoverview AskHumanDialog component unit tests
  *
- * 测试逐题问答流程：text、number、single-select、multi-select 四种题型，
- * 以及多题顺序回答、context 显示、答案格式。
- * mock 策略：mock @inkjs/ui 的 TextInput/Select/MultiSelect，捕获 onSubmit/onChange。
+ * Tests question-by-question flow: text, number, single-select, multi-select question types,
+ * as well as sequential multi-question answering, context display, answer format.
+ * Mock strategy: mock @inkjs/ui TextInput/Select/MultiSelect, capture onSubmit/onChange.
  */
 
 import React from 'react';
@@ -33,7 +33,7 @@ vi.mock('@inkjs/ui', () => ({
   },
 }));
 
-// ── 辅助 ──
+// ── Helpers ──
 
 function resetCaptures() {
   capturedTextInputOnSubmit = null;
@@ -41,12 +41,12 @@ function resetCaptures() {
   capturedMultiSelectOnSubmit = null;
 }
 
-// ── 测试用例 ──
+// ── Test cases ──
 
 describe('AskHumanDialog', () => {
   beforeEach(resetCaptures);
 
-  it('显示第一题（text 类型）', () => {
+  it('shows first question (text type)', () => {
     const questions: Question[] = [{ id: 'q1', question: 'What is your name?', type: 'text' }];
     const onAnswer = vi.fn();
     const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
@@ -55,7 +55,7 @@ describe('AskHumanDialog', () => {
     expect(frame).toContain('What is your name?');
   });
 
-  it('显示 context 信息', () => {
+  it('shows context info', () => {
     const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
     const onAnswer = vi.fn();
     const { lastFrame } = render(
@@ -64,15 +64,15 @@ describe('AskHumanDialog', () => {
     expect(lastFrame()).toContain('Need your info');
   });
 
-  it('不显示 context（无 context 时）', () => {
+  it('does not show context when none provided', () => {
     const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
     const onAnswer = vi.fn();
     const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
-    // 只检查不崩溃，不含额外 context 文字
+    // Only check it does not crash, no extra context text
     expect(lastFrame()).toContain('Name?');
   });
 
-  it('text 类型提交答案后调用 onAnswer', () => {
+  it('calls onAnswer after text type submits answer', () => {
     const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
     const onAnswer = vi.fn();
     render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
@@ -85,7 +85,7 @@ describe('AskHumanDialog', () => {
     expect(response.q1).toEqual({ type: 'direct', value: 'Alice' });
   });
 
-  it('number 类型解析为数字', () => {
+  it('number type parses as number', () => {
     const questions: Question[] = [{ id: 'q1', question: 'How old?', type: 'number' }];
     const onAnswer = vi.fn();
     render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
@@ -96,7 +96,7 @@ describe('AskHumanDialog', () => {
     expect(response.q1).toEqual({ type: 'direct', value: 42 });
   });
 
-  it('number 类型无效输入保留原字符串', () => {
+  it('number type preserves original string for invalid input', () => {
     const questions: Question[] = [{ id: 'q1', question: 'How old?', type: 'number' }];
     const onAnswer = vi.fn();
     render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
@@ -107,7 +107,7 @@ describe('AskHumanDialog', () => {
     expect(response.q1).toEqual({ type: 'direct', value: 'not-a-number' });
   });
 
-  it('single-select 类型使用 Select onChange', () => {
+  it('single-select type uses Select onChange', () => {
     const questions: Question[] = [
       { id: 'q1', question: 'Pick one', type: 'single-select', options: ['A', 'B', 'C'] },
     ];
@@ -122,7 +122,7 @@ describe('AskHumanDialog', () => {
     expect(response.q1).toEqual({ type: 'direct', value: 'B' });
   });
 
-  it('multi-select 类型使用 MultiSelect onSubmit', () => {
+  it('multi-select type uses MultiSelect onSubmit', () => {
     const questions: Question[] = [
       { id: 'q1', question: 'Pick many', type: 'multi-select', options: ['X', 'Y', 'Z'] },
     ];
@@ -137,7 +137,7 @@ describe('AskHumanDialog', () => {
     expect(response.q1).toEqual({ type: 'direct', value: ['X', 'Z'] });
   });
 
-  it('多题顺序回答：第一题答完后显示第二题', async () => {
+  it('sequential multi-question answering: shows second question after first', async () => {
     const questions: Question[] = [
       { id: 'q1', question: 'Name?', type: 'text' },
       { id: 'q2', question: 'Age?', type: 'number' },
@@ -145,26 +145,26 @@ describe('AskHumanDialog', () => {
     const onAnswer = vi.fn();
     const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
-    // 第一题
+    // First question
     expect(lastFrame()).toContain('[1/2]');
     expect(lastFrame()).toContain('Name?');
 
-    // 提交第一题答案
+    // Submit first question answer
     capturedTextInputOnSubmit!('Bob');
 
-    // 等待重渲染，第二题出现
+    // Wait for re-render, second question appears
     await vi.waitFor(() => {
       expect(lastFrame()).toContain('[2/2]');
       expect(lastFrame()).toContain('Age?');
     });
 
-    // 此时 onAnswer 还没调用（还有第二题）
+    // onAnswer not called yet (still has second question)
     expect(onAnswer).not.toHaveBeenCalled();
 
-    // 提交第二题
+    // Submit second question
     capturedTextInputOnSubmit!('25');
 
-    // 现在两题都答完，onAnswer 被调用
+    // Now both questions answered, onAnswer is called
     await vi.waitFor(() => {
       expect(onAnswer).toHaveBeenCalledOnce();
     });
@@ -173,7 +173,7 @@ describe('AskHumanDialog', () => {
     expect(response.q2).toEqual({ type: 'direct', value: 25 });
   });
 
-  it('三题混合类型完整流程', async () => {
+  it('three-question mixed-type full flow', async () => {
     const questions: Question[] = [
       { id: 'name', question: 'Your name?', type: 'text' },
       { id: 'color', question: 'Favorite color?', type: 'single-select', options: ['red', 'blue'] },
@@ -182,23 +182,23 @@ describe('AskHumanDialog', () => {
     const onAnswer = vi.fn();
     const { lastFrame } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
 
-    // 第一题（text）
+    // First question (text)
     expect(lastFrame()).toContain('[1/3]');
     capturedTextInputOnSubmit!('Alice');
 
-    // 等待第二题（single-select）
+    // Wait for second question (single-select)
     await vi.waitFor(() => {
       expect(lastFrame()).toContain('[2/3]');
     });
     capturedSelectOnChange!('blue');
 
-    // 等待第三题（multi-select）
+    // Wait for third question (multi-select)
     await vi.waitFor(() => {
       expect(lastFrame()).toContain('[3/3]');
     });
     capturedMultiSelectOnSubmit!(['js', 'ts']);
 
-    // 最终结果
+    // Final result
     await vi.waitFor(() => {
       expect(onAnswer).toHaveBeenCalledOnce();
     });
@@ -208,7 +208,7 @@ describe('AskHumanDialog', () => {
     expect(response.skills).toEqual({ type: 'direct', value: ['js', 'ts'] });
   });
 
-  it('unmount 不报错', () => {
+  it('unmount does not throw', () => {
     const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
     const onAnswer = vi.fn();
     const { unmount } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);

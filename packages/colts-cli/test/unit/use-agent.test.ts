@@ -149,47 +149,47 @@ describe('parseCommand', () => {
 });
 
 describe('trimToMaxEntries', () => {
-  it('不超过上限时返回原数组（同一引用）', () => {
+  it('returns original array when not exceeding limit (same reference)', () => {
     const arr = [1, 2, 3];
     const result = trimToMaxEntries(arr, 200);
-    expect(result).toBe(arr); // 同一引用
+    expect(result).toBe(arr); // same reference
   });
 
-  it('恰好等于上限时返回原数组', () => {
+  it('returns original array when exactly at limit', () => {
     const arr = Array.from({ length: 200 }, (_, i) => i);
     const result = trimToMaxEntries(arr, 200);
     expect(result).toBe(arr);
     expect(result).toHaveLength(200);
   });
 
-  it('超出上限时裁剪到 max 条（保留最新）', () => {
+  it('trims to max entries when exceeding limit (keeps newest)', () => {
     const arr = Array.from({ length: 250 }, (_, i) => i);
     const result = trimToMaxEntries(arr, 200);
     expect(result).toHaveLength(200);
-    // 保留最后的 200 条（索引 50-249）
+    // Keep last 200 entries (indices 50-249)
     expect(result[0]).toBe(50);
     expect(result[199]).toBe(249);
   });
 
-  it('空数组不裁剪', () => {
+  it('does not trim empty array', () => {
     const arr: number[] = [];
     const result = trimToMaxEntries(arr, 200);
     expect(result).toBe(arr);
     expect(result).toHaveLength(0);
   });
 
-  it('max=1 只保留最后 1 条', () => {
+  it('max=1 keeps only last entry', () => {
     const arr = [10, 20, 30, 40];
     const result = trimToMaxEntries(arr, 1);
     expect(result).toHaveLength(1);
     expect(result[0]).toBe(40);
   });
 
-  it('使用默认 MAX_ENTRIES 常量', () => {
+  it('uses default MAX_ENTRIES constant', () => {
     expect(MAX_ENTRIES).toBe(200);
   });
 
-  it('超出默认 MAX_ENTRIES 时正确裁剪', () => {
+  it('correctly trims when exceeding default MAX_ENTRIES', () => {
     const arr = Array.from({ length: 300 }, (_, i) => `entry-${i}`);
     const result = trimToMaxEntries(arr, MAX_ENTRIES);
     expect(result).toHaveLength(200);

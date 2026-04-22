@@ -1,14 +1,14 @@
 /**
- * @fileoverview 执行过程追踪日志写入器
+ * @fileoverview Execution trace log writer
  *
- * 记录所有 RunStreamEvent 为 JSONL 格式，每个事件对应一条 trace record。
- * 与 session 快照对称：session 记录最终状态，trace 记录完整执行过程。
+ * Records all RunStreamEvent as JSONL format; each event corresponds to one trace record.
+ * Symmetric to session snapshot: session records final state, trace records full execution process.
  *
- * 特性：
- * - 双时间戳：ISO 8601（人可读）+ elapsed ms（调试间隔）
- * - tool 配对计时：tool:start → tool:end 自动计算 durationMs
- * - 大字段截断：避免 trace 文件膨胀
- * - 构造时写 trace.start，flush 时写 trace.end
+ * Features:
+ * - Dual timestamps: ISO 8601 (human-readable) + elapsed ms (debug interval)
+ * - Tool pairing timing: tool:start → tool:end automatically calculates durationMs
+ * - Large field truncation: prevents trace file bloat
+ * - Writes trace.start on construction, trace.end on flush
  */
 
 import * as fs from 'node:fs';
@@ -16,20 +16,20 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import type { RunStreamEvent } from '@agentskillmania/colts';
 
-/** 追踪日志默认存储目录 */
+/** Default trace log storage directory */
 const DEFAULT_TRACE_DIR = path.join(os.homedir(), '.agentskillmania', 'colts', 'traces');
 
-/** 大字段截断长度 */
+/** Large field truncation length */
 const TRUNCATE_MAX_LENGTH = 200;
 
 /**
- * 截断字符串到指定长度
+ * Truncate string to specified length
  *
- * 超长部分用 "..." 省略。
+ * Omitted excess is replaced with "...".
  *
- * @param value - 要截断的值
- * @param maxLength - 最大长度
- * @returns 截断后的字符串
+ * @param value - Value to truncate
+ * @param maxLength - Maximum length
+ * @returns Truncated string
  */
 function truncate(value: unknown, maxLength: number = TRUNCATE_MAX_LENGTH): string {
   const str = typeof value === 'string' ? value : JSON.stringify(value);
@@ -38,15 +38,15 @@ function truncate(value: unknown, maxLength: number = TRUNCATE_MAX_LENGTH): stri
 }
 
 /**
- * 追踪日志记录类型
+ * Trace log record type
  *
- * 所有记录都有 ts（ISO 8601）和 elapsed（毫秒）两个时间字段。
+ * All records have ts (ISO 8601) and elapsed (ms) time fields.
  */
 type TraceRecord =
-  // 包裹事件
+  // Wrapper events
   | { event: 'trace.start'; ts: string; elapsed: 0; sessionId: string }
   | { event: 'trace.end'; ts: string; elapsed: number; totalEvents: number }
-  // run/step 事件
+  // run/step events
   | { event: 'step.start'; ts: string; elapsed: number; step: number }
   | {
       event: 'step.end';
@@ -57,7 +57,7 @@ type TraceRecord =
       answer?: string;
     }
   | { event: 'phase.change'; ts: string; elapsed: number; from: string; to: string }
-  // LLM 事件
+  // LLM events
   | {
       event: 'llm.request';
       ts: string;
@@ -73,7 +73,7 @@ type TraceRecord =
       text: string;
       toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
     }
-  // tool 事件
+  // Tool events
   | {
       event: 'tool.start';
       ts: string;
@@ -104,17 +104,17 @@ type TraceRecord =
       results: Record<string, unknown>;
       durationMs: number | null;
     }
-  // 错误
+  // Error
   | { event: 'error'; ts: string; elapsed: number; message: string; context: string }
-  // skill 事件
+  // Skill events
   | { event: 'skill.loading'; ts: string; elapsed: number; name: string }
   | { event: 'skill.loaded'; ts: string; elapsed: number; name: string; tokenCount: number }
   | { event: 'skill.start'; ts: string; elapsed: number; name: string; task: string }
   | { event: 'skill.end'; ts: string; elapsed: number; name: string; result: string }
-  // subagent 事件
+  // Subagent events
   | { event: 'subagent.start'; ts: string; elapsed: number; name: string; task: string }
   | { event: 'subagent.end'; ts: string; elapsed: number; name: string; result: string }
-  // 压缩事件
+  // Compression events
   | { event: 'compress.start'; ts: string; elapsed: number }
   | {
       event: 'compress.end';
@@ -123,7 +123,7 @@ type TraceRecord =
       summary: string;
       removedCount: number;
     }
-  // run 结束
+  // Run end
   | {
       event: 'run.end';
       ts: string;
@@ -134,14 +134,14 @@ type TraceRecord =
     };
 
 /**
- * 执行过程追踪写入器
+ * Execution trace writer
  *
  * @example
  * ```typescript
  * const tracer = new TraceWriter(sessionId);
  * for await (const event of runner.runStream(state, ...)) {
  *   tracer.consume(event);
- *   // ... 处理事件
+ *   // ... process events
  * }
  * await tracer.flush();
  * ```
@@ -150,14 +150,14 @@ export class TraceWriter {
   private stream: fs.WriteStream;
   private startTime: number;
   private eventCount = 0;
-  /** tool:start 信息记录，key 是 action.id */
+  /** tool:start info record, key is action.id */
   private toolStartInfos = new Map<string, { startTime: number; tool: string; callId: string }>();
-  /** tools:start 时间戳记录，用于多 tool 并行调用 */
+  /** tools:start timestamp record, for multi-tool parallel calls */
   private toolsStartTime: number | null = null;
 
   /**
-   * @param sessionId - 会话 ID，作为文件名
-   * @param traceDir - 可选自定义输出目录（用于测试隔离）
+   * @param sessionId - Session ID, used as filename
+   * @param traceDir - Optional custom output directory (for test isolation)
    */
   constructor(sessionId: string, traceDir?: string) {
     const dir = traceDir ?? DEFAULT_TRACE_DIR;
@@ -166,7 +166,7 @@ export class TraceWriter {
 
     this.startTime = Date.now();
 
-    // 写入 trace.start 标记
+    // Write trace.start marker
     const record: TraceRecord = {
       event: 'trace.start',
       ts: new Date().toISOString(),
@@ -177,11 +177,11 @@ export class TraceWriter {
   }
 
   /**
-   * 从事件流中提取 trace 记录并写入
+   * Extract trace records from event stream and write
    *
-   * 记录所有 RunStreamEvent（token 除外）。
+   * Records all RunStreamEvent (except tokens).
    *
-   * @param event - 来自 runStream 的事件
+   * @param event - Event from runStream
    */
   consume(event: RunStreamEvent): void {
     const record = this.toRecord(event);
@@ -192,10 +192,10 @@ export class TraceWriter {
   }
 
   /**
-   * 刷新并关闭写入流
+   * Flush and close write stream
    *
-   * 必须在会话结束时调用，确保所有数据落盘。
-   * 写入 trace.end 标记后关闭流。
+   * Must be called at session end to ensure all data is persisted.
+   * Closes stream after writing trace.end marker.
    */
   async flush(): Promise<void> {
     const record: TraceRecord = {
@@ -212,7 +212,7 @@ export class TraceWriter {
   }
 
   /**
-   * 生成当前时间戳和 elapsed
+   * Generate current timestamp and elapsed
    */
   private timestamp(): { ts: string; elapsed: number } {
     return {
@@ -222,13 +222,13 @@ export class TraceWriter {
   }
 
   /**
-   * 将 RunStreamEvent 转换为 TraceRecord
+   * Convert RunStreamEvent to TraceRecord
    */
   private toRecord(event: RunStreamEvent): TraceRecord | null {
     const { ts, elapsed } = this.timestamp();
 
     switch (event.type) {
-      // token 不记录，量大且最终文本在 session 和 llm.response 里已有
+      // Tokens are not recorded; large volume and final text already exists in session and llm.response
       case 'token':
         return null;
 
@@ -275,7 +275,7 @@ export class TraceWriter {
         };
 
       case 'tool:start': {
-        // 记录开始时间和 action 信息，用于 tool:end 配对
+        // Record start time and action info for tool:end pairing
         this.toolStartInfos.set(event.action.id, {
           startTime: Date.now(),
           tool: event.action.tool,
@@ -292,14 +292,14 @@ export class TraceWriter {
       }
 
       case 'tool:end': {
-        // 优先用 callId 精确匹配，fallback 到 FIFO
+        // Prefer exact match by callId, fallback to FIFO
         const info = event.callId
           ? this.toolStartInfos.get(event.callId)
           : this.getFirstToolStartInfo();
         if (event.callId && info) {
           this.toolStartInfos.delete(event.callId);
         } else if (!event.callId && info) {
-          // FIFO 匹配：从 map 中移除
+          // FIFO match: remove from map
           const firstKey = this.toolStartInfos.keys().next().value;
           if (firstKey !== undefined) this.toolStartInfos.delete(firstKey);
         }
@@ -317,7 +317,7 @@ export class TraceWriter {
 
       case 'tools:start': {
         this.toolsStartTime = Date.now();
-        // 记录每个 action 的信息
+        // Record info for each action
         for (const action of event.actions) {
           this.toolStartInfos.set(action.id, {
             startTime: Date.now(),
@@ -435,9 +435,9 @@ export class TraceWriter {
   }
 
   /**
-   * 获取第一个 tool:start 的信息并从 map 中移除
+   * Get first tool:start info and remove from map
    *
-   * 用于 tool:end 事件（没有 callId/tool）配对计时和信息关联。
+   * Used for tool:end events (without callId/tool) pairing timing and info association.
    */
   private getFirstToolStartInfo(): { startTime: number; tool: string; callId: string } | null {
     const firstKey = this.toolStartInfos.keys().next().value;
@@ -448,7 +448,7 @@ export class TraceWriter {
   }
 
   /**
-   * 写入一行 JSONL
+   * Write one JSONL line
    */
   private write(data: TraceRecord): void {
     this.stream.write(JSON.stringify(data) + '\n');

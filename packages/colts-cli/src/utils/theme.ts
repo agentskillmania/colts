@@ -1,28 +1,28 @@
 /**
- * @fileoverview CLI 视觉设计规范 — 颜色、图标、格式化工具
+ * @fileoverview CLI visual design spec — colors, icons, formatting utilities
  *
- * 所有视觉相关的常量和工具函数集中于此文件。
- * 组件只引用此文件的常量，不硬编码颜色或图标。
+ * All visual-related constants and utility functions are centralized in this file.
+ * Components only reference constants from this file, without hard-coding colors or icons.
  */
 
-// ── 颜色 ──
+// ── Colors ──
 
 /**
- * 语义颜色映射
+ * Semantic color map
  *
- * 自动适配 dark/light 终端主题。
- * 使用 chalk 颜色名保证 ANSI 兼容性。
+ * Auto-adapts to dark/light terminal themes.
+ * Uses chalk color names for ANSI compatibility.
  *
- * 使用规则：
- * - accent (magenta): skill 相关状态
- * - info (cyan): 信息性事件（compress、subagent start、system）
- * - success (green): 完成事件（tool done、skill loaded/completed、step end done）
- * - warning (yellow): 进行中（tool running、skill loading）
- * - error (red): 错误和失败
- * - dim (gray): 次要信息（时间戳、args、phase、duration）
- * - user (blue): 用户输入
- * - assistant (white): Agent 回复
- * - tool (gray): 保留，优先用 warning/success 区分运行/完成
+ * Usage rules:
+ * - accent (magenta): skill-related states
+ * - info (cyan): informational events (compress, subagent start, system)
+ * - success (green): completion events (tool done, skill loaded/completed, step end done)
+ * - warning (yellow): in-progress (tool running, skill loading)
+ * - error (red): errors and failures
+ * - dim (gray): secondary info (timestamps, args, phase, duration)
+ * - user (blue): user input
+ * - assistant (white): agent reply
+ * - tool (gray): reserved; prefer warning/success to distinguish running/completed
  */
 export const theme = {
   success: 'green',
@@ -37,53 +37,53 @@ export const theme = {
 } as const;
 
 /**
- * 颜色类型
+ * Color type
  */
 export type ThemeColor = (typeof theme)[keyof typeof theme];
 
-// ── 图标 ──
+// ── Icons ──
 
 /**
- * 各 TimelineEntry 类型对应的图标
+ * Icons for each TimelineEntry type
  *
- * 选取广泛支持的 Unicode 字符，避免终端兼容性问题。
+ * Selects widely supported Unicode characters to avoid terminal compatibility issues.
  */
 export const ICONS = {
-  /** 用户消息 */
+  /** User message */
   user: '❯',
-  /** Agent 回复 */
+  /** Agent reply */
   assistant: '◀',
-  /** 工具运行中 */
+  /** Tool running */
   toolRunning: '⚙',
-  /** 工具完成 */
+  /** Tool completed */
   toolDone: '✓',
-  /** 工具失败 */
+  /** Tool failed */
   toolError: '✗',
-  /** Phase 变化 */
+  /** Phase change */
   phase: '·',
-  /** 思考 */
+  /** Thought */
   thought: '◉',
-  /** 压缩 */
+  /** Compress */
   compress: '»',
   /** Skill */
   skill: '◆',
   /** SubAgent */
   subagent: '⇢',
-  /** 系统消息 */
+  /** System message */
   system: 'ℹ',
-  /** 分隔线 */
+  /** Divider */
   separator: '─',
 } as const;
 
-// ── 格式化工具 ──
+// ── Formatting utilities ──
 
 /**
- * 格式化时间戳为 HH:MM:SS 格式
+ * Format timestamp as HH:MM:SS
  *
- * 使用固定格式，不依赖 locale，保证跨系统一致性。
+ * Uses fixed format without locale dependency for cross-system consistency.
  *
- * @param ts - 毫秒级时间戳
- * @returns HH:MM:SS 格式的时间字符串
+ * @param ts - Millisecond timestamp
+ * @returns Time string in HH:MM:SS format
  */
 export function formatTimestamp(ts: number): string {
   const d = new Date(ts);
@@ -94,10 +94,10 @@ export function formatTimestamp(ts: number): string {
 }
 
 /**
- * 格式化持续时间
+ * Format duration
  *
- * @param ms - 毫秒数
- * @returns 人类可读的持续时间字符串，如 "1.2s" 或 "350ms"
+ * @param ms - Milliseconds
+ * @returns Human-readable duration string, e.g., "1.2s" or "350ms"
  */
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -105,11 +105,11 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * 截断字符串到最大长度
+ * Truncate string to maximum length
  *
- * @param s - 输入字符串
- * @param max - 最大长度
- * @returns 截断后的字符串，超出部分用 "..." 替代
+ * @param s - Input string
+ * @param max - Maximum length
+ * @returns Truncated string; excess replaced with "..."
  */
 export function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
@@ -117,10 +117,10 @@ export function truncate(s: string, max: number): string {
 }
 
 /**
- * 格式化工具参数为可读字符串
+ * Format tool arguments as readable string
  *
- * @param args - 工具参数对象或原始值
- * @returns 格式化后的字符串
+ * @param args - Tool argument object or raw value
+ * @returns Formatted string
  */
 export function formatArgs(args: unknown): string {
   if (typeof args === 'object' && args !== null) {
@@ -131,10 +131,10 @@ export function formatArgs(args: unknown): string {
 }
 
 /**
- * 格式化工具结果为可读字符串
+ * Format tool result as readable string
  *
- * @param result - 工具结果值
- * @returns 格式化后的字符串
+ * @param result - Tool result value
+ * @returns Formatted string
  */
 export function formatResult(result: unknown): string {
   if (result === undefined) return '';

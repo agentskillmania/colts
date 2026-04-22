@@ -1,8 +1,8 @@
 /**
- * @fileoverview SetupWizard 组件单元测试
+ * @fileoverview SetupWizard component unit tests
  *
- * 测试 3 步配置向导：Provider 选择 → API Key 输入 → Model 输入。
- * mock 策略：mock @inkjs/ui 的 Select 和 TextInput，捕获 onChange/onSubmit。
+ * Tests 3-step config wizard: Provider selection → API Key input → Model input.
+ * Mock strategy: mock @inkjs/ui Select and TextInput, capture onChange/onSubmit.
  */
 
 import React from 'react';
@@ -26,80 +26,80 @@ vi.mock('@inkjs/ui', () => ({
   },
 }));
 
-// ── 辅助 ──
+// ── Helpers ──
 
 function resetCaptures() {
   capturedSelectOnChange = null;
   capturedTextInputOnSubmit = null;
 }
 
-// ── 测试用例 ──
+// ── Test cases ──
 
 describe('SetupWizard', () => {
   beforeEach(resetCaptures);
 
-  // ── Step 1: Provider 选择 ──
+  // ── Step 1: Provider selection ──
 
-  it('初始显示 Step 1/3', () => {
+  it('initially shows Step 1/3', () => {
     const onComplete = vi.fn();
     const { lastFrame } = render(<SetupWizard onComplete={onComplete} />);
     expect(lastFrame()).toContain('Step 1/3');
   });
 
-  it('显示 colts-cli Setup 标题', () => {
+  it('shows colts-cli Setup title', () => {
     const onComplete = vi.fn();
     const { lastFrame } = render(<SetupWizard onComplete={onComplete} />);
     expect(lastFrame()).toContain('colts-cli Setup');
   });
 
-  it('显示 Select your LLM provider 提示', () => {
+  it('shows Select your LLM provider prompt', () => {
     const onComplete = vi.fn();
     const { lastFrame } = render(<SetupWizard onComplete={onComplete} />);
     expect(lastFrame()).toContain('Select your LLM provider');
   });
 
-  it('选择 Provider 后进入 Step 2', async () => {
+  it('enters Step 2 after selecting Provider', async () => {
     const onComplete = vi.fn();
     const { lastFrame } = render(<SetupWizard onComplete={onComplete} />);
 
     expect(capturedSelectOnChange).not.toBeNull();
     capturedSelectOnChange!('openai');
 
-    // 等待重渲染
+    // Wait for re-render
     await vi.waitFor(() => {
       expect(lastFrame()).toContain('Step 2/3');
     });
     expect(lastFrame()).toContain('API key');
   });
 
-  // ── Step 2: API Key 输入 ──
+  // ── Step 2: API Key input ──
 
-  it('输入 API Key 后进入 Step 3', async () => {
+  it('enters Step 3 after inputting API Key', async () => {
     const onComplete = vi.fn();
     const { lastFrame } = render(<SetupWizard onComplete={onComplete} />);
 
-    // 选择 provider
+    // Select provider
     capturedSelectOnChange!('openai');
 
-    // 等待 step 2 渲染后 TextInput 出现
+    // Wait for step 2 render, TextInput appears
     await vi.waitFor(() => {
       expect(lastFrame()).toContain('Step 2/3');
     });
 
-    // 此时 TextInput mock 应该已经被调用
+    // TextInput mock should have been called by now
     expect(capturedTextInputOnSubmit).not.toBeNull();
     capturedTextInputOnSubmit!('sk-test-key');
 
-    // 进入 Step 3
+    // Enter Step 3
     await vi.waitFor(() => {
       expect(lastFrame()).toContain('Step 3/3');
     });
     expect(lastFrame()).toContain('Model');
   });
 
-  // ── Step 3: Model 输入 ──
+  // ── Step 3: Model input ──
 
-  it('显示默认 model（openai）', async () => {
+  it('shows default model (openai)', async () => {
     const onComplete = vi.fn();
     const { lastFrame } = render(<SetupWizard onComplete={onComplete} />);
 
@@ -115,11 +115,11 @@ describe('SetupWizard', () => {
       expect(lastFrame()).toContain('Step 3/3');
     });
 
-    // 默认 model 提示
+    // Default model hint
     expect(lastFrame()).toContain('gpt-4o');
   });
 
-  it('输入空 Model 使用默认值并调用 onComplete', async () => {
+  it('uses default value when empty Model is input and calls onComplete', async () => {
     const onComplete = vi.fn();
     const { lastFrame } = render(<SetupWizard onComplete={onComplete} />);
 
@@ -135,7 +135,7 @@ describe('SetupWizard', () => {
       expect(lastFrame()).toContain('Step 3/3');
     });
 
-    // Step 3: 输入空值
+    // Step 3: input empty value
     capturedTextInputOnSubmit!('');
 
     await vi.waitFor(() => {
@@ -148,7 +148,7 @@ describe('SetupWizard', () => {
     });
   });
 
-  it('输入自定义 Model 值', async () => {
+  it('inputs custom Model value', async () => {
     const onComplete = vi.fn();
     render(<SetupWizard onComplete={onComplete} />);
 
@@ -164,7 +164,7 @@ describe('SetupWizard', () => {
       expect(capturedTextInputOnSubmit).not.toBeNull();
     });
 
-    // Step 3: 输入自定义 model
+    // Step 3: input custom model
     capturedTextInputOnSubmit!('gpt-4o-mini');
 
     await vi.waitFor(() => {
@@ -177,7 +177,7 @@ describe('SetupWizard', () => {
     });
   });
 
-  it('Google provider 的默认 model', async () => {
+  it('Google provider default model', async () => {
     const onComplete = vi.fn();
     render(<SetupWizard onComplete={onComplete} />);
 
@@ -191,7 +191,7 @@ describe('SetupWizard', () => {
       expect(capturedTextInputOnSubmit).not.toBeNull();
     });
 
-    // Step 3 默认是 gemini
+    // Step 3 default is gemini
     capturedTextInputOnSubmit!('');
 
     await vi.waitFor(() => {
@@ -204,7 +204,7 @@ describe('SetupWizard', () => {
     });
   });
 
-  it('Other provider 的默认 model', async () => {
+  it('Other provider default model', async () => {
     const onComplete = vi.fn();
     render(<SetupWizard onComplete={onComplete} />);
 
@@ -230,7 +230,7 @@ describe('SetupWizard', () => {
     });
   });
 
-  it('完整流程：anthropic provider + 自定义 model', async () => {
+  it('full flow: anthropic provider + custom model', async () => {
     const onComplete = vi.fn();
     render(<SetupWizard onComplete={onComplete} />);
 
@@ -256,7 +256,7 @@ describe('SetupWizard', () => {
     });
   });
 
-  it('unmount 不报错', () => {
+  it('unmount does not throw', () => {
     const onComplete = vi.fn();
     const { unmount } = render(<SetupWizard onComplete={onComplete} />);
     expect(() => unmount()).not.toThrow();

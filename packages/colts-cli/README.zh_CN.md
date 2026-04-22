@@ -1,5 +1,7 @@
 # @agentskillmania/colts-cli
 
+[![npm version](https://img.shields.io/npm/v/@agentskillmania/colts-cli.svg)](https://www.npmjs.com/package/@agentskillmania/colts-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
 colts Agent 框架的终端交互界面。基于 [Ink](https://github.com/vadimdemedes/ink) 构建的对话式 AI Agent 开发调试工具。

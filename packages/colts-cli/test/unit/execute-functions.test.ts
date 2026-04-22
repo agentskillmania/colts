@@ -1,9 +1,9 @@
 /**
- * @fileoverview executeStep / executeAdvance 控制流回归测试
+ * @fileoverview executeStep / executeAdvance control flow regression tests
  *
- * 覆盖 CR 指出的三个"裸奔"路径：
- * - T-CLI2: executeAdvance 内层循环中 await pauseFn() 在 phase-change 时阻塞
- * - T-CLI3: executeStep done 时 break（非 return）确保 tracer.flush() 执行
+ * Covers three "naked" paths pointed out by CR:
+ * - T-CLI2: await pauseFn() blocks on phase-change in executeAdvance inner loop
+ * - T-CLI3: break (not return) on executeStep done ensures tracer.flush() executes
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -50,7 +50,7 @@ function createMockSetState() {
 }
 
 // ---------------------------------------------------------------------------
-// T-CLI3: executeStep done → break (not return) → tracer.flush() 执行
+// T-CLI3: executeStep done → break (not return) → tracer.flush() executes
 // ---------------------------------------------------------------------------
 
 describe('executeStep regression (CR T-CLI3)', () => {
@@ -58,7 +58,7 @@ describe('executeStep regression (CR T-CLI3)', () => {
     const mockState = createMockState();
     const doneResult: StepResult = { type: 'done', answer: 'test answer' };
 
-    // 创建 mock runner，stepStream 返回一个立即完成的 generator
+    // Create mock runner whose stepStream returns an immediately completing generator
     const mockRunner = {
       stepStream: vi.fn().mockImplementation(async function* () {
         yield { type: 'token', token: 'hello' };
@@ -71,7 +71,7 @@ describe('executeStep regression (CR T-CLI3)', () => {
     const abortController = new AbortController();
     const pauseFn = vi.fn().mockResolvedValue(undefined);
 
-    // spy on TraceWriter.prototype.flush 来验证它被调用
+    // Spy on TraceWriter.prototype.flush to verify it is called
     const { TraceWriter } = await import('../../src/trace-writer.js');
     const flushSpy = vi.spyOn(TraceWriter.prototype, 'flush').mockResolvedValue();
 
@@ -85,7 +85,7 @@ describe('executeStep regression (CR T-CLI3)', () => {
       pauseFn
     );
 
-    // tracer.flush() 应该被调用 — 如果原来用 return 而非 break，这不会被调用
+    // tracer.flush() should be called — if original code used return instead of break, this would not be called
     expect(flushSpy).toHaveBeenCalledTimes(1);
 
     flushSpy.mockRestore();
@@ -119,7 +119,7 @@ describe('executeStep regression (CR T-CLI3)', () => {
       pauseFn
     );
 
-    // 即使出错，tracer.flush() 也应该被调用
+    // Even on error, tracer.flush() should be called
     expect(flushSpy).toHaveBeenCalledTimes(1);
 
     flushSpy.mockRestore();
@@ -134,7 +134,7 @@ describe('executeAdvance regression (CR T-CLI2)', () => {
   it('should await pauseFn on each phase-change event', async () => {
     const mockState = createMockState();
 
-    // 模拟 advanceStream：yield phase-change 事件，然后完成
+    // Simulate advanceStream: yield phase-change events, then complete
     const mockRunner = {
       advanceStream: vi.fn().mockImplementation(async function* () {
         yield { type: 'phase-change', from: { type: 'idle' }, to: { type: 'preparing' } };
@@ -162,8 +162,8 @@ describe('executeAdvance regression (CR T-CLI2)', () => {
       pauseFn
     );
 
-    // 每次 phase-change 都应该 await pauseFn
-    // 有 2 次 phase-change 事件
+    // Each phase-change should await pauseFn
+    // There are 2 phase-change events
     expect(pauseFn).toHaveBeenCalledTimes(2);
   });
 
@@ -196,11 +196,11 @@ describe('executeAdvance regression (CR T-CLI2)', () => {
       pauseFn
     );
 
-    // phase-change → calling-llm 应该触发 resetAssistant（会调 setEntries）
-    // 加上初始 resetAssistant 和 phase-change 时的 setEntries 更新，
-    // setEntries 调用次数应该 >= 3（初始 + 2次 phase-change 的 flush + resetAssistant）
+    // phase-change → calling-llm should trigger resetAssistant (calls setEntries)
+    // Plus initial resetAssistant and setEntries updates during phase-change,
+    // setEntries call count should be >= 3 (initial + 2 phase-change flushes + resetAssistant)
     expect(setEntries).toHaveBeenCalled();
-    // pauseFn 在 calling-llm phase-change 时被调用
+    // pauseFn is called at calling-llm phase-change
     expect(pauseFn).toHaveBeenCalled();
   });
 });

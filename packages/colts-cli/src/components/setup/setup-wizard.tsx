@@ -1,8 +1,8 @@
 /**
- * @fileoverview SetupWizard — 首次启动配置向导
+ * @fileoverview SetupWizard — first-launch configuration wizard
  *
- * 3 步引导：选择 Provider → 输入 API Key → 选择 Model。
- * 完成后调用 onComplete 保存配置。
+ * 3-step guide: Choose Provider → Enter API Key → Choose Model.
+ * Calls onComplete to save config after completion.
  */
 
 import React, { useState } from 'react';
@@ -35,7 +35,7 @@ const DEFAULT_MODELS: Record<string, string> = {
 };
 
 /**
- * 首次配置向导组件
+ * First-time configuration wizard component
  */
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [step, setStep] = useState(1);

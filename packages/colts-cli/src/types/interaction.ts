@@ -1,18 +1,18 @@
 /**
- * @fileoverview 交互状态类型 — AskHuman 和 Confirm 对话框共享状态
+ * @fileoverview Interaction state types — shared state for AskHuman and Confirm dialogs
  *
- * 当 agent 调用 ask_human 工具或需要确认的危险工具时，
- * MainTUI 切换到交互模式，渲染对应的对话框组件。
+ * When agent calls ask_human tool or a dangerous tool requiring confirmation,
+ * MainTUI switches to interaction mode and renders the corresponding dialog component.
  */
 
 import type { Question, HumanResponse } from '@agentskillmania/colts';
 
 /**
- * 交互状态
+ * Interaction state
  *
- * - `none`: 正常对话模式
- * - `ask-human`: agent 请求用户回答问题
- * - `confirm`: 危险工具需要用户确认
+ * - `none`: Normal chat mode
+ * - `ask-human`: Agent requests user to answer questions
+ * - `confirm`: Dangerous tool requires user confirmation
  */
 export type InteractionState =
   | { type: 'none' }

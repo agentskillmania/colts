@@ -61,7 +61,7 @@ export interface ColtsConfig extends Record<string, unknown> {
     /** Whether delegation is allowed */
     allowDelegation?: boolean;
   }>;
-  /** 需要用户确认的工具列表 */
+  /** List of tools requiring user confirmation */
   confirmTools?: string[];
 }
 
@@ -95,7 +95,7 @@ export interface AppConfig {
   skills?: string[];
   /** SubAgent configuration list */
   subAgents?: ColtsConfig['subAgents'];
-  /** 需要用户确认的工具列表 */
+  /** List of tools requiring user confirmation */
   confirmTools?: string[];
 }
 
@@ -255,12 +255,12 @@ export async function saveConfig(
 }
 
 /**
- * 首次配置向导保存
+ * First-time configuration wizard save
  *
- * 将 provider、apiKey、model 写入配置文件。
+ * Writes provider, apiKey, and model to the config file.
  *
- * @param setup - 向导收集的配置
- * @param options - 保存选项
+ * @param setup - Configuration collected by the wizard
+ * @param options - Save options
  */
 export async function saveSetup(
   setup: { provider: string; apiKey: string; model: string },

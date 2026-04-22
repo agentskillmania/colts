@@ -1,11 +1,11 @@
 /**
- * @fileoverview 单条 TimelineEntry 渲染器 — 根据 entry.type 选择布局和样式
+ * @fileoverview Single TimelineEntry renderer — chooses layout and style based on entry.type
  *
- * 每种 entry 类型有独立的图标和颜色，视觉扫描时可立即区分。
- * user/assistant/tool 使用自定义布局（streaming cursor、参数层级）。
- * step-start/step-end 使用分隔线样式。
- * run-complete/error 使用 Alert（带边框，醒目）。
- * 其余条目使用统一的图标 + 颜色行。
+ * Each entry type has its own icon and color for instant visual distinction.
+ * user/assistant/tool use custom layouts (streaming cursor, parameter hierarchy).
+ * step-start/step-end use divider styles.
+ * run-complete/error use Alert (bordered, prominent).
+ * Other entries use unified icon + color row.
  */
 
 import React from 'react';
@@ -22,22 +22,22 @@ import {
 } from '../../utils/theme.js';
 
 /**
- * TimelineEntry 组件 props
+ * TimelineEntry component props
  */
 export interface TimelineEntryProps {
-  /** Timeline entry 数据 */
+  /** Timeline entry data */
   entry: TimelineEntry;
-  /** 显示级别，控制时间戳等额外信息的展示 */
+  /** Display level, controls visibility of extra info like timestamps */
   detailLevel?: DetailLevel;
 }
 
 /**
- * 单条 TimelineEntry 渲染器
+ * Single TimelineEntry renderer
  *
- * 根据 entry.type 选择渲染组件和样式。
+ * Chooses rendering component and style based on entry.type.
  *
- * @param props - 组件 props
- * @returns 渲染的 TimelineEntry 或 null（未知类型）
+ * @param props - Component props
+ * @returns Rendered TimelineEntry or null (unknown type)
  */
 export function TimelineEntry({ entry, detailLevel = 'compact' }: TimelineEntryProps) {
   const showTimestamp = detailLevel !== 'compact';
@@ -78,16 +78,16 @@ export function TimelineEntry({ entry, detailLevel = 'compact' }: TimelineEntryP
   }
 }
 
-// ── 时间戳工具 ──
+// ── Timestamp utilities ──
 
-/** 可选的时间戳前缀 */
+/** Optional timestamp prefix */
 function Timestamp({ ts }: { ts: number }) {
   return <Text color={theme.dim}>{formatTimestamp(ts)} </Text>;
 }
 
-// ── 自定义布局：user / assistant / tool ──
+// ── Custom layouts: user / assistant / tool ──
 
-/** 用户消息 */
+/** User message */
 function UserEntry({
   entry,
   showTimestamp,
@@ -106,7 +106,7 @@ function UserEntry({
   );
 }
 
-/** Agent 回复 */
+/** Agent reply */
 function AssistantEntry({
   entry,
   showTimestamp,
@@ -129,7 +129,7 @@ function AssistantEntry({
   );
 }
 
-/** 工具调用 */
+/** Tool call */
 function ToolEntry({
   entry,
   showTimestamp,
@@ -148,7 +148,7 @@ function ToolEntry({
     );
   }
 
-  // 完成：根据 result 判断成功或失败
+  // Completion: determine success or failure based on result
   const hasError = typeof entry.result === 'string' && entry.result.startsWith('Error:');
   const icon = hasError ? ICONS.toolError : ICONS.toolDone;
   const color = hasError ? theme.error : theme.success;
@@ -176,9 +176,9 @@ function ToolEntry({
   );
 }
 
-// ── 分隔线：step-start / step-end ──
+// ── Dividers: step-start / step-end ──
 
-/** Step 开始分隔线 */
+/** Step start divider */
 function StepStartEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'step-start' }> }) {
   return (
     <Box>
@@ -189,7 +189,7 @@ function StepStartEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'step
   );
 }
 
-/** Step 结束分隔线 */
+/** Step end divider */
 function StepEndEntry({
   entry,
   showTimestamp,
@@ -201,7 +201,7 @@ function StepEndEntry({
   const color = isDone ? theme.success : theme.info;
   const label = isDone ? 'done' : 'continue';
 
-  // 如果 step done 有 answer，显示预览
+  // If step done has answer, show preview
   let answerPreview = '';
   if (isDone && entry.result.type === 'done') {
     const answer = entry.result.answer;
@@ -227,7 +227,7 @@ function StepEndEntry({
 
 // ── Alert：run-complete / error ──
 
-/** Run 完成 */
+/** Run complete */
 function RunCompleteEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'run-complete' }> }) {
   const r = entry.result;
   if (r.type === 'success') {
@@ -239,14 +239,14 @@ function RunCompleteEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'ru
   return <Alert variant="error">Run error: {r.error.message}</Alert>;
 }
 
-/** 错误 */
+/** Error */
 function ErrorEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'error' }> }) {
   return <Alert variant="error">{entry.message}</Alert>;
 }
 
-// ── 统一行样式：phase / thought / compress / skill / subagent / system ──
+// ── Unified row styles: phase / thought / compress / skill / subagent / system ──
 
-/** Phase 变化（verbose only） */
+/** Phase change (verbose only) */
 function PhaseEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'phase' }> }) {
   return (
     <Box marginLeft={1}>
@@ -257,7 +257,7 @@ function PhaseEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'phase' }
   );
 }
 
-/** 思考（verbose only） */
+/** Thought (verbose only) */
 function ThoughtEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'thought' }> }) {
   return (
     <Box marginLeft={1}>
@@ -268,7 +268,7 @@ function ThoughtEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'though
   );
 }
 
-/** 压缩 */
+/** Compress */
 function CompressEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'compress' }> }) {
   if (entry.status === 'compressing') {
     return (
@@ -287,7 +287,7 @@ function CompressEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'compr
   );
 }
 
-/** Skill 状态 */
+/** Skill status */
 function SkillEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'skill' }> }) {
   const statusConfig: Record<typeof entry.status, { color: string; label: string }> = {
     loading: { color: theme.warning, label: 'Loading' },
@@ -315,7 +315,7 @@ function SkillEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'skill' }
   );
 }
 
-/** SubAgent 状态 */
+/** SubAgent status */
 function SubagentEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'subagent' }> }) {
   if (entry.status === 'start') {
     return (
@@ -339,7 +339,7 @@ function SubagentEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'subag
   );
 }
 
-/** 系统消息 */
+/** System message */
 function SystemEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'system' }> }) {
   return (
     <Box marginLeft={1}>
@@ -352,7 +352,7 @@ function SystemEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'system'
 
 // ── verbose only：LLM request / response ──
 
-/** LLM 请求概要（verbose only） */
+/** LLM request summary (verbose only) */
 function LlmRequestEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'llm-request' }> }) {
   return (
     <Box marginLeft={1} flexDirection="column">
@@ -373,7 +373,7 @@ function LlmRequestEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'llm
   );
 }
 
-/** LLM 响应概要（verbose only） */
+/** LLM response summary (verbose only) */
 function LlmResponseEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'llm-response' }> }) {
   return (
     <Box marginLeft={1} flexDirection="column">

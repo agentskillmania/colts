@@ -25,25 +25,25 @@ describe('Integration: App detail level switching with real LLM', () => {
     async () => {
       const { lastFrame, unmount } = renderApp({ runner });
 
-      // 先切到 verbose 模式
+      // Switch to verbose mode first
       await submitMessage('/verbose');
 
-      // 发一条消息
+      // Send a message
       await submitMessage('Say exactly the word "hello" and nothing else.');
       const verboseFrame = await waitForIdle(lastFrame, 90000);
 
-      // verbose 模式下应该看到 agent 回复
+      // Agent reply should be visible in verbose mode
       expect(verboseFrame).toContain('◀');
       expect(verboseFrame.toLowerCase()).toContain('hello');
 
-      // 切回 compact 模式
+      // Switch back to compact mode
       await submitMessage('/compact');
 
-      // 再发一条消息
+      // Send another message
       await submitMessage('Say exactly the word "world" and nothing else.');
       const compactFrame = await waitForIdle(lastFrame, 90000);
 
-      // compact 模式下也能看到回复
+      // Reply should also be visible in compact mode
       expect(compactFrame).toContain('◀');
       expect(compactFrame.toLowerCase()).toContain('world');
 

@@ -1,9 +1,9 @@
 /**
- * @fileoverview App 组件单元测试
+ * @fileoverview App component unit tests
  *
- * 测试 App 路由逻辑（ConfigPrompt vs MainTUI）、命令拦截、交互行为。
- * mock 策略：只 mock runner 上的 stream 方法返回空 generator，
- * 其余所有代码（App、useAgent、StreamEventConsumer）走真实路径。
+ * Tests App routing logic (ConfigPrompt vs MainTUI), command interception, interaction behavior.
+ * Mock strategy: only mock stream method on runner to return empty generator;
+ * all other code (App, useAgent, StreamEventConsumer) uses real paths.
  */
 
 import React from 'react';
@@ -15,14 +15,14 @@ import type { AgentRunner, AgentState } from '@agentskillmania/colts';
 import { createAgentState } from '@agentskillmania/colts';
 
 // ── mock runner-setup（createRunnerFromConfig / createInitialStateFromConfig）──
-// vi.mock factory 会被 hoist，不能引用外部变量，所以 factory 内部自包含
+// vi.mock factory is hoisted, cannot reference external variables, so factory is self-contained
 
 vi.mock('../../src/runner-setup.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/runner-setup.js')>();
   const { createAgentState: createState } = await import('@agentskillmania/colts');
   const { vi: viModule } = await import('vitest');
 
-  // 空 async generator
+  // Empty async generator
   async function* emptyStream() {
     return;
   }
@@ -48,7 +48,7 @@ vi.mock('../../src/runner-setup.js', async (importOriginal) => {
 
 // ── mock setup ──
 
-// mock @inkjs/ui 的 TextInput，捕获 onSubmit
+// Mock @inkjs/ui TextInput, capture onSubmit
 let capturedOnSubmit: ((value: string) => void) | null = null;
 let capturedSelectOnChange: ((value: string) => void) | null = null;
 
@@ -67,7 +67,7 @@ vi.mock('@inkjs/ui', async (importOriginal) => {
   };
 });
 
-// mock @inkjs/ui 的 Select 一样需要 mock
+// Mock @inkjs/ui Select also needs mock
 vi.mock('ink', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ink')>();
   return {
@@ -75,15 +75,15 @@ vi.mock('ink', async (importOriginal) => {
   };
 });
 
-// ── 辅助工具 ──
+// ── Helpers ──
 
-/** 创建空 async generator，模拟 runStream/stepStream/advanceStream */
+/** Create empty async generator to simulate runStream/stepStream/advanceStream */
 async function* emptyStream() {
-  // 不 yield 任何事件，直接 return 结果
+  // Do not yield any events, return result directly
   return;
 }
 
-/** 创建一个 mock runner，stream 方法返回空 generator */
+/** Create a mock runner whose stream method returns empty generator */
 function createMockRunner(overrides?: Partial<AgentRunner>): AgentRunner {
   return {
     runStream: vi.fn().mockReturnValue(emptyStream()),
@@ -107,7 +107,7 @@ const invalidConfig: AppConfig = {
   configPath: '/tmp/test.yaml',
 };
 
-// ── 测试用例 ──
+// ── Test cases ──
 
 describe('App', () => {
   beforeEach(() => {
@@ -115,10 +115,10 @@ describe('App', () => {
     capturedSelectOnChange = null;
   });
 
-  // ── 路由逻辑 ──
+  // ── Routing logic ──
 
-  describe('无有效配置', () => {
-    it('显示 SetupWizard 而不是 MainTUI', () => {
+  describe('No valid config', () => {
+    it('shows SetupWizard instead of MainTUI', () => {
       const { lastFrame } = render(<App config={invalidConfig} runner={null} />);
       const frame = lastFrame();
       expect(frame).toContain('colts-cli Setup');
@@ -126,14 +126,14 @@ describe('App', () => {
       expect(frame).not.toContain('RUN');
     });
 
-    it('显示 Provider 选择提示', () => {
+    it('shows provider selection prompt', () => {
       const { lastFrame } = render(<App config={invalidConfig} runner={null} />);
       expect(lastFrame()).toContain('Select your LLM provider');
     });
   });
 
-  describe('有效配置 + runner', () => {
-    it('显示 WelcomeScreen（无消息时）', () => {
+  describe('Valid config + runner', () => {
+    it('shows WelcomeScreen when no messages', () => {
       const runner = createMockRunner();
       const { lastFrame } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -141,7 +141,7 @@ describe('App', () => {
       expect(lastFrame()).toContain('Welcome to colts-cli');
     });
 
-    it('显示模型名称', () => {
+    it('shows model name', () => {
       const runner = createMockRunner();
       const { lastFrame } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -149,7 +149,7 @@ describe('App', () => {
       expect(lastFrame()).toContain('gpt-4o');
     });
 
-    it('显示 agent 名称', () => {
+    it('shows agent name', () => {
       const runner = createMockRunner();
       const { lastFrame } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -157,7 +157,7 @@ describe('App', () => {
       expect(lastFrame()).toContain('test-agent');
     });
 
-    it('显示输入区域（RUN 模式）', () => {
+    it('shows input area (RUN mode)', () => {
       const runner = createMockRunner();
       const { lastFrame } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -165,7 +165,7 @@ describe('App', () => {
       expect(lastFrame()).toContain('RUN');
     });
 
-    it('unmount 不报错', () => {
+    it('unmount does not throw', () => {
       const runner = createMockRunner();
       const { unmount } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -174,10 +174,10 @@ describe('App', () => {
     });
   });
 
-  // ── 命令拦截 ──
+  // ── Command interception ──
 
-  describe('handleSubmit 命令拦截', () => {
-    it('/step 切换到 STEP 模式', async () => {
+  describe('handleSubmit command interception', () => {
+    it('/step switches to STEP mode', async () => {
       const runner = createMockRunner();
       const { lastFrame } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -186,13 +186,13 @@ describe('App', () => {
       expect(capturedOnSubmit).not.toBeNull();
       capturedOnSubmit!('/step');
 
-      // handleSubmit 是 async（内部 await import），需要等渲染
+      // handleSubmit is async (internally awaits import), need to wait for render
       await vi.waitFor(() => {
         expect(lastFrame()).toContain('STEP');
       });
     });
 
-    it('/advance 切换到 ADVANCE 模式', async () => {
+    it('/advance switches to ADVANCE mode', async () => {
       const runner = createMockRunner();
       const { lastFrame } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -204,7 +204,7 @@ describe('App', () => {
       });
     });
 
-    it('/run 切换回 RUN 模式', async () => {
+    it('/run switches back to RUN mode', async () => {
       const runner = createMockRunner();
       const { lastFrame } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -221,7 +221,7 @@ describe('App', () => {
       });
     });
 
-    it('/clear 不报错', () => {
+    it('/clear does not throw', () => {
       const runner = createMockRunner();
       render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -230,7 +230,7 @@ describe('App', () => {
       expect(() => capturedOnSubmit!('/clear')).not.toThrow();
     });
 
-    it('普通消息触发 sendMessage（调用 runStream）', async () => {
+    it('normal message triggers sendMessage (calls runStream)', async () => {
       const runner = createMockRunner();
       render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -238,13 +238,13 @@ describe('App', () => {
 
       capturedOnSubmit!('hello');
 
-      // 等 async 操作完成
+      // Wait for async operation to complete
       await vi.waitFor(() => {
         expect(runner.runStream).toHaveBeenCalled();
       });
     });
 
-    it('空消息不触发 sendMessage', async () => {
+    it('empty message does not trigger sendMessage', async () => {
       const runner = createMockRunner();
       render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -252,12 +252,12 @@ describe('App', () => {
 
       capturedOnSubmit!('   ');
 
-      // 给一点时间确保不会触发
+      // Give some time to ensure it does not trigger
       await new Promise((r) => setTimeout(r, 50));
       expect(runner.runStream).not.toHaveBeenCalled();
     });
 
-    it('/help 被 useAgent 拦截为命令，不触发 runStream', async () => {
+    it('/help is intercepted as command by useAgent, does not trigger runStream', async () => {
       const runner = createMockRunner();
       render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -265,26 +265,26 @@ describe('App', () => {
 
       capturedOnSubmit!('/help');
 
-      // /help 在 useAgent.sendMessage 里被拦截为命令，不走 runStream
+      // /help is intercepted as command in useAgent.sendMessage, does not go through runStream
       await vi.waitFor(() => {
         expect(runner.runStream).not.toHaveBeenCalled();
       });
     });
   });
 
-  // ── 边界场景 ──
+  // ── Edge cases ──
 
-  describe('边界场景', () => {
-    it('runner 为 null 但 config 有效时不崩溃', () => {
-      // 这种组合不应该出现，但测试防御性
+  describe('Edge cases', () => {
+    it('does not crash when runner is null but config is valid', () => {
+      // This combination should not occur, but test defensively
       const { lastFrame } = render(
         <App config={validConfig} runner={null} sessionBaseDir="/tmp/colts-test-sessions" />
       );
-      // config 有效但 runner null → 走 SetupWizard 分支
+      // Config valid but runner null → goes to SetupWizard branch
       expect(lastFrame()).toContain('colts-cli Setup');
     });
 
-    it('多次模式切换不崩溃', () => {
+    it('multiple mode switches do not crash', () => {
       const runner = createMockRunner();
       const { lastFrame } = render(
         <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
@@ -300,39 +300,39 @@ describe('App', () => {
     });
   });
 
-  // ── SetupWizard 自动切换到 MainTUI ──
+  // ── SetupWizard auto-switches to MainTUI ──
 
-  describe('SetupWizard 自动切换 MainTUI', () => {
-    it('SetupWizard 完成后切换到 MainTUI 显示 WelcomeScreen', async () => {
+  describe('SetupWizard auto-switches to MainTUI', () => {
+    it('switches to MainTUI showing WelcomeScreen after SetupWizard completes', async () => {
       const { lastFrame } = render(<App config={invalidConfig} runner={null} />);
 
-      // 初始显示 SetupWizard
+      // Initially shows SetupWizard
       expect(lastFrame()).toContain('colts-cli Setup');
 
-      // Step 1: 选择 provider
+      // Step 1: select provider
       await vi.waitFor(() => {
         expect(capturedSelectOnChange).not.toBeNull();
       });
       capturedSelectOnChange!('openai');
 
-      // 等待 step 2，TextInput 出现
+      // Wait for step 2, TextInput appears
       await vi.waitFor(() => {
         expect(capturedOnSubmit).not.toBeNull();
       });
 
-      // Step 2: 输入 API key
+      // Step 2: enter API key
       capturedOnSubmit!('sk-test-key');
 
-      // 等待 step 3，新的 TextInput 出现
+      // Wait for step 3, new TextInput appears
       await vi.waitFor(() => {
         expect(lastFrame()).toContain('Step 3/3');
         expect(capturedOnSubmit).not.toBeNull();
       });
 
-      // Step 3: 输入 model（触发 onComplete → handleSetupComplete → 切换到 MainTUI）
+      // Step 3: enter model (triggers onComplete → handleSetupComplete → switch to MainTUI)
       capturedOnSubmit!('gpt-4o');
 
-      // 等待状态切换完成，应该显示 MainTUI 的 WelcomeScreen
+      // Wait for state switch to complete, should show MainTUI WelcomeScreen
       await vi.waitFor(
         () => {
           expect(lastFrame()).toContain('Welcome to colts-cli');
@@ -340,7 +340,7 @@ describe('App', () => {
         { timeout: 5000 }
       );
 
-      // 不应再包含 SetupWizard
+      // Should no longer contain SetupWizard
       expect(lastFrame()).not.toContain('colts-cli Setup');
     });
   });
