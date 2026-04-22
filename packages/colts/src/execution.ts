@@ -134,10 +134,14 @@ export interface ExecutionState {
   phase: Phase;
   /** Messages prepared for LLM (pi-ai format) */
   preparedMessages?: import('@mariozechner/pi-ai').Message[];
-  /** Raw LLM response */
+  /** Raw LLM response content */
   llmResponse?: string;
-  /** Parsed thought */
+  /** Native thinking from LLM API (e.g. Claude extended thinking) */
+  llmThinking?: string;
+  /** Extracted explicit thinking (may be empty if no thinking was provided) */
   thought?: string;
+  /** Content with think tags removed */
+  cleanedContent?: string;
   /** Tool call to execute (first action) */
   action?: Action;
   /** All tool calls from LLM response (for parallel execution support) */

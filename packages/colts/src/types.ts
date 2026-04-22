@@ -12,7 +12,7 @@ export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 /**
  * Message type
  */
-export type MessageType = 'text' | 'thought' | 'action' | 'tool-result' | 'final';
+export type MessageType = 'text' | 'thought' | 'action' | 'tool-result';
 
 /**
  * Conversation message

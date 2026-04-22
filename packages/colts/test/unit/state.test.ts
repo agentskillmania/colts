@@ -143,11 +143,11 @@ describe('Step 0: AgentState', () => {
     it('should support final type', () => {
       const state = createAgentState(baseConfig);
       const newState = addAssistantMessage(state, 'Final answer', {
-        type: 'final',
+        type: 'text',
       });
 
       expect(newState.context.messages[0]).toMatchObject({
-        type: 'final',
+        type: 'text',
       });
     });
   });

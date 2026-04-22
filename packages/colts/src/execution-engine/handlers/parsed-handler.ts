@@ -2,10 +2,9 @@
  * @fileoverview Parsed Phase Handler
  *
  * Transitions from parsed to either executing-tool (if action exists)
- * or completed (if no action). Writes thought+toolCalls message to
- * state when action exists, or final answer when no action.
- *
- * Migrated from advanceToParsed() + advanceFromParsed() in runner-advance.ts.
+ * or completed (if no action). Writes explicit thinking as a separate
+ * thought message when present, and the cleaned content as an action
+ * or text message.
  */
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
@@ -19,31 +18,44 @@ export class ParsedHandler implements IPhaseHandler {
   }
 
   execute(_ctx: PhaseHandlerContext, state: AgentState, execState: ExecutionState): AdvanceResult {
-    // Action already extracted from raw response in CallingLLMHandler
-    const thought = execState.llmResponse ?? '';
-    execState.thought = thought;
+    const thought = execState.thought ?? '';
+    const cleanedContent = execState.cleanedContent ?? execState.llmResponse ?? '';
 
     if (execState.action) {
-      // Has action: write thought message, transition to executing-tool
+      // Has action: write explicit thinking message (if any), then action message
+      let newState = state;
+
+      if (thought) {
+        newState = addAssistantMessage(newState, thought, { type: 'thought' });
+      }
+
       const toolCalls = execState.allActions?.map((a) => ({
         id: a.id,
         name: a.tool,
         arguments: a.arguments,
       }));
-      const newState = addAssistantMessage(state, thought, {
-        type: 'thought',
+
+      newState = addAssistantMessage(newState, cleanedContent, {
+        type: 'action',
         toolCalls,
       });
-      execState.phase = { type: 'parsed', thought, action: execState.action };
+
       // Pass all actions to executing-tool phase for parallel execution
       const actions = execState.allActions ?? [execState.action];
       execState.phase = { type: 'executing-tool', actions };
       return { state: newState, phase: execState.phase, done: false };
     } else {
-      // No action: go to completed with final answer
-      const answer = thought;
-      execState.phase = { type: 'completed', answer };
-      const newState = incrementStepCount(addAssistantMessage(state, answer, { type: 'final' }));
+      // No action: write explicit thinking message (if any), then text message
+      let newState = state;
+
+      if (thought) {
+        newState = addAssistantMessage(newState, thought, { type: 'thought' });
+      }
+
+      newState = addAssistantMessage(newState, cleanedContent, { type: 'text' });
+      newState = incrementStepCount(newState);
+
+      execState.phase = { type: 'completed', answer: cleanedContent };
       return { state: newState, phase: execState.phase, done: true };
     }
   }
