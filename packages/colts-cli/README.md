@@ -1,5 +1,7 @@
 # @agentskillmania/colts-cli
 
+[![npm version](https://img.shields.io/npm/v/@agentskillmania/colts-cli.svg)](https://www.npmjs.com/package/@agentskillmania/colts-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
 Terminal UI for the colts agent framework. An interactive chat-based tool for building, debugging, and running AI agents in the terminal. Built with [Ink](https://github.com/vadimdemedes/ink).

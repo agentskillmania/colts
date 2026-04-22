@@ -1,8 +1,8 @@
 /**
- * @fileoverview ConfirmDialog 组件单元测试
+ * @fileoverview ConfirmDialog component unit tests
  *
- * 测试工具确认对话框：显示工具名和参数、确认/取消回调。
- * mock 策略：mock @inkjs/ui 的 ConfirmInput，捕获 onConfirm/onCancel。
+ * Tests tool confirmation dialog: displays tool name and parameters, confirm/cancel callbacks.
+ * Mock strategy: mock @inkjs/ui ConfirmInput, capture onConfirm/onCancel.
  */
 
 import React from 'react';
@@ -23,19 +23,19 @@ vi.mock('@inkjs/ui', () => ({
   },
 }));
 
-// ── 辅助 ──
+// ── Helpers ──
 
 function resetCaptures() {
   capturedOnConfirm = null;
   capturedOnCancel = null;
 }
 
-// ── 测试用例 ──
+// ── Test cases ──
 
 describe('ConfirmDialog', () => {
   beforeEach(resetCaptures);
 
-  it('显示工具名', () => {
+  it('shows tool name', () => {
     const onResult = vi.fn();
     const { lastFrame } = render(
       <ConfirmDialog toolName="delete_file" args={{ path: '/tmp/test.txt' }} onResult={onResult} />
@@ -43,7 +43,7 @@ describe('ConfirmDialog', () => {
     expect(lastFrame()).toContain('delete_file');
   });
 
-  it('显示参数列表', () => {
+  it('shows parameter list', () => {
     const onResult = vi.fn();
     const { lastFrame } = render(
       <ConfirmDialog
@@ -58,13 +58,13 @@ describe('ConfirmDialog', () => {
     expect(lastFrame()).toContain('true');
   });
 
-  it('显示确认提示标题', () => {
+  it('shows confirmation prompt title', () => {
     const onResult = vi.fn();
     const { lastFrame } = render(<ConfirmDialog toolName="rm" args={{}} onResult={onResult} />);
     expect(lastFrame()).toContain('Confirm tool execution');
   });
 
-  it('确认时调用 onResult(true)', () => {
+  it('calls onResult(true) on confirm', () => {
     const onResult = vi.fn();
     render(<ConfirmDialog toolName="delete_file" args={{ path: '/tmp/x' }} onResult={onResult} />);
 
@@ -75,7 +75,7 @@ describe('ConfirmDialog', () => {
     expect(onResult).toHaveBeenCalledWith(true);
   });
 
-  it('取消时调用 onResult(false)', () => {
+  it('calls onResult(false) on cancel', () => {
     const onResult = vi.fn();
     render(<ConfirmDialog toolName="delete_file" args={{ path: '/tmp/x' }} onResult={onResult} />);
 
@@ -86,13 +86,13 @@ describe('ConfirmDialog', () => {
     expect(onResult).toHaveBeenCalledWith(false);
   });
 
-  it('空参数不崩溃', () => {
+  it('does not crash with empty parameters', () => {
     const onResult = vi.fn();
     const { lastFrame } = render(<ConfirmDialog toolName="ping" args={{}} onResult={onResult} />);
     expect(lastFrame()).toContain('ping');
   });
 
-  it('复杂参数（嵌套对象）正常显示', () => {
+  it('displays complex parameters (nested object) correctly', () => {
     const onResult = vi.fn();
     const { lastFrame } = render(
       <ConfirmDialog
@@ -105,7 +105,7 @@ describe('ConfirmDialog', () => {
     expect(lastFrame()).toContain('prod');
   });
 
-  it('unmount 不报错', () => {
+  it('unmount does not throw', () => {
     const onResult = vi.fn();
     const { unmount } = render(<ConfirmDialog toolName="test" args={{}} onResult={onResult} />);
     expect(() => unmount()).not.toThrow();

@@ -1,8 +1,8 @@
 /**
- * @fileoverview 根组件 — 路由到主 TUI、交互对话框或配置向导
+ * @fileoverview Root component — routes to main TUI, interactive dialogs, or setup wizard
  *
- * App 持有 config/runner/initialState 的内部 state。
- * 首次启动配置无效时显示 SetupWizard，保存后自动 reload 并切换到 MainTUI。
+ * App holds internal state for config/runner/initialState.
+ * Shows SetupWizard when config is invalid on first launch; auto-reloads and switches to MainTUI after saving.
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -64,9 +64,9 @@ export function App({
   const ready = config.hasValidConfig && runner !== null;
 
   /**
-   * SetupWizard 完成后的回调
+   * Callback after SetupWizard completes
    *
-   * 保存配置 → 重新加载 → 创建 runner → 切换到 MainTUI
+   * Save config → reload → create runner → switch to MainTUI
    */
   const handleSetupComplete = useCallback(
     async (setup: { provider: string; apiKey: string; model: string }) => {
@@ -118,10 +118,10 @@ function MainTUI({
 }) {
   const { exit } = useApp();
 
-  // 交互状态（AskHuman / Confirm 对话框）
+  // Interaction state (AskHuman / Confirm dialogs)
   const [interaction, setInteraction] = useState<InteractionState>({ type: 'none' });
 
-  // 延迟绑定交互 handler：挂载时填入闭包持有 setInteraction 的 handler
+  // Lazily bind interaction handler: fill in closure holding setInteraction on mount
   useEffect(() => {
     interactionCallbacks.askHuman = async ({ questions, context }) => {
       return new Promise((resolve) => {

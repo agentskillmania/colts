@@ -1,15 +1,15 @@
 /**
- * @fileoverview 流式事件消费者 — 统一处理 StreamEvent → TimelineEntry 转换
+ * @fileoverview Stream event consumer — unified StreamEvent → TimelineEntry conversion
  *
- * 将 run/step/advance 三种执行模式中重复的事件处理逻辑收敛到一处。
- * 编排层（executeRun/executeStep/executeAdvance）只负责控制流差异。
+ * Consolidates duplicated event processing logic from run/step/advance execution modes.
+ * Orchestration layer (executeRun/executeStep/executeAdvance) only handles control flow differences.
  *
- * 每个 TimelineEntry 带有全局单调递增的 seq 序号，
- * 即使 React 批量更新合并了中间状态，按 seq 排序后条目顺序始终正确。
+ * Each TimelineEntry carries a globally monotonically increasing seq number.
+ * Even if React batch updates merge intermediate states, sorting by seq ensures correct entry order.
  *
- * Assistant entry 采用延迟创建策略：不在 resetAssistant() 时立即插入，
- * 而是在第一个 token 到达时才创建。这保证了 assistant entry 的 seq
- * 大于 step-start / phase-change 等结构性事件，渲染时顺序正确。
+ * Assistant entry uses lazy creation: not inserted immediately during resetAssistant(),
+ * but created only when the first token arrives. This ensures the assistant entry's seq
+ * is greater than structural events like step-start / phase-change, so render order is correct.
  */
 
 import throttle from 'throttleit';
@@ -18,76 +18,76 @@ import type { StreamEvent, RunStreamEvent } from '@agentskillmania/colts';
 import type { TimelineEntry } from '../types/timeline.js';
 import { nextSeq } from '../types/timeline.js';
 
-/** setEntries 回调类型 */
+/** setEntries callback type */
 export type SetEntries = React.Dispatch<React.SetStateAction<TimelineEntry[]>>;
 
-/** setState 回调类型 */
+/** setState callback type */
 export type SetState = React.Dispatch<React.SetStateAction<AgentState | null>>;
 
 /**
- * 模式特化的钩子回调
+ * Mode-specific hook callbacks
  *
- * 不同执行模式通过这些回调注入差异行为，事件处理本身由 Consumer 统一完成。
+ * Different execution modes inject behavior differences through these callbacks; event processing is unified by Consumer.
  */
 export interface EventHooks {
-  /** tool:end 后的额外处理。run 模式在此创建新 assistant entry，step/advance 不需要 */
+  /** Extra processing after tool:end. Run mode creates a new assistant entry here; step/advance do not */
   onToolEnd?: () => void;
 
-  /** phase-change 事件的额外处理。advance 模式在此 flush + 暂停，run/step 不需要 */
+  /** Extra processing for phase-change events. Advance mode flushes + pauses here; run/step do not */
   onPhaseChange?: (event: Extract<StreamEvent, { type: 'phase-change' }>) => void;
 }
 
-/** 渲染节流间隔（毫秒） */
+/** Render throttle interval (milliseconds) */
 const RENDER_INTERVAL_MS = 50;
 
 /**
- * 流式事件消费者
+ * Stream event consumer
  *
- * 消费 StreamEvent 事件，将其转换为 TimelineEntry 并更新 UI 状态。
- * token 累积使用 throttle（50ms）节流渲染，避免每个 token 都触发 setEntries。
+ * Consumes StreamEvent events, converts them to TimelineEntry, and updates UI state.
+ * Token accumulation uses throttle (50ms) to limit rendering, avoiding setEntries on every token.
  *
  * @remarks
- * 用法：
+ * Usage:
  * ```typescript
  * const consumer = new StreamEventConsumer(setEntries, setState, {
  *   onToolEnd: () => consumer.resetAssistant(),
  * });
  *
- * // 在事件循环中
+ * // In event loop
  * for await (const event of generator) {
  *   consumer.consume(event);
  * }
  *
- * // 结束后
+ * // After completion
  * consumer.flush();
  * ```
  */
 export class StreamEventConsumer {
-  /** 当前 assistant entry 的 ID */
+  /** Current assistant entry ID */
   private assistantId: string;
 
-  /** 当前 assistant entry 的 seq */
+  /** Current assistant entry seq */
   private assistantSeq: number;
 
-  /** 累积的文本内容 */
+  /** Accumulated text content */
   private accumulatedContent = '';
 
-  /** 节流后的 flush 函数 */
+  /** Throttled flush function */
   private throttledFlush: () => void;
 
-  /** 是否已销化（finalize 后不再处理事件） */
+  /** Whether disposed (no longer processes events after finalize) */
   private disposed = false;
 
-  /** 工具开始时间记录（key 为 tool entry seq） */
+  /** Tool start time record (key is tool entry seq) */
   private toolStartTimes = new Map<number, number>();
 
-  /** assistant entry 是否已插入 timeline（延迟创建标志） */
+  /** Whether assistant entry has been inserted into timeline (lazy creation flag) */
   private assistantInserted = false;
 
   /**
    * @param setEntries - React state setter for timeline entries
    * @param setState - React state setter for agent state
-   * @param hooks - 模式特化的钩子回调
+   * @param hooks - Mode-specific hook callbacks
    */
   constructor(
     private readonly setEntries: SetEntries,
@@ -97,15 +97,15 @@ export class StreamEventConsumer {
     this.assistantSeq = nextSeq();
     this.assistantId = this.uid();
 
-    // 创建节流 flush：50ms 内最多调用一次 setEntries 更新 assistant 内容
+    // Create throttled flush: call setEntries at most once within 50ms to update assistant content
     this.throttledFlush = throttle(() => {
       this.doFlush();
     }, RENDER_INTERVAL_MS);
   }
 
-  // ── 公共 API ──
+  // ── Public API ──
 
-  /** 消费一个流式事件 */
+  /** Consume a stream event */
   consume(event: RunStreamEvent): void {
     if (this.disposed) return;
 
@@ -217,29 +217,29 @@ export class StreamEventConsumer {
       }
 
       case 'complete': {
-        // 由 TraceWriter 记录，不需要 UI 展示
+        // Recorded by TraceWriter, no UI display needed
         break;
       }
     }
   }
 
   /**
-   * 强制刷出所有累积的 token 到 UI
+   * Force flush all accumulated tokens to UI
    *
-   * 在 phase 切换、工具调用、错误、完成时调用。
+   * Called on phase switch, tool call, error, or completion.
    */
   flush(): void {
-    // throttleit 的 throttle 函数没有 cancel()，直接调 doFlush 跳过节流
+    // throttleit throttle function has no cancel(); call doFlush directly to bypass throttling
     this.doFlush();
   }
 
   /**
-   * 重置 assistant 状态，准备接收新的 token 流
+   * Reset assistant state to prepare for a new token stream
    *
-   * 延迟创建策略：只重置内部状态，不立即插入 entry。
-   * 第一个 token 到达时才真正创建 assistant entry（保证 seq 顺序正确）。
+   * Lazy creation strategy: only reset internal state, do not insert entry immediately.
+   * Assistant entry is truly created when the first token arrives (ensures correct seq order).
    *
-   * 在 tool:end 后（run 模式）或 calling-llm phase 前（advance 模式）调用。
+   * Called after tool:end (run mode) or before calling-llm phase (advance mode).
    */
   resetAssistant(): void {
     this.flush();
@@ -250,9 +250,9 @@ export class StreamEventConsumer {
   }
 
   /**
-   * 将 assistant entry 标记为不再 streaming，并设置最终内容
+   * Mark assistant entry as no longer streaming and set final content
    *
-   * @param content - 最终内容，如果为空则使用累积的内容
+   * @param content - Final content; if empty, uses accumulated content
    */
   finalizeAssistant(content?: string): void {
     this.ensureAssistantInserted();
@@ -270,23 +270,23 @@ export class StreamEventConsumer {
     this.disposed = true;
   }
 
-  /** 获取累积的文本内容 */
+  /** Get accumulated text content */
   getAccumulatedContent(): string {
     return this.accumulatedContent;
   }
 
-  /** 获取当前 assistant entry ID */
+  /** Get current assistant entry ID */
   getAssistantId(): string {
     return this.assistantId;
   }
 
-  // ── 事件处理 ──
+  // ── Event handling ──
 
-  /** token 事件：延迟创建 assistant entry，累积文本，节流更新 UI */
+  /** Token event: lazily create assistant entry, accumulate text, throttled UI update */
   private handleToken(event: Extract<StreamEvent, { type: 'token' }>): void {
     if (event.token) {
       this.accumulatedContent += event.token;
-      // 只在有非空白内容时才创建 assistant entry（避免纯换行产生空 entry）
+      // Only create assistant entry when there is non-whitespace content (avoid empty entries from pure newlines)
       if (this.accumulatedContent.trim()) {
         this.ensureAssistantInserted();
       }
@@ -296,10 +296,10 @@ export class StreamEventConsumer {
     }
   }
 
-  /** tool:start 事件：flush token，停止 assistant streaming，创建 tool entry */
+  /** tool:start event: flush tokens, stop assistant streaming, create tool entry */
   private handleToolStart(event: Extract<StreamEvent, { type: 'tool:start' }>): void {
     this.flush();
-    // 只在已有 assistant entry 时才标记 streaming 结束
+    // Only mark streaming as ended when an assistant entry already exists
     if (this.assistantInserted) {
       const id = this.assistantId;
       const seq = this.assistantSeq;
@@ -322,7 +322,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** tool:end 事件：更新 tool entry 的结果，计算 duration，调用模式特化钩子 */
+  /** tool:end event: update tool entry result, calculate duration, call mode-specific hook */
   private handleToolEnd(event: Extract<StreamEvent, { type: 'tool:end' }>): void {
     this.setEntries((prev) => {
       let idx = -1;
@@ -352,10 +352,10 @@ export class StreamEventConsumer {
     this.hooks.onToolEnd?.();
   }
 
-  /** tools:start 事件：flush token，停止 assistant streaming，批量创建 tool entry */
+  /** tools:start event: flush tokens, stop assistant streaming, batch create tool entries */
   private handleToolsStart(event: Extract<StreamEvent, { type: 'tools:start' }>): void {
     this.flush();
-    // 只在已有 assistant entry 时才标记 streaming 结束
+    // Only mark streaming as ended when an assistant entry already exists
     if (this.assistantInserted) {
       const id = this.assistantId;
       const seq = this.assistantSeq;
@@ -381,7 +381,7 @@ export class StreamEventConsumer {
     }
   }
 
-  /** tools:end 事件：从后往前匹配 isRunning 的 tool 条目，更新结果和 duration */
+  /** tools:end event: match isRunning tool entries from back to front, update results and duration */
   private handleToolsEnd(event: Extract<StreamEvent, { type: 'tools:end' }>): void {
     this.setEntries((prev) => {
       const next = [...prev];
@@ -409,7 +409,7 @@ export class StreamEventConsumer {
     this.hooks.onToolEnd?.();
   }
 
-  /** phase-change 事件：创建 phase entry，调用模式特化钩子 */
+  /** phase-change event: create phase entry, call mode-specific hook */
   private handlePhaseChange(event: Extract<StreamEvent, { type: 'phase-change' }>): void {
     this.flush();
     const mapAssistant = this.assistantInserted
@@ -434,7 +434,7 @@ export class StreamEventConsumer {
     this.hooks.onPhaseChange?.(event);
   }
 
-  /** error 事件：flush，创建 error entry */
+  /** error event: flush, create error entry */
   private handleError(event: Extract<StreamEvent, { type: 'error' }>): void {
     this.flush();
     const errMsg = event.error instanceof Error ? event.error.message : String(event.error);
@@ -452,7 +452,7 @@ export class StreamEventConsumer {
     ]);
   }
 
-  /** compressing 事件 */
+  /** compressing event */
   private handleCompressing(): void {
     this.addEntry({
       type: 'compress',
@@ -463,7 +463,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** compressed 事件 */
+  /** compressed event */
   private handleCompressed(event: Extract<StreamEvent, { type: 'compressed' }>): void {
     this.addEntry({
       type: 'compress',
@@ -476,7 +476,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** skill:start 事件 */
+  /** skill:start event */
   private handleSkillStart(event: Extract<StreamEvent, { type: 'skill:start' }>): void {
     if (event.state) this.setState(event.state);
     this.addEntry({
@@ -489,7 +489,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** skill:end 事件 */
+  /** skill:end event */
   private handleSkillEnd(event: Extract<StreamEvent, { type: 'skill:end' }>): void {
     if (event.state) this.setState(event.state);
     this.addEntry({
@@ -503,7 +503,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** skill:loading 事件 */
+  /** skill:loading event */
   private handleSkillLoading(event: Extract<StreamEvent, { type: 'skill:loading' }>): void {
     this.addEntry({
       type: 'skill',
@@ -515,7 +515,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** skill:loaded 事件 */
+  /** skill:loaded event */
   private handleSkillLoaded(event: Extract<StreamEvent, { type: 'skill:loaded' }>): void {
     this.addEntry({
       type: 'skill',
@@ -528,7 +528,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** subagent:start 事件 */
+  /** subagent:start event */
   private handleSubagentStart(event: Extract<StreamEvent, { type: 'subagent:start' }>): void {
     this.addEntry({
       type: 'subagent',
@@ -541,7 +541,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** subagent:end 事件 */
+  /** subagent:end event */
   private handleSubagentEnd(event: Extract<StreamEvent, { type: 'subagent:end' }>): void {
     this.addEntry({
       type: 'subagent',
@@ -554,7 +554,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** step:start 事件 */
+  /** step:start event */
   private handleStepStart(event: Extract<RunStreamEvent, { type: 'step:start' }>): void {
     this.addEntry({
       type: 'step-start',
@@ -565,7 +565,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** step:end 事件 */
+  /** step:end event */
   private handleStepEnd(event: Extract<RunStreamEvent, { type: 'step:end' }>): void {
     this.addEntry({
       type: 'step-end',
@@ -577,7 +577,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** llm:request 事件：记录发送给 LLM 的请求概要（verbose only） */
+  /** llm:request event: record summary of request sent to LLM (verbose only) */
   private handleLlmRequest(event: Extract<StreamEvent, { type: 'llm:request' }>): void {
     this.addEntry({
       type: 'llm-request',
@@ -590,7 +590,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** llm:response 事件：记录 LLM 返回的响应概要（verbose only） */
+  /** llm:response event: record summary of response returned by LLM (verbose only) */
   private handleLlmResponse(event: Extract<StreamEvent, { type: 'llm:response' }>): void {
     this.addEntry({
       type: 'llm-response',
@@ -602,13 +602,13 @@ export class StreamEventConsumer {
     });
   }
 
-  // ── 内部工具 ──
+  // ── Internal utilities ──
 
   /**
-   * 确保 assistant entry 已插入 timeline
+   * Ensure assistant entry is inserted into timeline
    *
-   * 延迟创建的核心：只在第一个 token 或需要标记 isStreaming=false 时才真正创建 entry。
-   * 这保证 assistant entry 的 seq 大于 step-start 等结构性事件，渲染顺序正确。
+   * Core of lazy creation: only truly create entry on first token or when isStreaming=false needs to be set.
+   * This ensures assistant entry seq is greater than structural events like step-start, so render order is correct.
    */
   private ensureAssistantInserted(): void {
     if (this.assistantInserted) return;
@@ -623,7 +623,7 @@ export class StreamEventConsumer {
     });
   }
 
-  /** 实际执行 flush：把累积内容写入 assistant entry */
+  /** Actually execute flush: write accumulated content to assistant entry */
   private doFlush(): void {
     if (!this.assistantInserted) return;
     const content = this.accumulatedContent;
@@ -636,16 +636,16 @@ export class StreamEventConsumer {
     );
   }
 
-  /** 追加一条 TimelineEntry */
+  /** Append a TimelineEntry */
   private addEntry(entry: TimelineEntry): void {
     this.setEntries((prev) => [...prev, entry]);
   }
 
-  /** 生成唯一 ID */
+  /** Generate unique ID */
   private uid(): string {
     return `entry-${++idCounter}`;
   }
 }
 
-/** 全局 ID 计数器 */
+/** Global ID counter */
 let idCounter = 0;

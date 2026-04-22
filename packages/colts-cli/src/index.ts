@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * @fileoverview colts CLI 入口 — 加载配置、创建 AgentRunner、渲染 TUI
+ * @fileoverview colts CLI entry — load config, create AgentRunner, render TUI
  *
- * runner 创建逻辑委托给 runner-setup.ts，
- * index.ts 只负责：加载配置 → 创建 runner → 渲染 App。
+ * Runner creation logic is delegated to runner-setup.ts.
+ * index.ts is only responsible for: load config → create runner → render App.
  */
 
 import React from 'react';

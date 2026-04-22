@@ -1,13 +1,13 @@
 /**
- * @fileoverview StreamEventConsumer 单元测试
+ * @fileoverview StreamEventConsumer unit tests
  *
- * 测试 StreamEvent → TimelineEntry 的转换逻辑，包括：
- * - token 累积与节流
- * - tool 生命周期（start/end）
- * - phase-change 事件
- * - skill / subagent / step 事件
- * - onToolEnd / onPhaseChange 钩子回调
- * - resetAssistant / finalizeAssistant / flush / disposed 状态
+ * Tests StreamEvent → TimelineEntry conversion logic, including:
+ * - token accumulation and throttling
+ * - tool lifecycle (start/end)
+ * - phase-change events
+ * - skill / subagent / step events
+ * - onToolEnd / onPhaseChange hook callbacks
+ * - resetAssistant / finalizeAssistant / flush / disposed states
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -15,15 +15,15 @@ import type { RunStreamEvent } from '@agentskillmania/colts';
 import { StreamEventConsumer } from '../../src/hooks/stream-event-consumer.js';
 import type { TimelineEntry } from '../../src/types/timeline.js';
 
-// ── 辅助工具 ──
+// ── Helpers ──
 
 /**
- * 创建模拟 React setState 的 tracker
+ * Create a tracker that simulates React setState
  *
- * React 的 setState(updater) 会把上一次的 state 传给 updater 函数。
- * 这个 helper 维护一个内部的 entries 数组，每次 setter 被调用时：
- * - 如果是函数，传入上一次状态，收集返回值作为新状态
- * - 如果是值，直接作为新状态
+ * React's setState(updater) passes the previous state to the updater function.
+ * This helper maintains an internal entries array; each time setter is called:
+ * - If function, pass previous state and collect return value as new state
+ * - If value, use directly as new state
  *
  * @returns { setter, allEntries, lastEntries, clear }
  */
@@ -38,18 +38,18 @@ function trackEntries() {
   });
   return {
     setter,
-    /** 获取最后一次 setter 调用后的 entries 快照 */
+    /** Get entries snapshot after last setter call */
     get lastEntries(): TimelineEntry[] {
       return current;
     },
-    /** 重置内部状态 */
+    /** Reset internal state */
     clear() {
       current = [];
     },
   };
 }
 
-/** 创建 mock setState */
+/** Create mock setState */
 function trackState() {
   let current: unknown = null;
   const setter = vi.fn((action: any) => {
@@ -67,7 +67,7 @@ function trackState() {
   };
 }
 
-// ── 事件构造器 ──
+// ── Event constructors ──
 
 function tokenEvent(token: string): RunStreamEvent {
   return { type: 'token', token };
@@ -108,7 +108,7 @@ function compressedEvent(summary: string, removedCount: number): RunStreamEvent 
   return { type: 'compressed', summary, removedCount };
 }
 
-// ── 测试用例 ──
+// ── Test cases ──
 
 describe('StreamEventConsumer', () => {
   let entries: ReturnType<typeof trackEntries>;
@@ -124,30 +124,30 @@ describe('StreamEventConsumer', () => {
     vi.useRealTimers();
   });
 
-  // ── 基本生命周期 ──
+  // ── Basic lifecycle ──
 
-  describe('构造与初始状态', () => {
-    it('构造时不自动创建 assistant entry（由调用方 resetAssistant）', () => {
+  describe('Construction and initial state', () => {
+    it('does not auto-create assistant entry on construction (caller resets assistant)', () => {
       new StreamEventConsumer(entries.setter, state.setter);
-      // 构造函数只初始化 assistantId，不创建 entry
+      // Constructor only initializes assistantId, does not create entry
       expect(entries.lastEntries).toHaveLength(0);
     });
 
-    it('getAccumulatedContent 初始为空字符串', () => {
+    it('getAccumulatedContent initially empty string', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       expect(consumer.getAccumulatedContent()).toBe('');
     });
 
-    it('getAssistantId 返回有效的 ID', () => {
+    it('getAssistantId returns valid ID', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       expect(consumer.getAssistantId()).toBeTruthy();
     });
   });
 
-  // ── token 累积 ──
+  // ── Token accumulation ──
 
-  describe('token 事件', () => {
-    it('单个 token 累积后 flush 写入 assistant entry', () => {
+  describe('Token events', () => {
+    it('single token accumulates then flush writes to assistant entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.resetAssistant();
 
@@ -162,7 +162,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('多个 token 连续累积', () => {
+    it('multiple tokens accumulate continuously', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(tokenEvent('Hello'));
@@ -173,35 +173,35 @@ describe('StreamEventConsumer', () => {
       expect(consumer.getAccumulatedContent()).toBe('Hello world');
     });
 
-    it('空 token 不触发任何更新', () => {
+    it('empty token does not trigger any update', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(tokenEvent(''));
 
       expect(consumer.getAccumulatedContent()).toBe('');
-      // 空token不调 throttledFlush，只有构造时不会有 setter 调用
+      // Empty token does not call throttledFlush; only construction has no setter call
     });
 
-    it('纯空白 token 不创建 assistant entry', () => {
+    it('pure whitespace token does not create assistant entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(tokenEvent('\n'));
       consumer.consume(tokenEvent(' '));
       consumer.consume(tokenEvent('\n'));
 
-      // 纯空白内容不触发 ensureAssistantInserted
+      // Pure whitespace content does not trigger ensureAssistantInserted
       const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
       expect(assistants).toHaveLength(0);
       expect(consumer.getAccumulatedContent()).toBe('\n \n');
     });
 
-    it('空白 token 后跟有内容 token 才创建 entry', () => {
+    it('creates entry only when whitespace token is followed by content token', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(tokenEvent('\n'));
       consumer.consume(tokenEvent('Hello'));
 
-      // 第二个 token 有非空白内容，此时才创建 entry
+      // Second token has non-whitespace content, entry created at this point
       const asst = entries.lastEntries.find((e) => e.type === 'assistant');
       expect(asst).toBeDefined();
       if (asst?.type === 'assistant') {
@@ -209,7 +209,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('节流：连续 token 在 50ms 内只调度一次延迟 flush', () => {
+    it('throttling: consecutive tokens schedule only one delayed flush within 50ms', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       const beforeCount = entries.setter.mock.calls.length;
 
@@ -217,21 +217,21 @@ describe('StreamEventConsumer', () => {
       consumer.consume(tokenEvent('b'));
       consumer.consume(tokenEvent('c'));
 
-      // 节流中，累积内容正确
+      // During throttling, accumulated content is correct
       expect(consumer.getAccumulatedContent()).toBe('abc');
 
-      // 推进时间让节流触发，应该有一次新的 setter 调用
+      // Advance time to let throttle trigger; should have one new setter call
       vi.advanceTimersByTime(60);
       expect(entries.setter.mock.calls.length).toBeGreaterThan(beforeCount);
     });
 
-    it('节流后 flush 强制立即刷新', () => {
+    it('flush forces immediate refresh after throttling', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(tokenEvent('a'));
       consumer.consume(tokenEvent('b'));
 
-      // 不推进时间，直接 flush，跳过节流
+      // Do not advance time; flush directly to bypass throttling
       consumer.flush();
 
       const asst = entries.lastEntries.find((e) => e.type === 'assistant');
@@ -241,10 +241,10 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // ── tool 生命周期 ──
+  // ── Tool lifecycle ──
 
-  describe('tool:start 事件', () => {
-    it('创建 tool entry 并停止 assistant streaming', () => {
+  describe('tool:start events', () => {
+    it('creates tool entry and stops assistant streaming', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.consume(tokenEvent('thinking...'));
 
@@ -259,13 +259,13 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('flush 残余 token 后停止 assistant streaming', () => {
+    it('flushes residual tokens then stops assistant streaming', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.consume(tokenEvent('partial'));
 
       consumer.consume(toolStartEvent('search'));
 
-      // assistant 应该 isStreaming=false，content='partial'
+      // assistant should be isStreaming=false, content='partial'
       const asst = entries.lastEntries.find((e) => e.type === 'assistant');
       if (asst?.type === 'assistant') {
         expect(asst.isStreaming).toBe(false);
@@ -273,10 +273,10 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('没有 token 时 tool:start 不创建空 assistant entry', () => {
+    it('does not create empty assistant entry on tool:start when no tokens', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
-      // LLM 直接调工具，没有说话
+      // LLM calls tool directly without speaking
       consumer.consume(toolStartEvent('search'));
 
       const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
@@ -287,8 +287,8 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  describe('tool:end 事件', () => {
-    it('更新 tool entry 的 result 并标记 isRunning=false', () => {
+  describe('tool:end events', () => {
+    it('updates tool entry result and marks isRunning=false', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.consume(toolStartEvent('read_file'));
 
@@ -301,7 +301,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('触发 onToolEnd 钩子', () => {
+    it('triggers onToolEnd hook', () => {
       const onToolEnd = vi.fn();
       const consumer = new StreamEventConsumer(entries.setter, state.setter, { onToolEnd });
 
@@ -311,7 +311,7 @@ describe('StreamEventConsumer', () => {
       expect(onToolEnd).toHaveBeenCalledTimes(1);
     });
 
-    it('多个 tool 按顺序 start/end，每个正确更新', () => {
+    it('multiple tools start/end in sequence, each updates correctly', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(toolStartEvent('tool_a'));
@@ -322,35 +322,35 @@ describe('StreamEventConsumer', () => {
       const tools = entries.lastEntries.filter((e) => e.type === 'tool');
       expect(tools).toHaveLength(2);
 
-      // 第二个 tool 的 result
+      // Second tool result
       if (tools[1]?.type === 'tool') {
         expect(tools[1].result).toBe('result_b');
         expect(tools[1].isRunning).toBe(false);
       }
     });
 
-    it('tool:end 没有匹配的 tool entry 时不崩溃', () => {
+    it('does not crash when tool:end has no matching tool entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       expect(() => consumer.consume(toolEndEvent('orphan'))).not.toThrow();
     });
   });
 
-  // ── onToolEnd 钩子（run 模式场景） ──
+  // ── onToolEnd hook (run mode scenario) ──
 
-  describe('onToolEnd 钩子', () => {
-    it('run 模式：tool:end 后 resetAssistant，后续 token 写入新 assistant', () => {
+  describe('onToolEnd hook', () => {
+    it('run mode: resetAssistant after tool:end, subsequent tokens write to new assistant', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter, {
         onToolEnd: () => consumer.resetAssistant(),
       });
 
-      // 第一个 assistant entry（lazy：第一个 token 触发创建）
+      // First assistant entry (lazy: created by first token)
       consumer.consume(tokenEvent('thinking'));
       consumer.consume(toolStartEvent('read_file'));
       consumer.consume(toolEndEvent('result'));
-      // onToolEnd → resetAssistant()，重置内部状态但不立即插入新 entry
+      // onToolEnd → resetAssistant(), resets internal state but does not insert new entry immediately
 
-      // 新 token 触发创建第二个 assistant entry
+      // New token triggers creation of second assistant entry
       consumer.consume(tokenEvent('second'));
       consumer.flush();
 
@@ -359,7 +359,7 @@ describe('StreamEventConsumer', () => {
       expect(consumer.getAccumulatedContent()).toBe('second');
     });
 
-    it('run 模式：重置后新 token 写入新 assistant', () => {
+    it('run mode: new token writes to new assistant after reset', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter, {
         onToolEnd: () => consumer.resetAssistant(),
       });
@@ -368,7 +368,7 @@ describe('StreamEventConsumer', () => {
       consumer.consume(toolStartEvent('tool'));
       consumer.consume(toolEndEvent('result'));
 
-      // resetAssistant 后
+      // After resetAssistant
       consumer.consume(tokenEvent('second'));
       consumer.flush();
 
@@ -376,10 +376,10 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // ── phase-change 事件 ──
+  // ── phase-change events ──
 
-  describe('phase-change 事件', () => {
-    it('创建 phase entry 并停止 assistant streaming', () => {
+  describe('phase-change events', () => {
+    it('creates phase entry and stops assistant streaming', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.consume(tokenEvent('text'));
 
@@ -392,7 +392,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('触发 onPhaseChange 钩子并传入事件', () => {
+    it('triggers onPhaseChange hook and passes event', () => {
       const onPhaseChange = vi.fn();
       const consumer = new StreamEventConsumer(entries.setter, state.setter, { onPhaseChange });
 
@@ -404,19 +404,19 @@ describe('StreamEventConsumer', () => {
       expect(event.to.type).toBe('calling-llm');
     });
 
-    it('没有 assistant entry 时 phase-change 不崩溃', () => {
+    it('does not crash on phase-change when no assistant entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(phaseChangeEvent('idle', 'preparing'));
 
       const phases = entries.lastEntries.filter((e) => e.type === 'phase');
       expect(phases).toHaveLength(1);
-      // 没有 assistant entry
+      // No assistant entry
       const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
       expect(assistants).toHaveLength(0);
     });
 
-    it('advance 模式：onPhaseChange 在 calling-llm 时 resetAssistant', () => {
+    it('advance mode: onPhaseChange resetsAssistant at calling-llm', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter, {
         onPhaseChange: (event) => {
           if (event.to.type === 'calling-llm') {
@@ -425,28 +425,28 @@ describe('StreamEventConsumer', () => {
         },
       });
 
-      // 先发 token 让第一个 assistant entry 存在
+      // Send token first so first assistant entry exists
       consumer.consume(tokenEvent('text'));
       const assistantsBefore = entries.lastEntries.filter((e) => e.type === 'assistant').length;
       expect(assistantsBefore).toBe(1);
 
-      // calling-llm 的 phase-change，触发 resetAssistant（lazy：不立即创建 entry）
+      // calling-llm phase-change triggers resetAssistant (lazy: does not create entry immediately)
       consumer.consume(phaseChangeEvent('preparing', 'calling-llm'));
       const assistantsAfterReset = entries.lastEntries.filter((e) => e.type === 'assistant').length;
-      // lazy creation：resetAssistant 不创建新 entry，assistant 数量不变
+      // lazy creation: resetAssistant does not create new entry, assistant count unchanged
       expect(assistantsAfterReset).toBe(1);
 
-      // 新 token 触发创建新的 assistant entry
+      // New token triggers creation of new assistant entry
       consumer.consume(tokenEvent('new-text'));
       const assistantsFinal = entries.lastEntries.filter((e) => e.type === 'assistant').length;
       expect(assistantsFinal).toBe(2);
     });
   });
 
-  // ── error 事件 ──
+  // ── error events ──
 
-  describe('error 事件', () => {
-    it('创建 error entry 并停止 assistant streaming', () => {
+  describe('error events', () => {
+    it('creates error entry and stops assistant streaming', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.consume(tokenEvent('thinking'));
 
@@ -458,20 +458,20 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('error 前先 flush 残余 token 到 assistant', () => {
+    it('flushes residual tokens to assistant before error', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.consume(tokenEvent('partial text'));
 
       consumer.consume(errorEvent('fail'));
 
-      // flush 后 assistant 有 partial text
+      // After flush, assistant has partial text
       const asst = entries.lastEntries.find((e) => e.type === 'assistant');
       if (asst?.type === 'assistant') {
         expect(asst.content).toBe('partial text');
       }
     });
 
-    it('没有 assistant entry 时 error 不崩溃，只创建 error entry', () => {
+    it('does not crash on error when no assistant entry, only creates error entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(errorEvent('unexpected'));
@@ -481,16 +481,16 @@ describe('StreamEventConsumer', () => {
       if (err?.type === 'error') {
         expect(err.message).toBe('unexpected');
       }
-      // 没有 assistant entry
+      // No assistant entry
       const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
       expect(assistants).toHaveLength(0);
     });
   });
 
-  // ── skill 事件 ──
+  // ── skill events ──
 
-  describe('skill 系列事件', () => {
-    it('skill:start 创建 active skill entry 并更新 state', () => {
+  describe('skill series events', () => {
+    it('skill:start creates active skill entry and updates state', () => {
       const mockState = { id: 'test' } as any;
 
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
@@ -504,7 +504,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('skill:start state 为 undefined 时不调用 setState', () => {
+    it('does not call setState when skill:start state is undefined', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       const callCount = state.setter.mock.calls.length;
 
@@ -513,7 +513,7 @@ describe('StreamEventConsumer', () => {
       expect(state.setter.mock.calls.length).toBe(callCount);
     });
 
-    it('skill:end 创建 completed skill entry 并携带 result', () => {
+    it('skill:end creates completed skill entry and carries result', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({
@@ -531,7 +531,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('skill:loading 创建 loading skill entry', () => {
+    it('skill:loading creates loading skill entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({ type: 'skill:loading', name: 'my-skill' });
@@ -543,7 +543,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('skill:loaded 创建 loaded skill entry 并携带 tokenCount', () => {
+    it('skill:loaded creates loaded skill entry and carries tokenCount', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({ type: 'skill:loaded', name: 'my-skill', tokenCount: 1500 });
@@ -556,7 +556,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('完整的 skill 生命周期：loading → loaded → start → end', () => {
+    it('full skill lifecycle: loading → loaded → start → end', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({ type: 'skill:loading', name: 'poet' });
@@ -582,10 +582,10 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // ── subagent 事件 ──
+  // ── subagent events ──
 
-  describe('subagent 事件', () => {
-    it('subagent:start 创建 start entry', () => {
+  describe('subagent events', () => {
+    it('subagent:start creates start entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({ type: 'subagent:start', name: 'researcher', task: 'Find sources' });
@@ -598,7 +598,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('subagent:end 创建 end entry 并携带 result', () => {
+    it('subagent:end creates end entry and carries result', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({
@@ -616,10 +616,10 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // ── step 事件 ──
+  // ── step events ──
 
-  describe('step 事件', () => {
-    it('step:start 创建 step-start entry', () => {
+  describe('step events', () => {
+    it('step:start creates step-start entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({ type: 'step:start', step: 1, state: null as any });
@@ -630,7 +630,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('step:end 创建 step-end entry 并携带 result', () => {
+    it('step:end creates step-end entry and carries result', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({ type: 'step:end', step: 2, result: { type: 'done', answer: '42' } });
@@ -643,10 +643,10 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // ── compress 事件 ──
+  // ── compress events ──
 
-  describe('compress 事件', () => {
-    it('compressing 创建 compressing entry', () => {
+  describe('compress events', () => {
+    it('compressing creates compressing entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(compressingEvent());
@@ -657,7 +657,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('compressed 创建 compressed entry 并携带 summary 和 removedCount', () => {
+    it('compressed creates compressed entry and carries summary and removedCount', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(compressedEvent('Kept key facts', 5));
@@ -674,7 +674,7 @@ describe('StreamEventConsumer', () => {
   // ── resetAssistant ──
 
   describe('resetAssistant', () => {
-    it('flush 残余内容后创建新的 assistant entry，重置累积', () => {
+    it('flushes residual content then creates new assistant entry and resets accumulation', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.consume(tokenEvent('old content'));
 
@@ -686,7 +686,7 @@ describe('StreamEventConsumer', () => {
       expect(consumer.getAccumulatedContent()).toBe('');
     });
 
-    it('reset 后新 token 写入新的 assistant entry', () => {
+    it('new token writes to new assistant entry after reset', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(tokenEvent('first'));
@@ -701,7 +701,7 @@ describe('StreamEventConsumer', () => {
   // ── finalizeAssistant ──
 
   describe('finalizeAssistant', () => {
-    it('标记 assistant 为 isStreaming=false 并使用累积内容', () => {
+    it('marks assistant as isStreaming=false and uses accumulated content', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.consume(tokenEvent('final answer'));
 
@@ -714,7 +714,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('传入 content 参数时覆盖累积内容', () => {
+    it('overrides accumulated content when content parameter is passed', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.resetAssistant();
       consumer.consume(tokenEvent('streaming content'));
@@ -730,7 +730,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('标记 disposed，后续 consume 不处理事件', () => {
+    it('marks disposed, subsequent consume does not process events', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.finalizeAssistant('done');
       const callCount = entries.setter.mock.calls.length;
@@ -738,11 +738,11 @@ describe('StreamEventConsumer', () => {
       consumer.consume(tokenEvent('after finalize'));
       consumer.consume(toolStartEvent('tool'));
 
-      // disposed 后 consume 不产生新的 setter 调用
+      // consume does not produce new setter calls after disposed
       expect(entries.setter.mock.calls.length).toBe(callCount);
     });
 
-    it('空累积内容且不传参数时，最终内容为空字符串', () => {
+    it('final content is empty string when accumulated content is empty and no parameter passed', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.finalizeAssistant();
@@ -757,11 +757,11 @@ describe('StreamEventConsumer', () => {
   // ── flush ──
 
   describe('flush', () => {
-    it('强制刷新累积内容，跳过节流', () => {
+    it('forces refresh of accumulated content, bypassing throttling', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(tokenEvent('hello'));
-      // 不推进时间，直接 flush
+      // Do not advance time, flush directly
       consumer.flush();
 
       const asst = entries.lastEntries.find((e) => e.type === 'assistant');
@@ -771,15 +771,15 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // ── disposed 后的手动操作 ──
+  // ── Manual operations after disposed ──
 
-  describe('disposed 状态', () => {
-    it('finalize 后 consume 不处理任何事件', () => {
+  describe('disposed state', () => {
+    it('consume does not process any events after finalize', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.finalizeAssistant('done');
       const callCount = entries.setter.mock.calls.length;
 
-      // 所有事件类型都不应该处理
+      // All event types should not be processed
       consumer.consume(tokenEvent('x'));
       consumer.consume(toolStartEvent('x'));
       consumer.consume(toolEndEvent('x'));
@@ -789,21 +789,21 @@ describe('StreamEventConsumer', () => {
       expect(entries.setter.mock.calls.length).toBe(callCount);
     });
 
-    it('resetAssistant / flush 仍可调用（手动 API 不受 disposed 限制）', () => {
+    it('resetAssistant / flush can still be called (manual API not restricted by disposed)', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.finalizeAssistant('done');
 
-      // resetAssistant 和 flush 是公共 API，不受 disposed 限制
-      // 调用方需要自己管理生命周期
+      // resetAssistant and flush are public APIs, not restricted by disposed
+      // Caller needs to manage lifecycle themselves
       expect(() => consumer.resetAssistant()).not.toThrow();
       expect(() => consumer.flush()).not.toThrow();
     });
   });
 
-  // ── 被忽略的事件 ──
+  // ── Ignored events ──
 
-  describe('被忽略的事件', () => {
-    it('complete 事件不产生 TimelineEntry', () => {
+  describe('Ignored events', () => {
+    it('complete event does not produce TimelineEntry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       const callCount = entries.setter.mock.calls.length;
 
@@ -815,7 +815,7 @@ describe('StreamEventConsumer', () => {
       expect(entries.setter.mock.calls.length).toBe(callCount);
     });
 
-    it('thinking 事件产生 thought entry', () => {
+    it('thinking event produces thought entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({
@@ -831,7 +831,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('llm:request 事件产生 llm-request entry', () => {
+    it('llm:request event produces llm-request entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({
@@ -852,7 +852,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('llm:response 事件产生 llm-response entry', () => {
+    it('llm:response event produces llm-response entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({
@@ -871,24 +871,24 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // ── 完整流程模拟 ──
+  // ── Full flow simulation ──
 
-  describe('完整流程', () => {
-    it('run 模式：token → tool → resetAssistant → token → finalize', () => {
+  describe('Full flow', () => {
+    it('run mode: token → tool → resetAssistant → token → finalize', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter, {
         onToolEnd: () => consumer.resetAssistant(),
       });
 
-      // 第一轮：思考 + 工具
+      // Round 1: thinking + tool
       consumer.consume(tokenEvent('Let me check'));
       consumer.consume(toolStartEvent('read_file', { path: '/tmp' }));
       consumer.consume(toolEndEvent('file contents'));
 
-      // onToolEnd 触发 resetAssistant，新 assistant entry
+      // onToolEnd triggers resetAssistant, new assistant entry
       consumer.consume(tokenEvent('The answer is 42'));
       consumer.finalizeAssistant('The answer is 42');
 
-      // 最终 assistant 应该是最后那个
+      // Final assistant should be the last one
       const lastAsst = [...entries.lastEntries].reverse().find((e) => e.type === 'assistant');
       if (lastAsst?.type === 'assistant') {
         expect(lastAsst.content).toBe('The answer is 42');
@@ -896,21 +896,21 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('step 模式：无 onToolEnd，一个 step 内 tool 不触发重置', () => {
+    it('step mode: no onToolEnd, tool within a step does not trigger reset', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(tokenEvent('thinking'));
       consumer.consume(toolStartEvent('search'));
       consumer.consume(toolEndEvent('results'));
 
-      // 没有 resetAssistant，assistant 不变
+      // No resetAssistant, assistant unchanged
       const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
-      // 应该只有一个 assistant（构造时 resetAssistant 不创建 entry，但 tool:start 前的 flush 也不创建）
-      // 实际上 tool:start 前的 flush 只更新已有的 assistant
+      // Should have only one assistant (resetAssistant on construction does not create entry, but flush before tool:start also does not create)
+      // Actually flush before tool:start only updates existing assistant
       expect(assistants.length).toBeLessThanOrEqual(1);
     });
 
-    it('advance 模式：phase-change 钩子触发暂停和 assistant 重置', () => {
+    it('advance mode: phase-change hook triggers pause and assistant reset', () => {
       const phaseChanges: string[] = [];
 
       const consumer = new StreamEventConsumer(entries.setter, state.setter, {
@@ -925,12 +925,12 @@ describe('StreamEventConsumer', () => {
       consumer.consume(phaseChangeEvent('idle', 'calling-llm'));
       expect(phaseChanges).toEqual(['idle->calling-llm']);
 
-      // resetAssistant 后新 token 进入新 entry
+      // New token enters new entry after resetAssistant
       consumer.consume(tokenEvent('thinking'));
       expect(consumer.getAccumulatedContent()).toBe('thinking');
     });
 
-    it('复杂流程：skill + tool + token 不互相干扰', () => {
+    it('complex flow: skill + tool + token do not interfere with each other', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume({ type: 'skill:loading', name: 'poet' });
@@ -960,10 +960,10 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // ── ID 唯一性 ──
+  // ── ID uniqueness ──
 
-  describe('ID 唯一性', () => {
-    it('多个 entry 的 ID 互不相同', () => {
+  describe('ID uniqueness', () => {
+    it('multiple entries have distinct IDs', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(toolStartEvent('a'));
@@ -975,8 +975,8 @@ describe('StreamEventConsumer', () => {
     });
   });
 
-  // T-CLI1: 回归测试 — tools:start / tools:end 并行工具事件 (CR CLI-1)
-  describe('tools:start / tools:end 并行工具事件 (CR CLI-1)', () => {
+  // T-CLI1: Regression test — tools:start / tools:end parallel tool events (CR CLI-1)
+  describe('tools:start / tools:end parallel tool events (CR CLI-1)', () => {
     function toolsStartEvent(
       actions: Array<{ tool: string; id: string; args?: Record<string, unknown> }>
     ): RunStreamEvent {
@@ -994,7 +994,7 @@ describe('StreamEventConsumer', () => {
       return { type: 'tools:end', results };
     }
 
-    it('tools:start 应为每个 action 创建 isRunning=true 的 tool entry', () => {
+    it('tools:start should create tool entry with isRunning=true for each action', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(
@@ -1016,7 +1016,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('tools:end 应从后往前匹配 isRunning 的 tool entry 并设置结果', () => {
+    it('tools:end should match isRunning tool entries from back to front and set results', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
       consumer.consume(
@@ -1029,7 +1029,7 @@ describe('StreamEventConsumer', () => {
 
       const tools = entries.lastEntries.filter((e) => e.type === 'tool');
       expect(tools).toHaveLength(2);
-      // tools:end 从后往前匹配，所以 tc-2 匹配最后一个，tc-1 匹配前一个
+      // tools:end matches from back to front, so tc-2 matches last, tc-1 matches previous
       if (tools[0]?.type === 'tool') {
         expect(tools[0].result).toBe('file content');
         expect(tools[0].isRunning).toBe(false);
@@ -1040,7 +1040,7 @@ describe('StreamEventConsumer', () => {
       }
     });
 
-    it('tools:end 应触发 onToolEnd 钩子', () => {
+    it('tools:end should trigger onToolEnd hook', () => {
       const onToolEnd = vi.fn();
       const consumer = new StreamEventConsumer(entries.setter, state.setter, { onToolEnd });
 
@@ -1055,7 +1055,7 @@ describe('StreamEventConsumer', () => {
       expect(onToolEnd).toHaveBeenCalledTimes(1);
     });
 
-    it('tools:start 前应 flush 累积的 token', () => {
+    it('should flush accumulated tokens before tools:start', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
       consumer.resetAssistant();
 
@@ -1067,7 +1067,7 @@ describe('StreamEventConsumer', () => {
         ])
       );
 
-      // assistant entry 应有累积的 token
+      // Assistant entry should have accumulated tokens
       const assistant = entries.lastEntries.find((e) => e.type === 'assistant');
       if (assistant?.type === 'assistant') {
         expect(assistant.content).toBe('partial text');

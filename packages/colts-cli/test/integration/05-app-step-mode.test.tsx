@@ -35,13 +35,13 @@ describe('Integration: App step/advance mode with real LLM', () => {
 
       await submitMessage('What is 2+2?');
 
-      // Step 模式会在每个 step 完成后暂停，需要循环处理暂停直到最终完成
+      // Step mode pauses after each step completes; loop through pauses until final completion
       let frame = '';
       for (let i = 0; i < 10; i++) {
         const state = await waitForPauseOrIdle(lastFrame, 30000);
         frame = state.frame;
         if (state.type === 'idle') break;
-        // 暂停状态，发空消息继续
+        // Paused state, send empty message to continue
         await submitMessage('');
       }
 
@@ -63,10 +63,10 @@ describe('Integration: App step/advance mode with real LLM', () => {
       await submitMessage('/advance');
       expect(lastFrame()).toContain('ADV');
 
-      // 用一个不需要工具调用的问题，让 LLM 直接回答
+      // Use a question that does not require tool calls, let LLM answer directly
       await submitMessage('Say exactly the number 42 and nothing else.');
 
-      // Advance mode 在每个 phase boundary 暂停，循环处理直到 idle
+      // Advance mode pauses at each phase boundary; loop until idle
       let frame = '';
       for (let i = 0; i < 20; i++) {
         const state = await waitForPauseOrIdle(lastFrame, 30000);

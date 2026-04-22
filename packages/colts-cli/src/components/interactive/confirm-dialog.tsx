@@ -1,7 +1,7 @@
 /**
- * @fileoverview Confirm 对话框 — 危险工具执行前确认
+ * @fileoverview Confirm dialog — confirmation before executing dangerous tools
  *
- * 显示工具名和参数预览，用户按 Y 确认或 n 取消。
+ * Displays tool name and parameter preview; user presses Y to confirm or n to cancel.
  */
 
 import React from 'react';
@@ -16,9 +16,9 @@ interface ConfirmDialogProps {
 }
 
 /**
- * Confirm 对话框组件
+ * Confirm dialog component
  *
- * 显示工具调用信息，等待用户 Y/n 确认。
+ * Displays tool call information and waits for user Y/n confirmation.
  */
 export function ConfirmDialog({ toolName, args, onResult }: ConfirmDialogProps) {
   return (

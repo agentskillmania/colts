@@ -24,19 +24,19 @@ describe('Integration: App /clear command with real LLM', () => {
     async () => {
       const { lastFrame, unmount } = renderApp({ runner });
 
-      // 先发一条消息建立对话历史
+      // Send a message first to establish conversation history
       await submitMessage('Say exactly "banana" and nothing else.');
       const frameWithMessage = await waitForIdle(lastFrame, 90000);
       expect(frameWithMessage).toContain('❯');
       expect(frameWithMessage.toLowerCase()).toContain('banana');
 
-      // 执行 /clear
+      // Execute /clear
       await submitMessage('/clear');
       const clearedFrame = lastFrame() || '';
 
-      // 清屏后不应该看到之前的消息
+      // Previous messages should not be visible after clear
       expect(clearedFrame).not.toContain('banana');
-      // 应该回到欢迎屏幕
+      // Should return to welcome screen
       expect(clearedFrame).toContain('Welcome to colts-cli');
 
       unmount();

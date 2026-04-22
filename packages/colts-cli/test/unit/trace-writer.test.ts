@@ -1,7 +1,7 @@
 /**
- * TraceWriter 单元测试
+ * TraceWriter unit tests
  *
- * 覆盖所有事件类型的 trace record 格式、双时间戳、tool 配对计时、截断。
+ * Covers trace record format for all event types, dual timestamps, tool pairing timing, truncation.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

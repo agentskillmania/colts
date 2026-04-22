@@ -25,19 +25,19 @@ describe('Integration: App tool usage with real LLM', () => {
     async () => {
       const { lastFrame, unmount } = renderApp({ runner });
 
-      // 问一个 LLM 不太可能心算正确的乘法
+      // Ask a multiplication that LLM is unlikely to calculate mentally
       await submitMessage('What is 25 times 37? Use the calculator tool.');
       const frame = await waitForIdle(lastFrame, 90000);
 
-      // 用户消息和 agent 回复
+      // User message and agent reply
       expect(frame).toContain('❯');
       expect(frame).toContain('What is 25 times 37?');
       expect(frame).toContain('◀');
 
-      // 工具调用应该可见（compact 模式也显示 tool）
+      // Tool call should be visible (compact mode also shows tool)
       expect(frame.toLowerCase()).toContain('calculator');
 
-      // 最终答案应该包含正确结果 925
+      // Final answer should contain correct result 925
       expect(frame).toMatch(/925/);
 
       unmount();

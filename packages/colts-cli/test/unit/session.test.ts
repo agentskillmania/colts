@@ -1,7 +1,7 @@
 /**
- * session.ts 单元测试
+ * session.ts unit tests
  *
- * 覆盖 v1 格式（version/meta/state 包装）和旧格式（裸 AgentState）的向后兼容。
+ * Covers backward compatibility of v1 format (version/meta/state wrapper) and old format (raw AgentState).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

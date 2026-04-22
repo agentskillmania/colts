@@ -130,17 +130,17 @@ function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-/** 条目数量上限，超过时裁剪最老的条目，防止长对话导致渲染卡顿 */
+/** Entry count limit; trims oldest entries when exceeded to prevent render lag in long conversations */
 export const MAX_ENTRIES = 200;
 
 /**
- * 裁剪条目到上限
+ * Trim entries to limit
  *
- * 纯函数，便于测试。超过 max 时保留最后 max 条。
+ * Pure function for easy testing. Keeps last max entries when exceeding max.
  *
- * @param entries - 当前条目数组
- * @param max - 最大条目数
- * @returns 裁剪后的数组（同一引用或新数组）
+ * @param entries - Current entry array
+ * @param max - Maximum number of entries
+ * @returns Trimmed array (same reference or new array)
  */
 export function trimToMaxEntries<T>(entries: T[], max: number): T[] {
   return entries.length > max ? entries.slice(-max) : entries;
@@ -163,7 +163,7 @@ export function useAgent(
 ): UseAgentReturn {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
 
-  /** setEntries 包装：自动裁剪超出上限的条目 */
+  /** setEntries wrapper: auto-trim entries exceeding the limit */
   const trimEntries = useCallback((action: React.SetStateAction<TimelineEntry[]>) => {
     setEntries((prev) => {
       const next = typeof action === 'function' ? action(prev) : action;
@@ -507,7 +507,7 @@ type SetState = React.Dispatch<React.SetStateAction<AgentState | null>>;
  * @param runner - AgentRunner instance
  * @param currentState - Current AgentState
  * @param userInput - User message text
- * @param setEntries - Setter for timeline entries（自动裁剪）
+ * @param setEntries - Setter for timeline entries (auto-trim)
  * @param setState - Setter for AgentState
  * @param signal - AbortSignal for cancellation
  */
@@ -522,7 +522,7 @@ async function executeRun(
   const stateWithMsg = addUserMessage(currentState, userInput);
   const tracer = new TraceWriter(stateWithMsg.id);
 
-  // 创建事件消费者，run 模式在 tool:end 后自动创建新 assistant entry
+  // Create event consumer; run mode auto-creates new assistant entry after tool:end
   const consumer = new StreamEventConsumer(setEntries, setState, {
     onToolEnd: () => consumer.resetAssistant(),
   });
@@ -538,7 +538,7 @@ async function executeRun(
       iterResult = await gen.next();
     }
 
-    // 处理最终结果
+    // Process final result
     if (iterResult.done && iterResult.value) {
       const { state: finalState, result: runResult } = iterResult.value;
       setState(finalState);
@@ -546,7 +546,7 @@ async function executeRun(
       if (runResult.type === 'success') {
         consumer.finalizeAssistant(consumer.getAccumulatedContent() || runResult.answer);
       } else {
-        // max_steps 或 error
+        // max_steps or error
         consumer.flush();
         const id = consumer.getAssistantId();
         setEntries((prev) => [
@@ -607,7 +607,7 @@ export async function executeStep(
   }
 
   const tracer = new TraceWriter(runningState.id);
-  // step 模式不设 onToolEnd：一个 step 内不重置 assistant，step 结束后整体处理
+  // Step mode does not set onToolEnd: do not reset assistant within a step; handle holistically after step ends
   const consumer = new StreamEventConsumer(setEntries, setState);
 
   let continueLoop = true;
@@ -627,7 +627,7 @@ export async function executeStep(
         iterResult = await gen.next();
       }
 
-      // Step 完成
+      // Step complete
       if (iterResult.done && iterResult.value) {
         const { state: newState, result: stepResult } = iterResult.value;
         runningState = newState;
@@ -639,7 +639,7 @@ export async function executeStep(
           break;
         }
 
-        // Step 完成但还需要继续 — 暂停等用户按 Enter
+        // Step complete but needs to continue — pause and wait for user to press Enter
         consumer.flush();
         const id = consumer.getAssistantId();
         setEntries((prev) => [
@@ -705,12 +705,12 @@ export async function executeAdvance(
 
   const tracer = new TraceWriter(effectiveState.id);
 
-  // advance 模式：consumer 不负责暂停，暂停在循环中检测 phase-change 事件后执行
+  // Advance mode: consumer does not handle pause; pause is triggered after detecting phase-change events in loop
   const consumer = new StreamEventConsumer(setEntries, setState);
 
   consumer.resetAssistant();
 
-  // advanceStream 每次只推进一步 phase，需要循环调用直到到达 terminal phase
+  // advanceStream advances one phase at a time; loop until reaching terminal phase
   const currentExecState = execState;
   let currentPhase = currentExecState.phase;
 
@@ -725,8 +725,8 @@ export async function executeAdvance(
         tracer.consume(iterResult.value);
         consumer.consume(iterResult.value);
 
-        // 检测 phase-change 事件，在内层循环中执行暂停
-        // 这样 await pauseFn() 能真正阻塞，而不是 fire-and-forget
+        // Detect phase-change events and execute pause in inner loop
+        // This makes await pauseFn() truly blocking, not fire-and-forget
         if (iterResult.value.type === 'phase-change') {
           const phaseEvent = iterResult.value as Extract<StreamEvent, { type: 'phase-change' }>;
           await pauseFn();
@@ -738,7 +738,7 @@ export async function executeAdvance(
         iterResult = await gen.next();
       }
 
-      // 一次 advanceStream 结束，检查结果并准备下一次推进
+      // One advanceStream iteration ends; check result and prepare for next advancement
       if (iterResult.done && iterResult.value) {
         const result = iterResult.value;
         effectiveState = result.state;
@@ -754,7 +754,7 @@ export async function executeAdvance(
 
         if (result.done) break;
       } else {
-        // generator 异常结束（没有 return value），退出循环
+        // Generator ended abnormally (no return value); exit loop
         break;
       }
     }
