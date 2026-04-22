@@ -321,7 +321,7 @@ describe('deepMerge', () => {
     });
   });
 
-  // T6: 回归测试 — 数组中 undefined 使用 default fallback (CR SY-2)
+  // T6: Regression test — undefined in arrays falls back to default (CR SY-2)
   describe('undefined semantics in arrays vs objects (CR SY-2)', () => {
     it('should use default value for undefined array elements', () => {
       const target = { items: [undefined, 'b'] } as unknown as Record<string, unknown>;
@@ -329,10 +329,10 @@ describe('deepMerge', () => {
 
       const result = deepMerge(target, defaultValue);
 
-      // 数组中 undefined 元素应 fallback 到 default
+      // Undefined array elements should fall back to default
       expect((result as { items: string[] }).items[0]).toBe('a');
       expect((result as { items: string[] }).items[1]).toBe('b');
-      // 短数组缺失的尾部元素从 default 填充
+      // Missing tail elements of short arrays are filled from default
       expect((result as { items: string[] }).items[2]).toBe('c');
     });
 
@@ -342,7 +342,7 @@ describe('deepMerge', () => {
 
       const result = deepMerge(target, defaultValue);
 
-      // 对象中 target 有这个 key（即使值为 undefined），应保留
+      // Object keys present in target (even if undefined) should be preserved
       expect(result).toHaveProperty('key');
       expect(result.key).toBeUndefined();
     });

@@ -47,9 +47,9 @@ function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[]
     }
 
     // Target takes priority, fallback to default for missing slots.
-    // Note: 与对象不同，数组中 undefined 元素使用 default fallback。
-    // 这是有意为之：短数组 missing 尾部元素应从 default 填充，
-    // 而非产生 undefined（对象用 `key in target` 区分，数组无法区分）。
+    // Note: Unlike objects, undefined array elements fall back to defaults.
+    // This is intentional: short arrays should have missing tail elements filled from defaults,
+    // rather than producing undefined (objects use `key in target` to distinguish; arrays cannot).
     const value = t !== undefined ? t : d;
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
       result[i] = deepMerge(value as Record<string, unknown>, {});

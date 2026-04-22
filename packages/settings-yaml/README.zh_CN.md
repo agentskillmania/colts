@@ -1,5 +1,7 @@
 # @agentskillmania/settings-yaml
 
+[![npm version](https://img.shields.io/npm/v/@agentskillmania/settings-yaml.svg)](https://www.npmjs.com/package/@agentskillmania/settings-yaml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
 YAML 配置管理库。深度合并、默认值回退、运行时覆盖。一行初始化，点号路径读写，按需持久化。
