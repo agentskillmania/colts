@@ -1,8 +1,8 @@
 /**
- * @fileoverview 新 ToolResultHandler 单元测试
+ * @fileoverview New ToolResultHandler unit tests
  *
- * 覆盖从 processToolResult() 迁移的全部场景。
- * handler 产出 AdvanceResult（含 effects），控制流由 phase + done 决定。
+ * Covers all scenarios migrated from processToolResult().
+ * Handler produces AdvanceResult (with effects); control flow is determined by phase + done.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -24,7 +24,7 @@ const defaultConfig: AgentConfig = {
   tools: [],
 };
 
-/** 创建最小 mock PhaseHandlerContext（handler 内部不直接用 ctx） */
+/** Create minimal mock PhaseHandlerContext (handler does not directly use ctx) */
 function createMockCtx(): PhaseHandlerContext {
   return {
     llmProvider: {} as any,
@@ -36,7 +36,7 @@ function createMockCtx(): PhaseHandlerContext {
   };
 }
 
-/** 创建 tool-result phase 的 ExecutionState */
+/** Create ExecutionState for tool-result phase */
 function createToolResultExecState(
   results: Record<string, unknown>,
   opts?: {
@@ -142,7 +142,7 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     const toolEnd = result.effects![3] as { type: 'tool:end'; result: unknown };
     expect(toolEnd.result).toBe("Skill 'research' loaded");
 
-    // skill:loaded 应包含 token 数量
+    // skill:loaded should include token count
     const skillLoaded = result.effects![1] as {
       type: 'skill:loaded';
       name: string;
@@ -151,7 +151,7 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     expect(skillLoaded.name).toBe('research');
     expect(skillLoaded.tokenCount).toBeGreaterThan(0);
 
-    // execState.phase 应被重置为 idle
+    // execState.phase should be reset to idle
     expect(execState.phase.type).toBe('idle');
   });
 
@@ -304,7 +304,7 @@ describe('ToolResultHandler — RETURN_SKILL', () => {
 
     const result = await handler.execute(createMockCtx(), state, execState);
 
-    // 顶级 skill return 后不直接结束，让 LLM 有机会向用户输出结果
+    // Top-level skill return does not end directly; let LLM output results to user
     expect(result.done).toBe(false);
     expect(result.phase.type).toBe('idle');
     expect(result.effects!.map((e) => e.type)).toEqual(['skill:end', 'tool:end']);
@@ -320,7 +320,7 @@ describe('ToolResultHandler — RETURN_SKILL', () => {
     const toolEnd = result.effects![1] as { type: 'tool:end'; result: unknown };
     expect(toolEnd.result).toBe('Found 3 relevant papers');
 
-    // execState.phase 应被重置为 idle
+    // execState.phase should be reset to idle
     expect(execState.phase.type).toBe('idle');
   });
 
@@ -372,7 +372,7 @@ describe('ToolResultHandler — RETURN_SKILL', () => {
     expect(result.state.context.skillState?.current).toBe('research');
     expect(result.state.context.skillState?.stack.length).toBe(0);
 
-    // execState.phase 应被重置为 idle
+    // execState.phase should be reset to idle
     expect(execState.phase.type).toBe('idle');
   });
 });
@@ -571,7 +571,7 @@ describe('ToolResultHandler — delegate tools', () => {
 
     const result = await handler.execute(createMockCtx(), state, execState);
 
-    // 顶级 skill return 后不直接结束
+    // Top-level skill return does not end directly
     expect(result.done).toBe(false);
     expect(result.phase.type).toBe('idle');
     expect(result.effects!.map((e) => e.type)).toEqual([

@@ -57,7 +57,7 @@ export class CallingLLMHandler implements IPhaseHandler {
           retryCount: 0,
         });
         if (decision.decision === 'ignore') {
-          // 用 fallbackText 替代原始 LLM 响应，作为纯文本继续
+          // Replace original LLM response with fallbackText and continue as plain text
           execState.llmResponse = decision.fallbackText;
           execState.action = undefined;
           execState.allActions = undefined;

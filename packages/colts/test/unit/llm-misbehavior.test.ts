@@ -202,8 +202,8 @@ describe('Naughty LLM - misbehavior edge cases', () => {
   });
 
   it('should recover when return_skill is called without an active skill', async () => {
-    // return_skill called with no active skill → top-level-return，不直接结束
-    // 需要第二轮 LLM 输出来完成任务
+    // return_skill called with no active skill → top-level-return, does not end directly
+    // Requires a second LLM output round to complete the task
     const registry = createSkillToolRegistry();
     const client = createMockLLMClient([
       {
@@ -221,7 +221,7 @@ describe('Naughty LLM - misbehavior edge cases', () => {
 
     const { result } = await runner.run(state);
 
-    // top-level-return 后 LLM 继续输出文本，run 完成
+    // After top-level-return, LLM continues outputting text, run completes
     expect(result.type).toBe('success');
   });
 
@@ -296,14 +296,14 @@ describe('Naughty LLM - misbehavior edge cases', () => {
         tokens: mockTokens,
         stopReason: 'toolUse',
       },
-      // Step 6: return from outer (top-level return，不直接结束)
+      // Step 6: return from outer (top-level return, does not end directly)
       {
         content: '',
         toolCalls: [{ id: 'tc6', name: 'return_skill', arguments: { result: 'Outer done' } }],
         tokens: mockTokens,
         stopReason: 'toolUse',
       },
-      // Step 7: LLM 输出最终文本
+      // Step 7: LLM outputs final text
       { content: 'All skills completed', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
     ]);
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, toolRegistry: registry });
@@ -330,7 +330,7 @@ describe('Naughty LLM - misbehavior edge cases', () => {
     const ends = skillEvents.filter((e) => e.type === 'skill:end');
     expect(ends.map((e) => e.name)).toEqual(['inner', 'middle', 'outer']);
 
-    // 最终 run 完成
+    // Run completes
     expect(result.type).toBe('success');
 
     // Stack should be empty after all returns

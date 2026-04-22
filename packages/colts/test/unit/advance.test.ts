@@ -435,13 +435,13 @@ describe('advance()', () => {
       expect(Object.values(result.phase.results)[0]).toBe('4');
     }
 
-    // 新架构：ToolResultHandler 处理 plain tool result 时返回 tool:end effect
-    // phase 保持 tool-result, done=false（advance() 不会自动转到 completed）
-    // advance() 用户通过 effects 获取 tool:end 事件
+    // New architecture: ToolResultHandler returns tool:end effect for plain tool result
+    // phase stays tool-result, done=false (advance() does not auto-transition to completed)
+    // User gets tool:end event through effects
     result = await runner.advance(result.state, execState);
     expect(result.phase.type).toBe('tool-result');
     expect(result.done).toBe(false);
-    // handler 应产出 tool:end effect
+    // Handler should produce tool:end effect
     expect(result.effects).toBeDefined();
     expect(result.effects!.some((e) => e.type === 'tool:end')).toBe(true);
   });
@@ -704,7 +704,7 @@ describe('advanceStream()', () => {
     expect(events.some((e) => e.type === 'phase-change')).toBe(true);
   });
 
-  // P1 回归：advanceStream() 必须能产出 ToolResultHandler 的 effects
+  // P1 Regression: advanceStream() must yield ToolResultHandler effects
   it('should yield tool:end effect when advanceStream reaches tool-result phase', async () => {
     const registry = new ToolRegistry();
     registry.register({
@@ -731,7 +731,7 @@ describe('advanceStream()', () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
 
-    // 从 idle 开始推进，每步用 advanceStream 收集 events
+    // Advance from idle, collecting events via advanceStream each step
     const eventTypes: string[] = [];
     let currentState = state;
     for (let i = 0; i < 20; i++) {
@@ -741,18 +741,18 @@ describe('advanceStream()', () => {
       }
       eventTypes.push(...events.map((e) => e.type));
 
-      // 用 blocking advance 推进 execState
+      // Use blocking advance to progress execState
       const result = await runner.advance(currentState, execState);
       currentState = result.state;
       if (isTerminalPhase(result.phase)) break;
     }
 
-    // 应该产出 tool:end effect（由 ToolResultHandler 产生）
+    // Should yield tool:end effect (produced by ToolResultHandler)
     expect(eventTypes).toContain('tool:end');
   });
 });
 
-// T1: 回归测试 — advance() 路径 SWITCH_SKILL 后 skillState 应更新
+// T1: Regression test — skillState should update after SWITCH_SKILL via advance()
 describe('advance() skillState regression (CR P0-1)', () => {
   it('should update skillState.current after SWITCH_SKILL via advance()', async () => {
     const mockResponse: LLMResponse = {
@@ -800,24 +800,24 @@ describe('advance() skillState regression (CR P0-1)', () => {
     result = await runner.advance(result.state, execState, registry); // parsed → executing-tool
     result = await runner.advance(result.state, execState, registry); // executing-tool → tool-result
 
-    // executing-tool handler 写入 tool message 并注入 task user message
-    // 但 skillState 在此阶段还未更新（由 ToolResultHandler 处理）
+    // Executing-tool handler writes tool message and injects task user message
+    // But skillState is not updated yet at this stage (handled by ToolResultHandler)
 
-    // 再 advance 一次：ToolResultHandler 处理 SWITCH_SKILL signal
+    // Advance once more: ToolResultHandler processes SWITCH_SKILL signal
     result = await runner.advance(result.state, execState);
 
-    // 新架构：ToolResultHandler 产出 skill:start + tool:end effects
-    // phase 变为 idle（表示 skill loaded，step 循环应继续）
+    // New architecture: ToolResultHandler produces skill:start + tool:end effects
+    // Phase becomes idle (indicating skill loaded, step loop should continue)
     expect(result.phase.type).toBe('idle');
     expect(result.done).toBe(false);
     expect(result.effects).toBeDefined();
     expect(result.effects!.map((e) => e.type)).toContain('skill:start');
 
-    // skillState.current 应该被 applySkillSignal 更新为 'test-skill'
+    // skillState.current should be updated to 'test-skill' by applySkillSignal
     const skillState = result.state.context.skillState;
     expect(skillState).toBeDefined();
     expect(skillState?.current).toBe('test-skill');
-    // loadedInstructions 应该包含 skill 的指令
+    // loadedInstructions should contain skill instructions
     expect(skillState?.loadedInstructions).toContain('Test skill instructions');
   });
 });

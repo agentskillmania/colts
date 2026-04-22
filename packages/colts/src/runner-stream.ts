@@ -168,7 +168,7 @@ export async function* executeAdvanceStream(
   // For other phases, delegate to executeAdvance()
   const result = await executeAdvance(ctx, state, execState, registry, options);
 
-  // yield handler 产出的 effects（如 tool:end、skill:start 等）
+  // Yield effects produced by handler (e.g., tool:end, skill:start)
   if (result.effects && result.effects.length > 0) {
     for (const effect of result.effects) {
       yield effect as StreamEvent;
@@ -241,7 +241,7 @@ export async function* executeStepStream(
       }
     }
 
-    // 转发 handler 产出的 effects
+    // Forward effects produced by handler
     if (effects && effects.length > 0) {
       for (const effect of effects) {
         yield effect as StreamEvent;
@@ -250,7 +250,7 @@ export async function* executeStepStream(
 
     yield { type: 'phase-change', from: fromPhase, to: phase };
 
-    // 控制流由 phase + done 决定
+    // Control flow is determined by phase + done
     if (done && phase.type === 'completed') {
       return {
         state: currentState,
@@ -263,21 +263,21 @@ export async function* executeStepStream(
       return { state: currentState, result: { type: 'error', error: phase.error } };
     }
 
-    // ToolResultHandler 已处理 tool-result phase（有 effects 表示已处理）
+    // ToolResultHandler has processed tool-result phase (effects indicate processed)
     if (phase.type === 'tool-result' && effects && effects.length > 0) {
-      // same-skill/cyclic/plain tool → 返回 continue
+      // same-skill/cyclic/plain tool → return continue
       return {
         state: currentState,
         result: { type: 'continue', toolResult: execState.toolResult },
       };
     }
 
-    // ExecutingToolHandler 返回的 tool-result（无 effects）→ 继续循环让 ToolResultHandler 处理
+    // ExecutingToolHandler returned tool-result (no effects) → continue loop for ToolResultHandler
     if (phase.type === 'tool-result' && (!effects || effects.length === 0)) {
       continue;
     }
 
-    // skill loaded/returned → phase 被重置为 idle，继续循环
+    // Skill loaded/returned → phase reset to idle, continue loop
     if (phase.type === 'idle') {
       continue;
     }
