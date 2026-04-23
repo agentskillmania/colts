@@ -349,7 +349,7 @@ export interface IContextCompressor {
 /**
  * Compression strategy
  */
-export type CompressionStrategy = 'truncate' | 'sliding-window' | 'summarize' | 'hybrid';
+export type CompressionStrategy = 'truncate' | 'summarize';
 
 /**
  * Threshold type for compression trigger
@@ -364,10 +364,14 @@ export interface CompressionConfig {
   threshold?: number;
   /** Threshold type (default: 'message-count') */
   thresholdType?: CompressionThresholdType;
-  /** Compression strategy (default: 'sliding-window') */
+  /** Compression strategy (default: 'truncate') */
   strategy?: CompressionStrategy;
   /** Number of recent messages to keep (default: 10) */
   keepRecent?: number;
+  /** Model for summary generation (defaults to the main model) */
+  summaryModel?: string;
+  /** LLM provider for summary generation (defaults to the main provider) */
+  summaryProvider?: ILLMProvider;
 }
 
 // ========== Skill Interfaces ==========

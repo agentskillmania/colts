@@ -81,18 +81,8 @@ describe('DefaultContextCompressor - Constructor', () => {
     );
   });
 
-  it('should throw when hybrid strategy used without LLM provider', () => {
-    expect(() => new DefaultContextCompressor({ strategy: 'hybrid' })).toThrow(
-      "Strategy 'hybrid' requires an LLM provider"
-    );
-  });
-
   it('should not throw for truncate strategy without LLM provider', () => {
     expect(() => new DefaultContextCompressor({ strategy: 'truncate' })).not.toThrow();
-  });
-
-  it('should not throw for sliding-window strategy without LLM provider', () => {
-    expect(() => new DefaultContextCompressor({ strategy: 'sliding-window' })).not.toThrow();
   });
 
   it('should accept summarize strategy with LLM provider', () => {
@@ -100,6 +90,44 @@ describe('DefaultContextCompressor - Constructor', () => {
     expect(
       () => new DefaultContextCompressor({ strategy: 'summarize' }, llm, 'gpt-4')
     ).not.toThrow();
+  });
+
+  it('should accept summarize strategy with summaryProvider instead of llmProvider', () => {
+    const summaryLLM = createMockLLMProvider('summary');
+    expect(
+      () =>
+        new DefaultContextCompressor(
+          { strategy: 'summarize', summaryProvider: summaryLLM, summaryModel: 'cheap-model' },
+          undefined,
+          undefined
+        )
+    ).not.toThrow();
+  });
+
+  it('should prefer summaryProvider over llmProvider for summarization', async () => {
+    const mainLLM = createMockLLMProvider('main summary');
+    const summaryLLM = createMockLLMProvider('dedicated summary');
+    const compressor = new DefaultContextCompressor(
+      {
+        strategy: 'summarize',
+        threshold: 10,
+        keepRecent: 3,
+        summaryProvider: summaryLLM,
+        summaryModel: 'summary-model',
+      },
+      mainLLM,
+      'main-model'
+    );
+    const state = createStateWithMessages(10);
+
+    const result = await compressor.compress(state);
+    expect(result.summary).toBe('dedicated summary');
+    expect(summaryLLM.call).toHaveBeenCalledOnce();
+    expect(mainLLM.call).not.toHaveBeenCalled();
+
+    // Verify the dedicated model was used
+    const callArgs = (summaryLLM.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArgs.model).toBe('summary-model');
   });
 });
 
@@ -173,24 +201,6 @@ describe('DefaultContextCompressor - compress (truncate)', () => {
 });
 
 // ============================================================
-// compress - sliding-window strategy
-// ============================================================
-describe('DefaultContextCompressor - compress (sliding-window)', () => {
-  it('should behave same as truncate', async () => {
-    const compressor = new DefaultContextCompressor({
-      strategy: 'sliding-window',
-      threshold: 10,
-      keepRecent: 4,
-    });
-    const state = createStateWithMessages(12);
-
-    const result = await compressor.compress(state);
-    expect(result.anchor).toBe(8); // 12 - 4
-    expect(result.summary).toBe('');
-  });
-});
-
-// ============================================================
 // compress - summarize strategy
 // ============================================================
 describe('DefaultContextCompressor - compress (summarize)', () => {
@@ -233,24 +243,21 @@ describe('DefaultContextCompressor - compress (summarize)', () => {
       'requires an LLM provider'
     );
   });
-});
 
-// ============================================================
-// compress - hybrid strategy
-// ============================================================
-describe('DefaultContextCompressor - compress (hybrid)', () => {
-  it('should summarize old messages and keep recent', async () => {
-    const llm = createMockLLMProvider('Hybrid summary');
+  it('should use summaryModel when provided', async () => {
+    const llm = createMockLLMProvider('Model-specific summary');
     const compressor = new DefaultContextCompressor(
-      { strategy: 'hybrid', threshold: 10, keepRecent: 3 },
+      { strategy: 'summarize', threshold: 10, keepRecent: 3, summaryModel: 'custom-model' },
       llm,
       'gpt-4'
     );
-    const state = createStateWithMessages(15);
+    const state = createStateWithMessages(10);
 
     const result = await compressor.compress(state);
-    expect(result.anchor).toBe(12); // 15 - 3
-    expect(result.summary).toBe('Hybrid summary');
+    expect(result.summary).toBe('Model-specific summary');
+
+    const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArgs.model).toBe('custom-model');
   });
 });
 
@@ -304,7 +311,7 @@ describe('DefaultContextCompressor - compress edge cases', () => {
     expect(result.summary).toBe('');
   });
 
-  it('should handle default strategy (sliding-window) via undefined', async () => {
+  it('should use truncate as default strategy when strategy is undefined', async () => {
     const compressor = new DefaultContextCompressor({
       threshold: 5,
       keepRecent: 2,
