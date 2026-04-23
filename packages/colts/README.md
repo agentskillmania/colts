@@ -14,7 +14,7 @@ A stateless ReAct agent framework with streaming-first APIs, three-level executi
 - **Thinking / Reasoning** — Native thinking (Claude-style) and prompt-level thinking (`<think/>` tags). Configurable per request.
 - **Skill System** — Runtime skill loading from `SKILL.md` files. Supports nested skill calls with `load_skill` / `return_skill`.
 - **Subagent Delegation** — Delegate tasks to specialized sub-agents with independent configs, tools, and state.
-- **Context Compression** — Four strategies (`truncate`, `sliding-window`, `summarize`, `hybrid`). Messages are never deleted.
+- **Context Compression** — Two strategies (`truncate`, `summarize`). Messages are never deleted.
 - **Pluggable Message Assembly** — `IMessageAssembler` interface for custom RAG, memory, or prompt strategies without forking the runner.
 - **Tool System** — Zod-based parameter validation with automatic JSON Schema generation.
 
@@ -198,7 +198,7 @@ const runner = new AgentRunner({
   model: 'gpt-4o',
   llmClient,
   compressor: {
-    strategy: 'hybrid',
+    strategy: 'truncate',
     threshold: 50,
     thresholdType: 'message-count',
     keepRecent: 10,
@@ -206,7 +206,7 @@ const runner = new AgentRunner({
 });
 ```
 
-Strategies: `truncate`, `sliding-window`, `summarize`, `hybrid`. The `summarize` and `hybrid` strategies call the LLM to generate summaries.
+Strategies: `truncate`, `summarize`. The `summarize` strategy calls the LLM to generate summaries. You can also set `summaryModel` or `summaryProvider` to use a dedicated model for summarization.
 
 ## Subagent System
 

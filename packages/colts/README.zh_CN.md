@@ -14,7 +14,7 @@
 - **Thinking / 推理模式** — 原生推理（Claude 风格）和提示词级推理（`<think/>` 标签）。可按请求配置。
 - **Skill 系统** — 运行时从 `SKILL.md` 文件动态加载领域指令。支持 `load_skill` / `return_skill` 嵌套调用。
 - **Subagent 委托** — 将任务委托给具有独立配置、工具和状态的专用子代理。
-- **上下文压缩** — 四种策略（`truncate`、`sliding-window`、`summarize`、`hybrid`）。消息永不删除。
+- **上下文压缩** — 两种策略（`truncate`、`summarize`）。消息永不删除。
 - **可插拔消息组装** — `IMessageAssembler` 接口，支持自定义 RAG、记忆或提示词策略，无需 fork Runner。
 - **工具系统** — 基于 Zod 的参数校验，自动生成 JSON Schema。
 
@@ -204,7 +204,7 @@ const runner = new AgentRunner({
   model: 'glm-4',
   llmClient,
   compressor: {
-    strategy: 'hybrid',
+    strategy: 'truncate',
     threshold: 50,
     thresholdType: 'message-count',
     keepRecent: 10,
@@ -212,7 +212,7 @@ const runner = new AgentRunner({
 });
 ```
 
-策略：`truncate`、`sliding-window`、`summarize`、`hybrid`。其中 `summarize` 和 `hybrid` 会调用 LLM 生成摘要。
+策略：`truncate`、`summarize`。其中 `summarize` 会调用 LLM 生成摘要，也可通过 `summaryModel` 或 `summaryProvider` 指定专用模型负责摘要。
 
 ## Subagent 系统
 
