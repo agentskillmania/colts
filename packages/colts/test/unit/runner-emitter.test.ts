@@ -244,7 +244,7 @@ describe('AgentRunner EventEmitter', () => {
       for (const p of payloads) {
         expect(p).toHaveProperty('from');
         expect(p).toHaveProperty('to');
-        expect(Object.keys(p)).toEqual(['from', 'to']);
+        expect(Object.keys(p)).toEqual(['from', 'to', 'timestamp']);
       }
     });
 

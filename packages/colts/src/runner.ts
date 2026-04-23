@@ -61,57 +61,57 @@ import { DefaultExecutionPolicy } from './policy/default-policy.js';
 export interface RunnerEventMap {
   // ── Lifecycle (run-level, EventEmitter-only) ──
   /** Run started */
-  'run:start': { state: AgentState };
+  'run:start': { state: AgentState; timestamp: number };
   /** Run ended */
-  'run:end': { state: AgentState; result: RunResult };
+  'run:end': { state: AgentState; result: RunResult; timestamp: number };
 
   // ── Lifecycle (step-level, aligned with RunStreamEvent) ──
   /** Step started */
-  'step:start': { step: number; state: AgentState };
+  'step:start': { step: number; state: AgentState; timestamp: number };
   /** Step ended */
-  'step:end': { step: number; result: StepResult };
+  'step:end': { step: number; result: StepResult; timestamp: number };
   /** Run completed */
-  complete: { result: RunResult };
+  complete: { result: RunResult; timestamp: number };
 
   // ── Execution process (aligned with StreamEvent) ──
   /** Phase transition */
-  'phase-change': { from: Phase; to: Phase };
+  'phase-change': { from: Phase; to: Phase; timestamp: number };
   /** LLM token streaming output */
-  token: { token: string };
+  token: { token: string; timestamp: number };
   /** Tool execution started */
-  'tool:start': { action: Action };
+  'tool:start': { action: Action; timestamp: number };
   /** Tool execution completed */
-  'tool:end': { result: unknown };
+  'tool:end': { result: unknown; callId?: string; timestamp: number };
   /** Parallel tool execution started */
-  'tools:start': { actions: Action[] };
+  'tools:start': { actions: Action[]; timestamp: number };
   /** Parallel tool execution completed */
-  'tools:end': { results: Record<string, unknown> };
+  'tools:end': { results: Record<string, unknown>; timestamp: number };
   /** Execution error */
-  error: { error: Error; context: { toolName?: string; step: number } };
+  error: { error: Error; context: { toolName?: string; step: number }; timestamp: number };
   /** Execution was aborted by caller */
-  abort: { step?: number; totalSteps?: number };
+  abort: { step?: number; totalSteps?: number; timestamp: number };
 
   // ── Context compression (aligned with StreamEvent) ──
   /** Compression started */
-  compressing: Record<string, never>;
+  compressing: { timestamp: number };
   /** Compression completed */
-  compressed: { summary: string; removedCount: number };
+  compressed: { summary: string; removedCount: number; timestamp: number };
 
   // ── Skill (aligned with StreamEvent) ──
   /** Skill loading */
-  'skill:loading': { name: string };
+  'skill:loading': { name: string; timestamp: number };
   /** Skill loaded */
-  'skill:loaded': { name: string; tokenCount: number };
+  'skill:loaded': { name: string; tokenCount: number; timestamp: number };
   /** Skill execution started */
-  'skill:start': { name: string; task: string; state?: AgentState };
+  'skill:start': { name: string; task: string; state?: AgentState; timestamp: number };
   /** Skill execution completed */
-  'skill:end': { name: string; result: string; state?: AgentState };
+  'skill:end': { name: string; result: string; state?: AgentState; timestamp: number };
 
   // ── SubAgent (aligned with StreamEvent) ──
   /** Sub-agent started */
-  'subagent:start': { name: string; task: string };
+  'subagent:start': { name: string; task: string; timestamp: number };
   /** Sub-agent completed */
-  'subagent:end': { name: string; result: DelegateResult };
+  'subagent:end': { name: string; result: DelegateResult; timestamp: number };
 
   // ── LLM call (aligned with StreamEvent) ──
   /** Before LLM request is sent */
@@ -119,14 +119,16 @@ export interface RunnerEventMap {
     messages: Array<{ role: string; content: string }>;
     tools: string[];
     skill: { current: string | null; stack: string[] } | null;
+    timestamp: number;
   };
   /** After LLM response is received */
   'llm:response': {
     text: string;
     toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
+    timestamp: number;
   };
   /** Thinking/reasoning content during streaming */
-  thinking: { content: string };
+  thinking: { content: string; timestamp: number };
 }
 
 /**
@@ -745,9 +747,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       // Emit corresponding StreamEvent based on phase type
       if (result.phase.type === 'executing-tool') {
         if (result.phase.actions.length === 1) {
-          this.emit('tool:start', { action: result.phase.actions[0] });
+          this.emit('tool:start', { action: result.phase.actions[0], timestamp: Date.now() });
         } else {
-          this.emit('tools:start', { actions: result.phase.actions });
+          this.emit('tools:start', { actions: result.phase.actions, timestamp: Date.now() });
         }
       }
       // Forward effects produced by handler to EventEmitter
@@ -757,13 +759,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         }
       }
       if (result.phase.type === 'error') {
-        this.emit('error', { error: result.phase.error, context: { step: 0 } });
+        this.emit('error', {
+          error: result.phase.error,
+          context: { step: 0 },
+          timestamp: Date.now(),
+        });
       }
-      this.emit('phase-change', { from, to: result.phase });
+      this.emit('phase-change', { from, to: result.phase, timestamp: Date.now() });
       return result;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { error: err, context: { step: 0 } });
+      this.emit('error', { error: err, context: { step: 0 }, timestamp: Date.now() });
       throw error;
     }
   }
@@ -818,7 +824,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { error: err, context: { step: 0 } });
+      this.emit('error', { error: err, context: { step: 0 }, timestamp: Date.now() });
       throw error;
     }
   }
@@ -860,7 +866,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     const execState = createExecutionState();
     const stepIdx = stepNumber ?? 0;
 
-    this.emit('step:start', { step: stepIdx, state });
+    this.emit('step:start', { step: stepIdx, state, timestamp: Date.now() });
 
     // Loop advance() until a natural stopping point
     let currentState = state;
@@ -868,7 +874,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     try {
       while (!isTerminalPhase(execState.phase)) {
         if (options?.signal?.aborted) {
-          this.emit('abort', { step: stepIdx });
+          this.emit('abort', { step: stepIdx, timestamp: Date.now() });
           return { state: currentState, result: { type: 'abort' } };
         }
 
@@ -876,7 +882,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         const result = await executeAdvance(this.ctx, currentState, execState, registry, options);
 
         if (options?.signal?.aborted) {
-          this.emit('abort', { step: stepIdx });
+          this.emit('abort', { step: stepIdx, timestamp: Date.now() });
           return { state: currentState, result: { type: 'abort' } };
         }
 
@@ -885,9 +891,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         // Emit executing-tool event
         if (result.phase.type === 'executing-tool') {
           if (result.phase.actions.length === 1) {
-            this.emit('tool:start', { action: result.phase.actions[0] });
+            this.emit('tool:start', { action: result.phase.actions[0], timestamp: Date.now() });
           } else {
-            this.emit('tools:start', { actions: result.phase.actions });
+            this.emit('tools:start', { actions: result.phase.actions, timestamp: Date.now() });
           }
         }
 
@@ -898,18 +904,18 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           }
         }
 
-        this.emit('phase-change', { from, to: result.phase });
+        this.emit('phase-change', { from, to: result.phase, timestamp: Date.now() });
 
         // Control flow is determined by phase + done
         if (result.done && result.phase.type === 'completed') {
           const stepResult: StepResult = { type: 'done', answer: result.phase.answer };
-          this.emit('step:end', { step: stepIdx, result: stepResult });
+          this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
           return { state: currentState, result: stepResult };
         }
 
         if (result.done && result.phase.type === 'error') {
           const stepResult: StepResult = { type: 'error', error: result.phase.error };
-          this.emit('step:end', { step: stepIdx, result: stepResult });
+          this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
           return { state: currentState, result: stepResult };
         }
 
@@ -919,7 +925,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           // same-skill/cyclic/plain tool → return continue
           const toolResult = execState.toolResult;
           const stepResult: StepResult = { type: 'continue', toolResult };
-          this.emit('step:end', { step: stepIdx, result: stepResult });
+          this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
           return { state: currentState, result: stepResult };
         }
 
@@ -941,7 +947,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       throw new Error('Unexpected: step loop exited without reaching terminal phase');
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { error: err, context: { step: stepIdx } });
+      this.emit('error', { error: err, context: { step: stepIdx }, timestamp: Date.now() });
       throw error;
     }
   }
@@ -960,7 +966,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     stepNumber?: number
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
     const stepIdx = stepNumber ?? 0;
-    this.emit('step:start', { step: stepIdx, state });
+    this.emit('step:start', { step: stepIdx, state, timestamp: Date.now() });
     try {
       const generator = executeStepStream(this.ctx, this.compressor, state, toolRegistry, options);
 
@@ -968,7 +974,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         const { done, value } = await generator.next();
         if (done) {
           const result = value as { state: AgentState; result: StepResult };
-          this.emit('step:end', { step: stepIdx, result: result.result });
+          this.emit('step:end', { step: stepIdx, result: result.result, timestamp: Date.now() });
           return result;
         }
         // Uniform forwarding: emit using the yield event's type and payload
@@ -977,7 +983,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { error: err, context: { step: stepIdx } });
+      this.emit('error', { error: err, context: { step: stepIdx }, timestamp: Date.now() });
       throw error;
     }
   }
@@ -1008,7 +1014,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Initialize skill state if needed
     const initializedState = this.initializeSkillState(state);
 
-    this.emit('run:start', { state: initializedState });
+    this.emit('run:start', { state: initializedState, timestamp: Date.now() });
     const registry = toolRegistry ?? this.toolRegistry;
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
     let currentState = initializedState;
@@ -1018,8 +1024,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       while (totalSteps < RUN_HARD_LIMIT) {
         if (options?.signal?.aborted) {
           const runResult: RunResult = { type: 'abort', totalSteps };
-          this.emit('abort', { totalSteps });
-          this.emit('run:end', { state: currentState, result: runResult });
+          this.emit('abort', { totalSteps, timestamp: Date.now() });
+          this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
           return { state: currentState, result: runResult };
         }
 
@@ -1033,7 +1039,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         if (result.type === 'abort') {
           const runResult: RunResult = { type: 'abort', totalSteps: totalSteps + 1 };
-          this.emit('run:end', { state: newState, result: runResult });
+          this.emit('run:end', { state: newState, result: runResult, timestamp: Date.now() });
           return { state: newState, result: runResult };
         }
 
@@ -1062,21 +1068,25 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               error: (result as { type: 'error'; error: Error }).error,
               totalSteps,
             };
-            this.emit('error', { error: runResult.error, context: { step: totalSteps - 1 } });
+            this.emit('error', {
+              error: runResult.error,
+              context: { step: totalSteps - 1 },
+              timestamp: Date.now(),
+            });
           } else if (decision.runResultType === 'abort') {
             runResult = { type: 'abort', totalSteps };
-            this.emit('abort', { totalSteps });
+            this.emit('abort', { totalSteps, timestamp: Date.now() });
           } else {
             runResult = { type: 'max_steps', totalSteps };
           }
 
-          this.emit('run:end', { state: currentState, result: runResult });
+          this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
           return { state: currentState, result: runResult };
         }
 
         // Auto-compress between steps
         if (this.compressor && this.compressor.shouldCompress(currentState)) {
-          this.emit('compressing', {});
+          this.emit('compressing', { timestamp: Date.now() });
           const prevAnchor = currentState.context.compression?.anchor ?? 0;
           currentState = await maybeCompress(this.compressor, currentState);
           const newAnchor = currentState.context.compression?.anchor ?? 0;
@@ -1084,6 +1094,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             this.emit('compressed', {
               summary: currentState.context.compression.summary,
               removedCount: newAnchor - prevAnchor,
+              timestamp: Date.now(),
             });
           }
         }
@@ -1091,11 +1102,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
       // Hard limit reached (safety net for policy bugs)
       const runResult: RunResult = { type: 'max_steps', totalSteps };
-      this.emit('run:end', { state: currentState, result: runResult });
+      this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
       return { state: currentState, result: runResult };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { error: err, context: { step: totalSteps } });
+      this.emit('error', { error: err, context: { step: totalSteps }, timestamp: Date.now() });
       throw error;
     }
   }
@@ -1127,7 +1138,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Initialize skill state if needed
     const initializedState = this.initializeSkillState(state);
 
-    this.emit('run:start', { state: initializedState });
+    this.emit('run:start', { state: initializedState, timestamp: Date.now() });
     const registry = toolRegistry ?? this.toolRegistry;
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
     let currentState = initializedState;
@@ -1137,15 +1148,15 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       while (totalSteps < RUN_HARD_LIMIT) {
         if (options?.signal?.aborted) {
           const runResult: RunResult = { type: 'abort', totalSteps };
-          this.emit('abort', { totalSteps });
-          this.emit('run:end', { state: currentState, result: runResult });
-          yield { type: 'complete', result: runResult };
+          this.emit('abort', { totalSteps, timestamp: Date.now() });
+          this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
+          yield { type: 'complete', result: runResult, timestamp: Date.now() };
           return { state: currentState, result: runResult };
         }
 
         // Step start
-        this.emit('step:start', { step: totalSteps, state: currentState });
-        yield { type: 'step:start', step: totalSteps, state: currentState };
+        this.emit('step:start', { step: totalSteps, state: currentState, timestamp: Date.now() });
+        yield { type: 'step:start', step: totalSteps, state: currentState, timestamp: Date.now() };
 
         // Use stepStream to get real-time tokens and phase events
         const iterator = executeStepStream(
@@ -1170,20 +1181,33 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         if (stepResult.result.type === 'abort') {
           const runResult: RunResult = { type: 'abort', totalSteps: totalSteps + 1 };
-          this.emit('run:end', { state: stepResult.state, result: runResult });
-          yield { type: 'complete', result: runResult };
+          this.emit('run:end', {
+            state: stepResult.state,
+            result: runResult,
+            timestamp: Date.now(),
+          });
+          yield { type: 'complete', result: runResult, timestamp: Date.now() };
           return { state: stepResult.state, result: runResult };
         }
 
         currentState = stepResult.state;
-        this.emit('step:end', { step: totalSteps, result: stepResult.result });
-        yield { type: 'step:end', step: totalSteps, result: stepResult.result };
+        this.emit('step:end', {
+          step: totalSteps,
+          result: stepResult.result,
+          timestamp: Date.now(),
+        });
+        yield {
+          type: 'step:end',
+          step: totalSteps,
+          result: stepResult.result,
+          timestamp: Date.now(),
+        };
         totalSteps++;
 
         // Auto-compress between steps
         if (this.compressor && this.compressor.shouldCompress(currentState)) {
-          this.emit('compressing', {});
-          yield { type: 'compressing' };
+          this.emit('compressing', { timestamp: Date.now() });
+          yield { type: 'compressing', timestamp: Date.now() };
           const prevAnchor = stepResult.state.context.compression?.anchor ?? 0;
           currentState = await maybeCompress(this.compressor, currentState);
           const newAnchor = currentState.context.compression?.anchor ?? 0;
@@ -1191,11 +1215,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             this.emit('compressed', {
               summary: currentState.context.compression.summary,
               removedCount: newAnchor - prevAnchor,
+              timestamp: Date.now(),
             });
             yield {
               type: 'compressed',
               summary: currentState.context.compression.summary,
               removedCount: newAnchor - prevAnchor,
+              timestamp: Date.now(),
             };
           }
         }
@@ -1226,28 +1252,29 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             this.emit('error', {
               error: runResult.error,
               context: { step: totalSteps - 1 },
+              timestamp: Date.now(),
             });
           } else if (decision.runResultType === 'abort') {
             runResult = { type: 'abort', totalSteps };
-            this.emit('abort', { totalSteps });
+            this.emit('abort', { totalSteps, timestamp: Date.now() });
           } else {
             runResult = { type: 'max_steps', totalSteps };
           }
 
-          this.emit('run:end', { state: currentState, result: runResult });
-          yield { type: 'complete', result: runResult };
+          this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
+          yield { type: 'complete', result: runResult, timestamp: Date.now() };
           return { state: currentState, result: runResult };
         }
       }
 
       // Hard limit reached (safety net for policy bugs)
       const runResult: RunResult = { type: 'max_steps', totalSteps };
-      this.emit('run:end', { state: currentState, result: runResult });
-      yield { type: 'complete', result: runResult };
+      this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
+      yield { type: 'complete', result: runResult, timestamp: Date.now() };
       return { state: currentState, result: runResult };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { error: err, context: { step: totalSteps } });
+      this.emit('error', { error: err, context: { step: totalSteps }, timestamp: Date.now() });
       throw error;
     }
   }

@@ -173,7 +173,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
           messages.push({
             role: 'user',
             content: msg.content,
-            timestamp: now,
+            timestamp: msg.timestamp,
           });
           break;
 
@@ -206,7 +206,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
               cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
             },
             stopReason: msg.toolCalls && msg.toolCalls.length > 0 ? 'toolUse' : 'stop',
-            timestamp: now,
+            timestamp: msg.timestamp,
           });
           break;
         }
@@ -219,7 +219,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
             toolName: msg.toolName ?? 'unknown',
             content: [{ type: 'text', text: msg.content }],
             isError: false,
-            timestamp: now,
+            timestamp: msg.timestamp,
           });
           break;
       }

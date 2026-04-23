@@ -20,18 +20,18 @@ import type { DelegateResult } from './subagent/types.js';
  */
 export type ToolPostEffect =
   // Skill lifecycle
-  | { type: 'skill:loading'; name: string }
-  | { type: 'skill:loaded'; name: string; tokenCount: number }
-  | { type: 'skill:start'; name: string; task: string; state: AgentState }
-  | { type: 'skill:end'; name: string; result: string; state: AgentState }
+  | { type: 'skill:loading'; name: string; timestamp: number }
+  | { type: 'skill:loaded'; name: string; tokenCount: number; timestamp: number }
+  | { type: 'skill:start'; name: string; task: string; state: AgentState; timestamp: number }
+  | { type: 'skill:end'; name: string; result: string; state: AgentState; timestamp: number }
   // SubAgent lifecycle
-  | { type: 'subagent:start'; name: string; task: string }
-  | { type: 'subagent:end'; name: string; result: unknown }
+  | { type: 'subagent:start'; name: string; task: string; timestamp: number }
+  | { type: 'subagent:end'; name: string; result: unknown; timestamp: number }
   // Tool completion
-  | { type: 'tool:end'; result: unknown }
-  | { type: 'tools:end'; results: Record<string, unknown> }
+  | { type: 'tool:end'; result: unknown; callId?: string; timestamp: number }
+  | { type: 'tools:end'; results: Record<string, unknown>; timestamp: number }
   // Error
-  | { type: 'error'; error: Error; context: { step: number } };
+  | { type: 'error'; error: Error; context: { step: number }; timestamp: number };
 
 /**
  * Action extracted from LLM response (represents a tool call)
@@ -74,33 +74,35 @@ export type StepResult =
  * Events emitted during step/advance stream
  */
 export type StreamEvent =
-  | { type: 'phase-change'; from: Phase; to: Phase }
-  | { type: 'token'; token: string }
-  | { type: 'tool:start'; action: Action }
-  | { type: 'tool:end'; result: unknown; callId?: string }
-  | { type: 'tools:start'; actions: Action[] }
-  | { type: 'tools:end'; results: Record<string, unknown> }
-  | { type: 'error'; error: Error; context: { toolName?: string; step: number } }
-  | { type: 'compressing' }
-  | { type: 'compressed'; summary: string; removedCount: number }
-  | { type: 'skill:loading'; name: string }
-  | { type: 'skill:loaded'; name: string; tokenCount: number }
-  | { type: 'skill:start'; name: string; task: string; state?: AgentState }
-  | { type: 'skill:end'; name: string; result: string; state?: AgentState }
-  | { type: 'subagent:start'; name: string; task: string }
-  | { type: 'subagent:end'; name: string; result: DelegateResult }
+  | { type: 'phase-change'; from: Phase; to: Phase; timestamp: number }
+  | { type: 'token'; token: string; timestamp: number }
+  | { type: 'tool:start'; action: Action; timestamp: number }
+  | { type: 'tool:end'; result: unknown; callId?: string; timestamp: number }
+  | { type: 'tools:start'; actions: Action[]; timestamp: number }
+  | { type: 'tools:end'; results: Record<string, unknown>; timestamp: number }
+  | { type: 'error'; error: Error; context: { toolName?: string; step: number }; timestamp: number }
+  | { type: 'compressing'; timestamp: number }
+  | { type: 'compressed'; summary: string; removedCount: number; timestamp: number }
+  | { type: 'skill:loading'; name: string; timestamp: number }
+  | { type: 'skill:loaded'; name: string; tokenCount: number; timestamp: number }
+  | { type: 'skill:start'; name: string; task: string; state?: AgentState; timestamp: number }
+  | { type: 'skill:end'; name: string; result: string; state?: AgentState; timestamp: number }
+  | { type: 'subagent:start'; name: string; task: string; timestamp: number }
+  | { type: 'subagent:end'; name: string; result: DelegateResult; timestamp: number }
   | {
       type: 'llm:request';
       messages: Array<{ role: string; content: string }>;
       tools: string[];
       skill: { current: string | null; stack: string[] } | null;
+      timestamp: number;
     }
   | {
       type: 'llm:response';
       text: string;
       toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
+      timestamp: number;
     }
-  | { type: 'thinking'; content: string };
+  | { type: 'thinking'; content: string; timestamp: number };
 
 /**
  * Options for advance execution
@@ -201,7 +203,7 @@ export type RunResult =
  * Events emitted during runStream()
  */
 export type RunStreamEvent =
-  | { type: 'step:start'; step: number; state: import('./types.js').AgentState }
-  | { type: 'step:end'; step: number; result: StepResult }
+  | { type: 'step:start'; step: number; state: import('./types.js').AgentState; timestamp: number }
+  | { type: 'step:end'; step: number; result: StepResult; timestamp: number }
   | StreamEvent
-  | { type: 'complete'; result: RunResult };
+  | { type: 'complete'; result: RunResult; timestamp: number };
