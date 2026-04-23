@@ -45,7 +45,12 @@ export class ToolResultHandler implements IPhaseHandler {
     if (delegateAction) {
       const agentName = String(delegateAction.arguments.agent ?? '');
       const taskDesc = String(delegateAction.arguments.task ?? '');
-      effects.push({ type: 'subagent:start', name: agentName, task: taskDesc });
+      effects.push({
+        type: 'subagent:start',
+        timestamp: Date.now(),
+        name: agentName,
+        task: taskDesc,
+      });
     }
 
     // 2. Skill signal processing — sole call site of applySkillSignal
@@ -58,6 +63,7 @@ export class ToolResultHandler implements IPhaseHandler {
           // Skill loading event (for UI to show loading progress)
           effects.push({
             type: 'skill:loading',
+            timestamp: Date.now(),
             name: sigResult.skillName,
           });
           const instructions =
@@ -65,20 +71,27 @@ export class ToolResultHandler implements IPhaseHandler {
           const tokenCount = instructions.length > 0 ? Math.ceil(instructions.length / 4) : 0;
           effects.push({
             type: 'skill:loaded',
+            timestamp: Date.now(),
             name: sigResult.skillName,
             tokenCount,
           });
           effects.push({
             type: 'skill:start',
+            timestamp: Date.now(),
             name: sigResult.skillName,
             task: (result as SkillSignal & { task?: string }).task ?? '',
             state: currentState,
           });
-          effects.push({ type: 'tool:end', result: formatSkillToolResult(result) });
+          effects.push({
+            type: 'tool:end',
+            timestamp: Date.now(),
+            result: formatSkillToolResult(result),
+          });
           // Delegate post-processing: subagent:end
           if (delegateAction) {
             effects.push({
               type: 'subagent:end',
+              timestamp: Date.now(),
               name: String(delegateAction.arguments.agent ?? ''),
               result,
             });
@@ -90,14 +103,20 @@ export class ToolResultHandler implements IPhaseHandler {
         case 'returned': {
           effects.push({
             type: 'skill:end',
+            timestamp: Date.now(),
             name: sigResult.completedSkill,
             result: (result as SkillSignal & { result: string }).result,
             state: currentState,
           });
-          effects.push({ type: 'tool:end', result: formatSkillToolResult(result) });
+          effects.push({
+            type: 'tool:end',
+            timestamp: Date.now(),
+            result: formatSkillToolResult(result),
+          });
           if (delegateAction) {
             effects.push({
               type: 'subagent:end',
+              timestamp: Date.now(),
               name: String(delegateAction.arguments.agent ?? ''),
               result,
             });
@@ -109,14 +128,20 @@ export class ToolResultHandler implements IPhaseHandler {
         case 'top-level-return': {
           effects.push({
             type: 'skill:end',
+            timestamp: Date.now(),
             name: sigResult.skillName,
             result: (result as SkillSignal & { result: string }).result,
             state: currentState,
           });
-          effects.push({ type: 'tool:end', result: formatSkillToolResult(result) });
+          effects.push({
+            type: 'tool:end',
+            timestamp: Date.now(),
+            result: formatSkillToolResult(result),
+          });
           if (delegateAction) {
             effects.push({
               type: 'subagent:end',
+              timestamp: Date.now(),
               name: String(delegateAction.arguments.agent ?? ''),
               result,
             });
@@ -129,11 +154,13 @@ export class ToolResultHandler implements IPhaseHandler {
         case 'same-skill': {
           effects.push({
             type: 'tool:end',
+            timestamp: Date.now(),
             result: `Skill '${sigResult.currentSkill}' is already active`,
           });
           if (delegateAction) {
             effects.push({
               type: 'subagent:end',
+              timestamp: Date.now(),
               name: String(delegateAction.arguments.agent ?? ''),
               result,
             });
@@ -144,11 +171,13 @@ export class ToolResultHandler implements IPhaseHandler {
         case 'cyclic': {
           effects.push({
             type: 'tool:end',
+            timestamp: Date.now(),
             result: `Cannot load Skill '${sigResult.currentSkill}': already in the call stack`,
           });
           if (delegateAction) {
             effects.push({
               type: 'subagent:end',
+              timestamp: Date.now(),
               name: String(delegateAction.arguments.agent ?? ''),
               result,
             });
@@ -157,10 +186,16 @@ export class ToolResultHandler implements IPhaseHandler {
         }
 
         case 'not-found': {
-          effects.push({ type: 'error', error: sigResult.error, context: { step: 0 } });
+          effects.push({
+            type: 'error',
+            timestamp: Date.now(),
+            error: sigResult.error,
+            context: { step: 0 },
+          });
           if (delegateAction) {
             effects.push({
               type: 'subagent:end',
+              timestamp: Date.now(),
               name: String(delegateAction.arguments.agent ?? ''),
               result,
             });
@@ -173,14 +208,15 @@ export class ToolResultHandler implements IPhaseHandler {
 
     // 3. Plain tool result
     if (resultKeys.length <= 1) {
-      effects.push({ type: 'tool:end', result });
+      effects.push({ type: 'tool:end', timestamp: Date.now(), result });
     } else {
-      effects.push({ type: 'tools:end', results });
+      effects.push({ type: 'tools:end', timestamp: Date.now(), results });
     }
 
     if (delegateAction) {
       effects.push({
         type: 'subagent:end',
+        timestamp: Date.now(),
         name: String(delegateAction.arguments.agent ?? ''),
         result,
       });

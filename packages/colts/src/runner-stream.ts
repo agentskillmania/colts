@@ -58,6 +58,8 @@ export async function* streamCallingLLM(
           stack: state.context.skillState.stack.map((f) => f.skillName),
         }
       : null,
+
+    timestamp: Date.now(),
   };
 
   let accumulatedContent = '';
@@ -80,10 +82,10 @@ export async function* streamCallingLLM(
 
     if (event.type === 'text') {
       accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
-      yield { type: 'token', token: event.delta ?? '' };
+      yield { type: 'token', token: event.delta ?? '', timestamp: Date.now() };
     } else if (event.type === 'thinking') {
       accumulatedThinking += event.delta ?? '';
-      yield { type: 'thinking', content: event.delta ?? '' };
+      yield { type: 'thinking', content: event.delta ?? '', timestamp: Date.now() };
     } else if (event.type === 'tool_call' && event.toolCall) {
       responseToolCalls = responseToolCalls ?? [];
       responseToolCalls.push({
@@ -106,6 +108,8 @@ export async function* streamCallingLLM(
     type: 'llm:response',
     text: responseContent,
     toolCalls: responseToolCalls ?? null,
+
+    timestamp: Date.now(),
   };
 
   // Store complete response, fallback to accumulatedContent if 'done' event was missed
@@ -158,18 +162,28 @@ export async function* executeAdvanceStream(
   //   Plan: add optional streamExecute() to IPhaseHandler so CallingLLMHandler owns both
   //   blocking and streaming paths. Then remove streamCallingLLM() and this bypass block.
   if (fromPhase.type === 'calling-llm') {
-    yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
+    yield {
+      type: 'phase-change',
+      from: fromPhase,
+      to: { type: 'streaming' },
+      timestamp: Date.now(),
+    };
 
     try {
       yield* streamCallingLLM(ctx, state, execState, registry, options?.signal);
     } catch (error) {
       const errorObj = error instanceof Error ? error : new Error(String(error));
       execState.phase = { type: 'error', error: errorObj };
-      yield { type: 'error', error: errorObj, context: { step: 0 } };
+      yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
       return { state, phase: execState.phase, done: true };
     }
 
-    yield { type: 'phase-change', from: { type: 'streaming' }, to: execState.phase };
+    yield {
+      type: 'phase-change',
+      from: { type: 'streaming' },
+      to: execState.phase,
+      timestamp: Date.now(),
+    };
     return { state, phase: execState.phase, done: false };
   }
 
@@ -183,7 +197,7 @@ export async function* executeAdvanceStream(
     }
   }
 
-  yield { type: 'phase-change', from: fromPhase, to: result.phase };
+  yield { type: 'phase-change', from: fromPhase, to: result.phase, timestamp: Date.now() };
 
   return result;
 }
@@ -218,18 +232,28 @@ export async function* executeStepStream(
 
     // TODO(M3): same calling-llm bypass as executeAdvanceStream above, see plan there
     if (fromPhase.type === 'calling-llm') {
-      yield { type: 'phase-change', from: fromPhase, to: { type: 'streaming' } };
+      yield {
+        type: 'phase-change',
+        from: fromPhase,
+        to: { type: 'streaming' },
+        timestamp: Date.now(),
+      };
 
       try {
         yield* streamCallingLLM(ctx, currentState, execState, registry, options?.signal);
       } catch (error) {
         const errorObj = error instanceof Error ? error : new Error(String(error));
         execState.phase = { type: 'error', error: errorObj };
-        yield { type: 'error', error: errorObj, context: { step: 0 } };
+        yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
         return { state: currentState, result: { type: 'error', error: errorObj } };
       }
 
-      yield { type: 'phase-change', from: { type: 'streaming' }, to: execState.phase };
+      yield {
+        type: 'phase-change',
+        from: { type: 'streaming' },
+        to: execState.phase,
+        timestamp: Date.now(),
+      };
       continue;
     }
 
@@ -250,9 +274,9 @@ export async function* executeStepStream(
     // Emit tool events based on phase transitions
     if (phase.type === 'executing-tool') {
       if (phase.actions.length === 1) {
-        yield { type: 'tool:start', action: phase.actions[0] };
+        yield { type: 'tool:start', action: phase.actions[0], timestamp: Date.now() };
       } else {
-        yield { type: 'tools:start', actions: phase.actions };
+        yield { type: 'tools:start', actions: phase.actions, timestamp: Date.now() };
       }
     }
 
@@ -263,7 +287,7 @@ export async function* executeStepStream(
       }
     }
 
-    yield { type: 'phase-change', from: fromPhase, to: phase };
+    yield { type: 'phase-change', from: fromPhase, to: phase, timestamp: Date.now() };
 
     // Control flow is determined by phase + done
     if (done && phase.type === 'completed') {
@@ -274,7 +298,7 @@ export async function* executeStepStream(
     }
 
     if (done && phase.type === 'error') {
-      yield { type: 'error', error: phase.error, context: { step: 0 } };
+      yield { type: 'error', error: phase.error, context: { step: 0 }, timestamp: Date.now() };
       return { state: currentState, result: { type: 'error', error: phase.error } };
     }
 

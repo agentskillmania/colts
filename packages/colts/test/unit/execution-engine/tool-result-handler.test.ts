@@ -72,7 +72,7 @@ describe('ToolResultHandler — plain tool results', () => {
     expect(result.done).toBe(false);
     expect(result.phase.type).toBe('tool-result');
     expect(result.effects).toHaveLength(1);
-    expect(result.effects![0]).toEqual({ type: 'tool:end', result: '42' });
+    expect(result.effects![0]).toMatchObject({ type: 'tool:end', result: '42' });
   });
 
   it('should produce tools:end effect for multiple results', async () => {
@@ -90,7 +90,7 @@ describe('ToolResultHandler — plain tool results', () => {
     expect(result.done).toBe(false);
     expect(result.phase.type).toBe('tool-result');
     expect(result.effects).toHaveLength(1);
-    expect(result.effects![0]).toEqual({ type: 'tools:end', results: multiResults });
+    expect(result.effects![0]).toMatchObject({ type: 'tools:end', results: multiResults });
   });
 });
 

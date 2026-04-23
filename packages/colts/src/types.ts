@@ -24,8 +24,8 @@ export interface Message {
   content: string;
   /** Message type */
   type?: MessageType;
-  /** Timestamp */
-  timestamp?: number;
+  /** Timestamp (milliseconds since epoch) */
+  timestamp: number;
   /** Tool call ID (associates with assistant toolCall when role='tool') */
   toolCallId?: string;
   /** Tool name (identifies source tool when role='tool') */
@@ -115,6 +115,10 @@ export interface AgentContext {
   compression?: CompressionMeta;
   /** Skill state for nested skill calling */
   skillState?: SkillState;
+  /** State creation timestamp */
+  createdAt: number;
+  /** Last state mutation timestamp */
+  updatedAt: number;
 }
 
 /**

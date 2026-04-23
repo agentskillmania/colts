@@ -41,12 +41,15 @@ function computeChecksum(state: AgentState): string {
  * @returns New AgentState (immutable)
  */
 export function createAgentState(config: AgentConfig): AgentState {
+  const now = Date.now();
   return {
     id: generateId(),
     config,
     context: {
       messages: [],
       stepCount: 0,
+      createdAt: now,
+      updatedAt: now,
     },
   };
 }
@@ -62,7 +65,10 @@ export function updateState(
   state: AgentState,
   recipe: (draft: Draft<AgentState>) => void
 ): AgentState {
-  return produce(state, recipe);
+  return produce(state, (draft) => {
+    recipe(draft);
+    draft.context.updatedAt = Date.now();
+  });
 }
 
 /**
