@@ -141,7 +141,7 @@ describe('User Story: Context Compression with Real LLM', () => {
       itif(testConfig.enabled)(
         'should generate summary via LLM and continue working',
         async () => {
-          // Given: A runner with summarize compression
+          // Given: A runner with summarize compression using custom summary model
           const runner = new AgentRunner({
             model: testConfig.testModel,
             llmClient: client,
@@ -149,6 +149,7 @@ describe('User Story: Context Compression with Real LLM', () => {
               strategy: 'summarize',
               threshold: 5,
               keepRecent: 2,
+              summaryModel: testConfig.testModel,
             },
           });
 
@@ -171,6 +172,45 @@ describe('User Story: Context Compression with Real LLM', () => {
           if (result.type === 'success') {
             expect(result.answer).toBeTruthy();
           }
+        },
+        120000
+      );
+    });
+
+    // Scenario 2: Custom summary provider
+    describe('Scenario 2: Dedicated summary provider', () => {
+      itif(testConfig.enabled)(
+        'should use summaryProvider for summarization',
+        async () => {
+          // Given: A separate LLM client for summarization
+          const summaryClient = createRealLLMClient();
+
+          const runner = new AgentRunner({
+            model: testConfig.testModel,
+            llmClient: client,
+            compressor: {
+              strategy: 'summarize',
+              threshold: 5,
+              keepRecent: 2,
+              summaryProvider: summaryClient,
+              summaryModel: testConfig.testModel,
+            },
+          });
+
+          const state = createStateWithHistory(5);
+
+          // When: Compress manually
+          const compressed = await runner.compress(state);
+
+          // Then: Should have summary
+          expect(compressed.context.compression).toBeDefined();
+          expect(compressed.context.compression!.summary).toBeTruthy();
+
+          // When: Run after compression
+          const { result } = await runner.run(compressed);
+
+          // Then: Agent should still function
+          expect(result.type).toBe('success');
         },
         120000
       );

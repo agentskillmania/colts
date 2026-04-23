@@ -10,21 +10,19 @@ import type { AgentState, ILLMProvider, CompressionConfig, CompressResult } from
 /**
  * Context compression strategy
  */
-type Strategy = 'truncate' | 'sliding-window' | 'summarize' | 'hybrid';
+type Strategy = 'truncate' | 'summarize';
 
 /**
  * Default context compressor implementation
  *
- * Supports four strategies:
+ * Supports two strategies:
  * - truncate: Drop old messages without summary
- * - sliding-window: Same as truncate (clearer semantics)
  * - summarize: Call LLM to generate summary of old messages
- * - hybrid: Summarize old messages + keep recent as-is
  *
  * @example
  * ```typescript
  * const compressor = new DefaultContextCompressor(
- *   { strategy: 'hybrid', threshold: 50, keepRecent: 10 },
+ *   { strategy: 'summarize', threshold: 50, keepRecent: 10 },
  *   llmProvider,
  *   'gpt-4',
  * );
@@ -36,27 +34,32 @@ export class DefaultContextCompressor {
   private readonly keepRecent: number;
   private readonly llmProvider?: ILLMProvider;
   private readonly model?: string;
+  private readonly summaryProvider?: ILLMProvider;
+  private readonly summaryModel?: string;
 
   /**
    * Create a default context compressor
    *
    * @param config - Compression configuration
-   * @param llmProvider - LLM provider (required for summarize/hybrid strategies)
-   * @param model - Model identifier for LLM calls
-   * @throws Error if summarize or hybrid strategy is used without an LLM provider
+   * @param llmProvider - LLM provider for normal operations (used as fallback for summarization)
+   * @param model - Model identifier for LLM calls (used as fallback for summarization)
+   * @throws Error if summarize strategy is used without an LLM provider
    */
   constructor(config?: CompressionConfig, llmProvider?: ILLMProvider, model?: string) {
     this.threshold = config?.threshold ?? 50;
-    this.strategy = (config?.strategy ?? 'sliding-window') as Strategy;
+    this.strategy = (config?.strategy ?? 'truncate') as Strategy;
     this.keepRecent = config?.keepRecent ?? 10;
     this.llmProvider = llmProvider;
     this.model = model;
+    this.summaryProvider = config?.summaryProvider;
+    this.summaryModel = config?.summaryModel;
 
-    // summarize and hybrid require LLM provider
-    if ((this.strategy === 'summarize' || this.strategy === 'hybrid') && !llmProvider) {
+    // summarize requires an LLM provider (either dedicated or fallback)
+    const effectiveProvider = this.summaryProvider ?? llmProvider;
+    if (this.strategy === 'summarize' && !effectiveProvider) {
       throw new Error(
         `Strategy '${this.strategy}' requires an LLM provider. ` +
-          `Pass llmProvider or use 'truncate'/'sliding-window' strategy.`
+          `Pass llmProvider, summaryProvider in config, or use 'truncate' strategy.`
       );
     }
   }
@@ -100,11 +103,9 @@ export class DefaultContextCompressor {
 
     switch (this.strategy) {
       case 'truncate':
-      case 'sliding-window':
         return { summary: '', anchor };
 
-      case 'summarize':
-      case 'hybrid': {
+      case 'summarize': {
         const messagesToCompress = messages.slice(existingAnchor, anchor);
         const summary = await this.generateSummary(
           messagesToCompress,
@@ -130,8 +131,10 @@ export class DefaultContextCompressor {
     messages: AgentState['context']['messages'],
     existingSummary?: string
   ): Promise<string> {
-    if (!this.llmProvider || !this.model) {
-      throw new Error('LLM provider and model required for summarize/hybrid strategy');
+    const provider = this.summaryProvider ?? this.llmProvider;
+    const model = this.summaryModel ?? this.model;
+    if (!provider || !model) {
+      throw new Error('LLM provider and model required for summarize strategy');
     }
 
     // Build conversation text from messages
@@ -146,8 +149,8 @@ export class DefaultContextCompressor {
       ? `Previous conversation summary:\n${existingSummary}\n\nNew conversation to incorporate:\n${conversationText}\n\nPlease provide an updated concise summary that covers the entire conversation history. Focus on key facts, decisions, and results.`
       : `Summarize the following conversation concisely. Focus on key facts, decisions, and results:\n\n${conversationText}`;
 
-    const response = await this.llmProvider.call({
-      model: this.model,
+    const response = await provider.call({
+      model: model,
       messages: [{ role: 'user' as const, content: prompt, timestamp: Date.now() }],
     });
 
