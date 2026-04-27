@@ -7,6 +7,7 @@
 import type { AgentState, Message } from './types.js';
 import type { ToolCall } from './parser.js';
 import type { DelegateResult } from './subagent/types.js';
+import type { TokenStats } from '@agentskillmania/llm-client';
 
 // ---------------------------------------------------------------------------
 // ToolPostEffect — lifecycle side effects produced by handler
@@ -65,10 +66,10 @@ export type Phase =
  * Result of a single step (one ReAct cycle)
  */
 export type StepResult =
-  | { type: 'continue'; toolResult: unknown }
-  | { type: 'done'; answer: string }
-  | { type: 'error'; error: Error }
-  | { type: 'abort' };
+  | { type: 'continue'; toolResult: unknown; tokens: TokenStats }
+  | { type: 'done'; answer: string; tokens: TokenStats }
+  | { type: 'error'; error: Error; tokens: TokenStats }
+  | { type: 'abort'; tokens: TokenStats };
 
 /**
  * Events emitted during step/advance stream
@@ -126,6 +127,10 @@ export interface AdvanceResult {
   done: boolean;
   /** Side-effects produced by the handler (e.g. skill:start, tool:end) */
   effects?: ToolPostEffect[];
+  /** Token usage from the LLM call (if any) */
+  tokens?: TokenStats;
+  /** Estimated token count of the context sent to LLM (if any) */
+  estimatedContextSize?: number;
 }
 
 /**
@@ -153,6 +158,10 @@ export interface ExecutionState {
   toolResult?: unknown;
   /** Accumulated tokens during streaming */
   accumulatedTokens?: string;
+  /** Estimated token count of the prepared context */
+  estimatedContextSize?: number;
+  /** Token usage from the LLM call (if any) */
+  tokens?: TokenStats;
 }
 
 /**
@@ -194,10 +203,10 @@ export function isTerminalPhase(phase: Phase): boolean {
  * Result of a complete run (multiple ReAct cycles)
  */
 export type RunResult =
-  | { type: 'success'; answer: string; totalSteps: number }
-  | { type: 'max_steps'; totalSteps: number }
-  | { type: 'error'; error: Error; totalSteps: number }
-  | { type: 'abort'; totalSteps: number };
+  | { type: 'success'; answer: string; totalSteps: number; tokens: TokenStats }
+  | { type: 'max_steps'; totalSteps: number; tokens: TokenStats }
+  | { type: 'error'; error: Error; totalSteps: number; tokens: TokenStats }
+  | { type: 'abort'; totalSteps: number; tokens: TokenStats };
 
 /**
  * Events emitted during runStream()

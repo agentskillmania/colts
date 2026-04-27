@@ -56,6 +56,14 @@ describe('User Story: Step Control with Real LLM', () => {
           expect(result.answer.length).toBeGreaterThan(0);
         }
 
+        // And: Token usage is tracked
+        expect(result.tokens).toBeDefined();
+        expect(result.tokens.input).toBeGreaterThan(0);
+        expect(result.tokens.output).toBeGreaterThan(0);
+        expect(newState.context.totalTokens).toBeDefined();
+        expect(newState.context.totalTokens!.input).toBeGreaterThan(0);
+        expect(newState.context.totalTokens!.output).toBeGreaterThan(0);
+
         // And: State should be updated
         expect(newState.context.stepCount).toBe(1);
         expect(newState.context.messages.length).toBeGreaterThan(0);
@@ -105,12 +113,28 @@ describe('User Story: Step Control with Real LLM', () => {
           if (result2.type === 'done') {
             expect(result2.answer).toBeTruthy();
           }
+
+          // And: Token usage is tracked across steps
+          expect(result2.tokens).toBeDefined();
+          expect(result2.tokens.input).toBeGreaterThan(0);
+          expect(result2.tokens.output).toBeGreaterThan(0);
+          expect(stateAfterStep2.context.totalTokens).toBeDefined();
+          expect(stateAfterStep2.context.totalTokens!.input).toBeGreaterThan(0);
+          expect(stateAfterStep2.context.totalTokens!.output).toBeGreaterThan(0);
         } else {
           // LLM answered directly without tool
           expect(result1.type).toBe('done');
           if (result1.type === 'done') {
             expect(result1.answer).toBeTruthy();
           }
+
+          // And: Token usage is tracked
+          expect(result1.tokens).toBeDefined();
+          expect(result1.tokens.input).toBeGreaterThan(0);
+          expect(result1.tokens.output).toBeGreaterThan(0);
+          expect(stateAfterStep1.context.totalTokens).toBeDefined();
+          expect(stateAfterStep1.context.totalTokens!.input).toBeGreaterThan(0);
+          expect(stateAfterStep1.context.totalTokens!.output).toBeGreaterThan(0);
         }
       },
       60000
@@ -193,12 +217,16 @@ describe('User Story: Step Control with Real LLM', () => {
 
         // When: Execute stepStream
         const events: { type: string }[] = [];
-        const { result } = await runner.stepStream(state, registry).next();
-
-        // Consume all events
         const stream = runner.stepStream(state, registry);
-        for await (const event of stream) {
-          events.push({ type: event.type });
+        let finalResult: { state: AgentState; result: StepResult } | undefined;
+
+        while (true) {
+          const { done, value } = await stream.next();
+          if (done) {
+            finalResult = value;
+            break;
+          }
+          events.push({ type: value.type });
         }
 
         // Then: Should have phase-change events
@@ -206,6 +234,16 @@ describe('User Story: Step Control with Real LLM', () => {
 
         // And: Should have token events
         expect(events.some((e) => e.type === 'token')).toBe(true);
+
+        // And: Step result should have token usage
+        expect(finalResult).toBeDefined();
+        expect(finalResult!.result.tokens).toBeDefined();
+        expect(finalResult!.result.tokens.input).toBeGreaterThan(0);
+        expect(finalResult!.result.tokens.output).toBeGreaterThan(0);
+        expect(finalResult!.state.context.totalTokens).toBeDefined();
+        expect(finalResult!.state.context.totalTokens!.input).toBeGreaterThan(0);
+        expect(finalResult!.state.context.totalTokens!.output).toBeGreaterThan(0);
+        expect(finalResult!.state.context.estimatedContextSize).toBeGreaterThan(0);
       },
       60000
     );
@@ -250,6 +288,11 @@ describe('User Story: Step Control with Real LLM', () => {
         // Then: Should have completed within max steps
         expect(stepCount).toBeLessThan(maxSteps);
         expect(state.context.messages.length).toBeGreaterThan(0);
+
+        // And: Token usage is accumulated
+        expect(state.context.totalTokens).toBeDefined();
+        expect(state.context.totalTokens!.input).toBeGreaterThan(0);
+        expect(state.context.totalTokens!.output).toBeGreaterThan(0);
       },
       120000
     );

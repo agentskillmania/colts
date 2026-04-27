@@ -320,6 +320,7 @@ describe('advance()', () => {
     result = await runner.advance(result.state, execState);
     expect(result.phase.type).toBe('llm-response');
     expect(result.done).toBe(false);
+    expect(result.tokens).toEqual(mockTokens);
     expect(execState.llmResponse).toBe('The answer is 42');
 
     // Phase: llm-response -> parsing

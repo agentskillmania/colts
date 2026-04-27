@@ -57,6 +57,14 @@ describe('User Story: Run Execution with Real LLM', () => {
           expect(result.totalSteps).toBeGreaterThanOrEqual(1);
         }
 
+        // And: Token usage is tracked
+        expect(result.tokens).toBeDefined();
+        expect(result.tokens.input).toBeGreaterThan(0);
+        expect(result.tokens.output).toBeGreaterThan(0);
+        expect(finalState.context.totalTokens).toBeDefined();
+        expect(finalState.context.totalTokens!.input).toBeGreaterThan(0);
+        expect(finalState.context.totalTokens!.output).toBeGreaterThan(0);
+
         // And: State should be updated
         expect(finalState.context.stepCount).toBeGreaterThanOrEqual(1);
         expect(finalState.context.messages.length).toBeGreaterThan(0);
@@ -103,6 +111,20 @@ describe('User Story: Run Execution with Real LLM', () => {
           expect(result.totalSteps).toBeGreaterThanOrEqual(1);
         }
 
+        // And: Token usage is tracked across multi-step execution
+        expect(result.tokens).toBeDefined();
+        expect(result.tokens.input).toBeGreaterThan(0);
+        expect(result.tokens.output).toBeGreaterThan(0);
+        expect(finalState.context.totalTokens).toBeDefined();
+        expect(finalState.context.totalTokens!.input).toBeGreaterThan(0);
+        expect(finalState.context.totalTokens!.output).toBeGreaterThan(0);
+
+        // And: totalTokens should exactly equal result.tokens
+        expect(finalState.context.totalTokens).toEqual(result.tokens);
+
+        // And: estimatedContextSize is tracked
+        expect(finalState.context.estimatedContextSize).toBeGreaterThan(0);
+
         // And: State should reflect execution
         expect(finalState.context.stepCount).toBeGreaterThanOrEqual(1);
       },
@@ -132,11 +154,18 @@ describe('User Story: Run Execution with Real LLM', () => {
         // When: Run with streaming
         const tokens: string[] = [];
         const eventTypes: string[] = [];
+        let streamResult: unknown;
 
-        for await (const event of runner.runStream(state)) {
-          eventTypes.push(event.type);
-          if (event.type === 'token') {
-            tokens.push(event.token);
+        const streamIterator = runner.runStream(state);
+        while (true) {
+          const { done, value } = await streamIterator.next();
+          if (done) {
+            streamResult = value.result;
+            break;
+          }
+          eventTypes.push(value.type);
+          if (value.type === 'token') {
+            tokens.push(value.token);
           }
         }
 
@@ -152,6 +181,27 @@ describe('User Story: Run Execution with Real LLM', () => {
         const firstStepStart = eventTypes.indexOf('step:start');
         const firstToken = eventTypes.indexOf('token');
         expect(firstStepStart).toBeLessThan(firstToken);
+
+        // And: Token usage is tracked in stream result
+        expect(streamResult).toBeDefined();
+        if (streamResult && typeof streamResult === 'object' && 'tokens' in streamResult) {
+          const resultTokens = (streamResult as { tokens: { input: number; output: number } })
+            .tokens;
+          expect(resultTokens.input).toBeGreaterThan(0);
+          expect(resultTokens.output).toBeGreaterThan(0);
+        }
+
+        // And: totalTokens is tracked in stream final state
+        if (streamResult && typeof streamResult === 'object' && 'state' in streamResult) {
+          const streamFinalState = (
+            streamResult as {
+              state: { context: { totalTokens?: { input: number; output: number } } };
+            }
+          ).state;
+          expect(streamFinalState.context.totalTokens).toBeDefined();
+          expect(streamFinalState.context.totalTokens!.input).toBeGreaterThan(0);
+          expect(streamFinalState.context.totalTokens!.output).toBeGreaterThan(0);
+        }
       },
       60000
     );
@@ -203,6 +253,14 @@ describe('User Story: Run Execution with Real LLM', () => {
           expect(completeResult.type).toBe('success');
         }
 
+        // And: Token usage is tracked in multi-step stream
+        if (completeResult && typeof completeResult === 'object' && 'tokens' in completeResult) {
+          const resultTokens = (completeResult as { tokens: { input: number; output: number } })
+            .tokens;
+          expect(resultTokens.input).toBeGreaterThan(0);
+          expect(resultTokens.output).toBeGreaterThan(0);
+        }
+
         // And: Should have step lifecycle events
         expect(stepStarts.length).toBe(stepEnds.length);
         expect(stepStarts.length).toBeGreaterThanOrEqual(1);
@@ -246,6 +304,18 @@ describe('User Story: Run Execution with Real LLM', () => {
         if (result.type === 'success') {
           expect(result.totalSteps).toBe(1);
         }
+
+        // And: Token usage is tracked even with maxSteps limit
+        expect(result.tokens).toBeDefined();
+        expect(result.tokens.input).toBeGreaterThan(0);
+        expect(result.tokens.output).toBeGreaterThan(0);
+
+        // And: totalTokens and estimatedContextSize are tracked
+        const { state: finalState } = await runner.run(state, { maxSteps: 1 });
+        expect(finalState.context.totalTokens).toBeDefined();
+        expect(finalState.context.totalTokens!.input).toBeGreaterThan(0);
+        expect(finalState.context.totalTokens!.output).toBeGreaterThan(0);
+        expect(finalState.context.estimatedContextSize).toBeGreaterThan(0);
       },
       60000
     );

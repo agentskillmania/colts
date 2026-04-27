@@ -10,6 +10,7 @@ import type { AgentState, IToolRegistry } from '../../types.js';
 import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution.js';
 import { toolCallToAction } from '../../execution.js';
 import { getToolsForLLM } from '../../tools/llm-format.js';
+import { estimateTokens } from '../../state.js';
 
 export class CallingLLMHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {
@@ -47,6 +48,21 @@ export class CallingLLMHandler implements IPhaseHandler {
     execState.llmResponse = responseText;
     execState.llmThinking = response.thinking ?? ''; // Preserve native thinking from the LLM API
 
+    // Estimate context size from prepared messages
+    const preparedMessages =
+      execState.preparedMessages ??
+      ctx.messageAssembler.build(state, {
+        systemPrompt: ctx.options.systemPrompt,
+        model: ctx.options.model,
+        skillProvider: ctx.skillProvider,
+        enablePromptThinking: ctx.options.enablePromptThinking,
+      });
+    const estimatedContextSize = preparedMessages.reduce(
+      (sum, m) =>
+        sum + estimateTokens(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)),
+      0
+    );
+
     if (response.toolCalls && response.toolCalls.length > 0) {
       try {
         const toolCall = response.toolCalls[0];
@@ -72,6 +88,12 @@ export class CallingLLMHandler implements IPhaseHandler {
     }
 
     execState.phase = { type: 'llm-response', response: responseText };
-    return { state, phase: execState.phase, done: false };
+    return {
+      state,
+      phase: execState.phase,
+      done: false,
+      tokens: response.tokens,
+      estimatedContextSize,
+    };
   }
 }

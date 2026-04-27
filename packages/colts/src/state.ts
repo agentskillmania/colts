@@ -6,7 +6,8 @@
  */
 
 import { produce, Draft } from 'immer';
-import type { AgentState, AgentConfig, Message, Snapshot } from './types.js';
+import { encodingForModel } from 'js-tiktoken';
+import type { AgentState, AgentConfig, Message, Snapshot, TokenStats } from './types.js';
 
 /**
  * Generate unique ID
@@ -40,6 +41,28 @@ function computeChecksum(state: AgentState): string {
  * @param config - Agent configuration
  * @returns New AgentState (immutable)
  */
+const enc = encodingForModel('gpt-4');
+
+/** Estimate token count of a string via js-tiktoken */
+export function estimateTokens(text: string): number {
+  return enc.encode(text).length;
+}
+
+/** Add two TokenStats, handling undefined */
+export function addTokenStats(a?: TokenStats, b?: TokenStats): TokenStats {
+  return {
+    input: (a?.input ?? 0) + (b?.input ?? 0),
+    output: (a?.output ?? 0) + (b?.output ?? 0),
+  };
+}
+
+/** Add token usage to AgentContext.totalTokens */
+export function updateTotalTokens(state: AgentState, usage: TokenStats): AgentState {
+  return updateState(state, (draft) => {
+    draft.context.totalTokens = addTokenStats(draft.context.totalTokens, usage);
+  });
+}
+
 export function createAgentState(config: AgentConfig): AgentState {
   const now = Date.now();
   return {
@@ -50,6 +73,8 @@ export function createAgentState(config: AgentConfig): AgentState {
       stepCount: 0,
       createdAt: now,
       updatedAt: now,
+      totalTokens: undefined,
+      estimatedContextSize: undefined,
     },
   };
 }
@@ -84,6 +109,7 @@ export function addUserMessage(state: AgentState, content: string): AgentState {
       role: 'user',
       content,
       timestamp: Date.now(),
+      tokenCount: estimateTokens(content),
     });
   });
 }
@@ -110,6 +136,7 @@ export function addAssistantMessage(
       content,
       type: options?.type ?? 'text',
       timestamp: Date.now(),
+      tokenCount: estimateTokens(content),
     };
     if (options?.toolCalls && options.toolCalls.length > 0) {
       msg.toolCalls = options.toolCalls;
@@ -140,6 +167,7 @@ export function addToolMessage(
       content,
       type: 'tool-result',
       timestamp: Date.now(),
+      tokenCount: estimateTokens(content),
     };
     if (options?.toolCallId) msg.toolCallId = options.toolCallId;
     if (options?.toolName) msg.toolName = options.toolName;

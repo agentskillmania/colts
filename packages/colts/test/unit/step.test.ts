@@ -109,6 +109,10 @@ describe('step()', () => {
       expect(result.answer).toBe('The answer is 42');
     }
 
+    // Token tracking
+    expect(result.tokens).toEqual(mockTokens);
+    expect(newState.context.totalTokens).toEqual(mockTokens);
+
     // State should be updated
     expect(newState.context.stepCount).toBe(1);
     expect(newState.context.messages).toHaveLength(1);
@@ -159,6 +163,10 @@ describe('step()', () => {
     if (result.type === 'continue') {
       expect(result.toolResult).toBe('4');
     }
+
+    // Token tracking
+    expect(result.tokens).toEqual(mockTokens);
+    expect(newState.context.totalTokens).toEqual(mockTokens);
 
     // State should have assistant thought and tool result
     expect(newState.context.stepCount).toBe(1);

@@ -109,6 +109,10 @@ describe('run()', () => {
       expect(result.totalSteps).toBe(1);
     }
 
+    // Token tracking
+    expect(result.tokens).toEqual(mockTokens);
+    expect(finalState.context.totalTokens).toEqual(mockTokens);
+
     // Original state is immutable
     expect(state.context.stepCount).toBe(0);
     expect(finalState.context.stepCount).toBe(1);
@@ -151,6 +155,10 @@ describe('run()', () => {
       expect(result.answer).toBe('The result is 4');
       expect(result.totalSteps).toBe(2);
     }
+
+    // Token tracking: accumulated across 2 steps
+    expect(result.tokens).toEqual({ input: 20, output: 10 });
+    expect(finalState.context.totalTokens).toEqual({ input: 20, output: 10 });
 
     expect(finalState.context.stepCount).toBe(2);
     expect(state.context.stepCount).toBe(0);

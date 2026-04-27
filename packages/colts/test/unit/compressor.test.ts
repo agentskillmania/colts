@@ -185,6 +185,8 @@ describe('DefaultContextCompressor - compress (truncate)', () => {
     const result = await compressor.compress(state);
     expect(result.anchor).toBe(7); // 10 - 3
     expect(result.summary).toBe('');
+    expect(result.removedTokenCount).toBeGreaterThan(0);
+    expect(result.compressedAt).toBeGreaterThan(0);
   });
 
   it('should use default keepRecent (10)', async () => {
@@ -216,6 +218,9 @@ describe('DefaultContextCompressor - compress (summarize)', () => {
     const result = await compressor.compress(state);
     expect(result.anchor).toBe(7);
     expect(result.summary).toBe('This is a summary');
+    expect(result.summaryTokenCount).toBeGreaterThan(0);
+    expect(result.removedTokenCount).toBeGreaterThan(0);
+    expect(result.compressedAt).toBeGreaterThan(0);
     expect(llm.call).toHaveBeenCalledOnce();
   });
 

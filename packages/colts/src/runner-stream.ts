@@ -14,6 +14,7 @@ import type {
   AdvanceOptions,
 } from './execution.js';
 import { createExecutionState, isTerminalPhase } from './execution.js';
+import { addTokenStats, estimateTokens } from './state.js';
 import type { RunnerContext } from './runner-advance.js';
 import { executeAdvance } from './runner-advance.js';
 import { buildMessagesFromCtx } from './runner-advance.js';
@@ -95,6 +96,9 @@ export async function* streamCallingLLM(
       });
     } else if (event.type === 'done') {
       responseContent = accumulatedContent;
+      if (event.roundTotalTokens) {
+        execState.tokens = event.roundTotalTokens;
+      }
     }
   }
 
@@ -102,6 +106,14 @@ export async function* streamCallingLLM(
   if (signal?.aborted) {
     return;
   }
+
+  // Estimate context size from prepared messages
+  const estimatedContextSize = messages.reduce(
+    (sum, m) =>
+      sum + estimateTokens(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)),
+    0
+  );
+  execState.estimatedContextSize = estimatedContextSize;
 
   // Yield llm:response event after LLM response, carrying the full output
   yield {
@@ -224,9 +236,10 @@ export async function* executeStepStream(
   const execState = createExecutionState();
 
   let currentState = state;
+  let stepTokens = { input: 0, output: 0 };
   while (!isTerminalPhase(execState.phase)) {
     if (options?.signal?.aborted) {
-      return { state: currentState, result: { type: 'abort' } };
+      return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
     }
     const fromPhase = execState.phase;
 
@@ -245,7 +258,10 @@ export async function* executeStepStream(
         const errorObj = error instanceof Error ? error : new Error(String(error));
         execState.phase = { type: 'error', error: errorObj };
         yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
-        return { state: currentState, result: { type: 'error', error: errorObj } };
+        return {
+          state: currentState,
+          result: { type: 'error', error: errorObj, tokens: stepTokens },
+        };
       }
 
       yield {
@@ -254,6 +270,31 @@ export async function* executeStepStream(
         to: execState.phase,
         timestamp: Date.now(),
       };
+
+      if (execState.tokens) {
+        stepTokens = addTokenStats(stepTokens, execState.tokens);
+        currentState = {
+          ...currentState,
+          context: {
+            ...currentState.context,
+            totalTokens: addTokenStats(
+              currentState.context.totalTokens ?? { input: 0, output: 0 },
+              execState.tokens
+            ),
+          },
+        };
+      }
+
+      if (execState.estimatedContextSize !== undefined) {
+        currentState = {
+          ...currentState,
+          context: {
+            ...currentState.context,
+            estimatedContextSize: execState.estimatedContextSize,
+          },
+        };
+      }
+
       continue;
     }
 
@@ -263,10 +304,15 @@ export async function* executeStepStream(
       phase,
       done,
       effects,
+      tokens,
     } = await executeAdvance(ctx, currentState, execState, registry, options);
 
+    if (tokens) {
+      stepTokens = addTokenStats(stepTokens, tokens);
+    }
+
     if (options?.signal?.aborted) {
-      return { state: currentState, result: { type: 'abort' } };
+      return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
     }
 
     currentState = await maybeCompress(compressor, newState);
@@ -293,13 +339,16 @@ export async function* executeStepStream(
     if (done && phase.type === 'completed') {
       return {
         state: currentState,
-        result: { type: 'done', answer: phase.answer },
+        result: { type: 'done', answer: phase.answer, tokens: stepTokens },
       };
     }
 
     if (done && phase.type === 'error') {
       yield { type: 'error', error: phase.error, context: { step: 0 }, timestamp: Date.now() };
-      return { state: currentState, result: { type: 'error', error: phase.error } };
+      return {
+        state: currentState,
+        result: { type: 'error', error: phase.error, tokens: stepTokens },
+      };
     }
 
     // ToolResultHandler has processed tool-result phase (effects indicate processed)
@@ -307,7 +356,7 @@ export async function* executeStepStream(
       // same-skill/cyclic/plain tool → return continue
       return {
         state: currentState,
-        result: { type: 'continue', toolResult: execState.toolResult },
+        result: { type: 'continue', toolResult: execState.toolResult, tokens: stepTokens },
       };
     }
 

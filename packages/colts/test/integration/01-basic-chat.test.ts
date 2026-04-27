@@ -64,6 +64,19 @@ describe('Integration: Basic LLM Chat', () => {
         expect(result.state.context.messages[1].role).toBe('assistant');
         expect(result.state.context.stepCount).toBe(1);
 
+        // And: Token usage is tracked
+        expect(result.tokens).toBeDefined();
+        expect(result.tokens.input).toBeGreaterThan(0);
+        expect(result.tokens.output).toBeGreaterThan(0);
+        expect(result.state.context.totalTokens).toBeDefined();
+        expect(result.state.context.totalTokens?.input).toBeGreaterThan(0);
+        expect(result.state.context.totalTokens?.output).toBeGreaterThan(0);
+
+        // And: estimatedContextSize and message tokenCount are tracked
+        expect(result.state.context.estimatedContextSize).toBeGreaterThan(0);
+        expect(result.state.context.messages[0].tokenCount).toBeGreaterThan(0);
+        expect(result.state.context.messages[1].tokenCount).toBeGreaterThan(0);
+
         console.log('Response:', result.response);
         console.log('Tokens:', result.tokens);
       },
@@ -101,6 +114,20 @@ describe('Integration: Basic LLM Chat', () => {
         // And: Full conversation history preserved
         expect(state.context.messages).toHaveLength(4);
         expect(state.context.stepCount).toBe(2);
+
+        // And: Token usage is accumulated across turns
+        expect(state.context.totalTokens).toBeDefined();
+        expect(state.context.totalTokens!.input).toBeGreaterThan(0);
+        expect(state.context.totalTokens!.output).toBeGreaterThan(0);
+
+        // And: totalTokens should equal sum of each turn
+        const expectedInput = result1.tokens.input + result2.tokens.input;
+        const expectedOutput = result1.tokens.output + result2.tokens.output;
+        expect(state.context.totalTokens!.input).toBe(expectedInput);
+        expect(state.context.totalTokens!.output).toBe(expectedOutput);
+
+        // And: estimatedContextSize is tracked
+        expect(result2.state.context.estimatedContextSize).toBeGreaterThan(0);
       },
       120000
     );
@@ -172,6 +199,11 @@ describe('Integration: Basic LLM Chat', () => {
         expect(doneChunk).toBeDefined();
         expect(doneChunk?.accumulatedContent).toBeDefined();
         expect((doneChunk?.accumulatedContent || '').length).toBeGreaterThan(0);
+
+        // And: Token usage is tracked in streaming
+        expect(doneChunk?.tokens).toBeDefined();
+        expect(doneChunk?.tokens?.input).toBeGreaterThan(0);
+        expect(doneChunk?.tokens?.output).toBeGreaterThan(0);
       },
       90000
     );

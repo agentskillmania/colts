@@ -6,6 +6,7 @@
  */
 
 import type { AgentState, ILLMProvider, CompressionConfig, CompressResult } from './types.js';
+import { estimateTokens } from './state.js';
 
 /**
  * Context compression strategy
@@ -101,21 +102,37 @@ export class DefaultContextCompressor {
       };
     }
 
+    const messagesToCompress = messages.slice(existingAnchor, anchor);
+    const removedTokenCount = messagesToCompress.reduce(
+      (sum, m) => sum + (m.tokenCount ?? estimateTokens(m.content)),
+      0
+    );
+
     switch (this.strategy) {
       case 'truncate':
-        return { summary: '', anchor };
+        return {
+          summary: '',
+          anchor,
+          removedTokenCount,
+          compressedAt: Date.now(),
+        };
 
       case 'summarize': {
-        const messagesToCompress = messages.slice(existingAnchor, anchor);
         const summary = await this.generateSummary(
           messagesToCompress,
           state.context.compression?.summary
         );
-        return { summary, anchor };
+        return {
+          summary,
+          anchor,
+          summaryTokenCount: estimateTokens(summary),
+          removedTokenCount,
+          compressedAt: Date.now(),
+        };
       }
 
       default:
-        return { summary: '', anchor };
+        return { summary: '', anchor, removedTokenCount, compressedAt: Date.now() };
     }
   }
 

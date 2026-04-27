@@ -18,7 +18,15 @@ import type {
 } from './types.js';
 import { ConfigurationError } from './types.js';
 import { DefaultContextCompressor } from './compressor.js';
-import { addUserMessage, addAssistantMessage, incrementStepCount, updateState } from './state.js';
+import {
+  addUserMessage,
+  addAssistantMessage,
+  incrementStepCount,
+  updateState,
+  addTokenStats,
+  updateTotalTokens,
+  estimateTokens,
+} from './state.js';
 import { ToolRegistry } from './tools/registry.js';
 import type { Tool as ColtsTool } from './tools/registry.js';
 import type {
@@ -507,7 +515,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // 2. Prepare messages for LLM
     const messages = this.buildMessages(newState);
 
-    // 3. Call LLM
+    // 3. Estimate context size
+    const estimatedContextSize = messages.reduce(
+      (sum, m) =>
+        sum + estimateTokens(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)),
+      0
+    );
+    newState = updateState(newState, (draft) => {
+      draft.context.estimatedContextSize = estimatedContextSize;
+    });
+
+    // 4. Call LLM
     const response = await this.llmProvider.call({
       model: this.options.model,
       messages,
@@ -520,10 +538,15 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       type: 'text',
     });
 
-    // 5. Increment step count
+    // 6. Increment step count
     newState = incrementStepCount(newState);
 
-    // 6. Clean up stale skill state on completion
+    // 7. Track token usage
+    if (response.tokens) {
+      newState = updateTotalTokens(newState, response.tokens);
+    }
+
+    // 8. Clean up stale skill state on completion
     newState = this.cleanupStaleSkillState(newState);
 
     return {
@@ -584,7 +607,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // 2. Prepare messages for LLM
     const messages = this.buildMessages(currentState);
 
-    // 3. Start streaming
+    // 3. Estimate context size
+    const estimatedContextSize = messages.reduce(
+      (sum, m) =>
+        sum + estimateTokens(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)),
+      0
+    );
+    const currentStateWithSize = updateState(currentState, (draft) => {
+      draft.context.estimatedContextSize = estimatedContextSize;
+    });
+
+    // 4. Start streaming
     let accumulatedContent = '';
 
     try {
@@ -604,7 +637,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               type: 'text',
               delta: event.delta,
               accumulatedContent,
-              state: currentState,
+              state: currentStateWithSize,
             };
             break;
           }
@@ -612,10 +645,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           case 'done': {
             // Finalize state with complete response
             let finalState = incrementStepCount(
-              addAssistantMessage(currentState, accumulatedContent, {
+              addAssistantMessage(currentStateWithSize, accumulatedContent, {
                 type: 'text',
               })
             );
+            // Track token usage
+            if (event.roundTotalTokens) {
+              finalState = updateTotalTokens(finalState, event.roundTotalTokens);
+            }
             // Clean up stale skill state on completion
             finalState = this.cleanupStaleSkillState(finalState);
 
@@ -632,7 +669,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             yield {
               type: 'error',
               error: event.error,
-              state: currentState,
+              state: currentStateWithSize,
             };
             break;
           }
@@ -646,7 +683,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       yield {
         type: 'error',
         error: error instanceof Error ? error.message : String(error),
-        state: currentState,
+        state: currentStateWithSize,
       };
     }
   }
@@ -870,23 +907,37 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     // Loop advance() until a natural stopping point
     let currentState = state;
+    let stepTokens: TokenStats = { input: 0, output: 0 };
 
     try {
       while (!isTerminalPhase(execState.phase)) {
         if (options?.signal?.aborted) {
           this.emit('abort', { step: stepIdx, timestamp: Date.now() });
-          return { state: currentState, result: { type: 'abort' } };
+          return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
         }
 
         const from = execState.phase;
         const result = await executeAdvance(this.ctx, currentState, execState, registry, options);
 
-        if (options?.signal?.aborted) {
-          this.emit('abort', { step: stepIdx, timestamp: Date.now() });
-          return { state: currentState, result: { type: 'abort' } };
+        let nextState = result.state;
+
+        if (result.tokens) {
+          stepTokens = addTokenStats(stepTokens, result.tokens);
+          nextState = updateTotalTokens(nextState, result.tokens);
         }
 
-        currentState = await maybeCompress(this.compressor, result.state);
+        if (result.estimatedContextSize !== undefined) {
+          nextState = updateState(nextState, (draft) => {
+            draft.context.estimatedContextSize = result.estimatedContextSize;
+          });
+        }
+
+        if (options?.signal?.aborted) {
+          this.emit('abort', { step: stepIdx, timestamp: Date.now() });
+          return { state: nextState, result: { type: 'abort', tokens: stepTokens } };
+        }
+
+        currentState = await maybeCompress(this.compressor, nextState);
 
         // Emit executing-tool event
         if (result.phase.type === 'executing-tool') {
@@ -908,13 +959,21 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         // Control flow is determined by phase + done
         if (result.done && result.phase.type === 'completed') {
-          const stepResult: StepResult = { type: 'done', answer: result.phase.answer };
+          const stepResult: StepResult = {
+            type: 'done',
+            answer: result.phase.answer,
+            tokens: stepTokens,
+          };
           this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
           return { state: currentState, result: stepResult };
         }
 
         if (result.done && result.phase.type === 'error') {
-          const stepResult: StepResult = { type: 'error', error: result.phase.error };
+          const stepResult: StepResult = {
+            type: 'error',
+            error: result.phase.error,
+            tokens: stepTokens,
+          };
           this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
           return { state: currentState, result: stepResult };
         }
@@ -924,7 +983,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         if (result.phase.type === 'tool-result' && result.effects && result.effects.length > 0) {
           // same-skill/cyclic/plain tool → return continue
           const toolResult = execState.toolResult;
-          const stepResult: StepResult = { type: 'continue', toolResult };
+          const stepResult: StepResult = { type: 'continue', toolResult, tokens: stepTokens };
           this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
           return { state: currentState, result: stepResult };
         }
@@ -1019,11 +1078,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
     let currentState = initializedState;
     let totalSteps = 0;
+    let runTokens: TokenStats = { input: 0, output: 0 };
 
     try {
       while (totalSteps < RUN_HARD_LIMIT) {
         if (options?.signal?.aborted) {
-          const runResult: RunResult = { type: 'abort', totalSteps };
+          const runResult: RunResult = { type: 'abort', totalSteps, tokens: runTokens };
           this.emit('abort', { totalSteps, timestamp: Date.now() });
           this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
           return { state: currentState, result: runResult };
@@ -1037,8 +1097,16 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           totalSteps
         );
 
+        if (result.tokens) {
+          runTokens = addTokenStats(runTokens, result.tokens);
+        }
+
         if (result.type === 'abort') {
-          const runResult: RunResult = { type: 'abort', totalSteps: totalSteps + 1 };
+          const runResult: RunResult = {
+            type: 'abort',
+            totalSteps: totalSteps + 1,
+            tokens: runTokens,
+          };
           this.emit('run:end', { state: newState, result: runResult, timestamp: Date.now() });
           return { state: newState, result: runResult };
         }
@@ -1061,12 +1129,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               type: 'success',
               answer: (result as { type: 'done'; answer: string }).answer,
               totalSteps,
+              tokens: runTokens,
             };
           } else if (decision.runResultType === 'error') {
             runResult = {
               type: 'error',
               error: (result as { type: 'error'; error: Error }).error,
               totalSteps,
+              tokens: runTokens,
             };
             this.emit('error', {
               error: runResult.error,
@@ -1074,10 +1144,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               timestamp: Date.now(),
             });
           } else if (decision.runResultType === 'abort') {
-            runResult = { type: 'abort', totalSteps };
+            runResult = { type: 'abort', totalSteps, tokens: runTokens };
             this.emit('abort', { totalSteps, timestamp: Date.now() });
           } else {
-            runResult = { type: 'max_steps', totalSteps };
+            runResult = { type: 'max_steps', totalSteps, tokens: runTokens };
           }
 
           this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
@@ -1101,7 +1171,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       }
 
       // Hard limit reached (safety net for policy bugs)
-      const runResult: RunResult = { type: 'max_steps', totalSteps };
+      const runResult: RunResult = { type: 'max_steps', totalSteps, tokens: runTokens };
       this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
       return { state: currentState, result: runResult };
     } catch (error) {
@@ -1143,11 +1213,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
     let currentState = initializedState;
     let totalSteps = 0;
+    let runTokens: TokenStats = { input: 0, output: 0 };
 
     try {
       while (totalSteps < RUN_HARD_LIMIT) {
         if (options?.signal?.aborted) {
-          const runResult: RunResult = { type: 'abort', totalSteps };
+          const runResult: RunResult = { type: 'abort', totalSteps, tokens: runTokens };
           this.emit('abort', { totalSteps, timestamp: Date.now() });
           this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
           yield { type: 'complete', result: runResult, timestamp: Date.now() };
@@ -1179,8 +1250,16 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           yield value as RunStreamEvent;
         }
 
+        if (stepResult.result.tokens) {
+          runTokens = addTokenStats(runTokens, stepResult.result.tokens);
+        }
+
         if (stepResult.result.type === 'abort') {
-          const runResult: RunResult = { type: 'abort', totalSteps: totalSteps + 1 };
+          const runResult: RunResult = {
+            type: 'abort',
+            totalSteps: totalSteps + 1,
+            tokens: runTokens,
+          };
           this.emit('run:end', {
             state: stepResult.state,
             result: runResult,
@@ -1242,12 +1321,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               type: 'success',
               answer: (stepResult.result as { type: 'done'; answer: string }).answer,
               totalSteps,
+              tokens: runTokens,
             };
           } else if (decision.runResultType === 'error') {
             runResult = {
               type: 'error',
               error: (stepResult.result as { type: 'error'; error: Error }).error,
               totalSteps,
+              tokens: runTokens,
             };
             this.emit('error', {
               error: runResult.error,
@@ -1255,10 +1336,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               timestamp: Date.now(),
             });
           } else if (decision.runResultType === 'abort') {
-            runResult = { type: 'abort', totalSteps };
+            runResult = { type: 'abort', totalSteps, tokens: runTokens };
             this.emit('abort', { totalSteps, timestamp: Date.now() });
           } else {
-            runResult = { type: 'max_steps', totalSteps };
+            runResult = { type: 'max_steps', totalSteps, tokens: runTokens };
           }
 
           this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
@@ -1268,7 +1349,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       }
 
       // Hard limit reached (safety net for policy bugs)
-      const runResult: RunResult = { type: 'max_steps', totalSteps };
+      const runResult: RunResult = { type: 'max_steps', totalSteps, tokens: runTokens };
       this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
       yield { type: 'complete', result: runResult, timestamp: Date.now() };
       return { state: currentState, result: runResult };

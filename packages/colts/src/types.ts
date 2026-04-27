@@ -4,6 +4,9 @@
  * Pure data types for AgentState, runner configuration, and compression.
  */
 
+import type { TokenStats as LLMTokenStats } from '@agentskillmania/llm-client';
+export type TokenStats = LLMTokenStats;
+
 /**
  * Message role
  */
@@ -36,6 +39,8 @@ export interface Message {
     name: string;
     arguments: Record<string, unknown>;
   }>;
+  /** Estimated token count of this message's content (via js-tiktoken) */
+  tokenCount?: number;
 }
 
 /**
@@ -72,6 +77,12 @@ export interface CompressionMeta {
   summary: string;
   /** Boundary index: messages before this are summarized, not sent to LLM */
   anchor: number;
+  /** Estimated token count of the summary text */
+  summaryTokenCount?: number;
+  /** Estimated token count of messages that were summarized */
+  removedTokenCount?: number;
+  /** When compression occurred */
+  compressedAt?: number;
 }
 
 /**
@@ -119,6 +130,10 @@ export interface AgentContext {
   createdAt: number;
   /** Last state mutation timestamp */
   updatedAt: number;
+  /** Cumulative token usage across all LLM calls (exact values from provider) */
+  totalTokens?: TokenStats;
+  /** Estimated total token count of full LLM context (via js-tiktoken) */
+  estimatedContextSize?: number;
 }
 
 /**
@@ -324,6 +339,12 @@ export interface CompressResult {
   summary: string;
   /** Boundary index: messages[0..anchor-1] compressed, messages[anchor..] kept as-is */
   anchor: number;
+  /** Estimated token count of the summary text */
+  summaryTokenCount?: number;
+  /** Estimated token count of messages that were summarized */
+  removedTokenCount?: number;
+  /** When compression occurred */
+  compressedAt?: number;
 }
 
 /**
