@@ -21,7 +21,13 @@ export async function compressState(
 ): Promise<AgentState> {
   const result = await compressor.compress(state);
   return produce(state, (draft) => {
-    draft.context.compression = { summary: result.summary, anchor: result.anchor };
+    draft.context.compression = {
+      summary: result.summary,
+      anchor: result.anchor,
+      summaryTokenCount: result.summaryTokenCount,
+      removedTokenCount: result.removedTokenCount,
+      compressedAt: result.compressedAt,
+    };
   });
 }
 

@@ -307,6 +307,16 @@ describe('AgentRunner', () => {
       expect(chunks).toHaveLength(3);
       expect(chunks[0].type).toBe('text');
       expect(chunks[0].delta).toBe('Hello');
+
+      // Verify token tracking in done chunk
+      const doneChunk = chunks[2] as {
+        type: string;
+        tokens?: TokenStats;
+        state: { context: { totalTokens?: TokenStats } };
+      };
+      expect(doneChunk.type).toBe('done');
+      expect(doneChunk.tokens).toEqual({ input: 5, output: 5 });
+      expect(doneChunk.state.context.totalTokens).toEqual({ input: 5, output: 5 });
       expect(chunks[1].type).toBe('text');
       expect(chunks[1].delta).toBe(' there');
       expect(chunks[2].type).toBe('done');

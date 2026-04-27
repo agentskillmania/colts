@@ -123,6 +123,8 @@ describe('User Story: Context Compression with Real LLM', () => {
           // Then: Compression metadata should be set
           expect(compressed.context.compression).toBeDefined();
           expect(compressed.context.compression!.anchor).toBe(18); // 20 - 2
+          expect(compressed.context.compression!.removedTokenCount).toBeGreaterThan(0);
+          expect(compressed.context.compression!.compressedAt).toBeGreaterThan(0);
 
           // And: Original state should be unchanged (immutability)
           expect(state.context.compression).toBeUndefined();
@@ -163,6 +165,9 @@ describe('User Story: Context Compression with Real LLM', () => {
           expect(compressed.context.compression).toBeDefined();
           expect(compressed.context.compression!.summary).toBeTruthy();
           expect(compressed.context.compression!.anchor).toBe(8); // 10 - 2
+          expect(compressed.context.compression!.summaryTokenCount).toBeGreaterThan(0);
+          expect(compressed.context.compression!.removedTokenCount).toBeGreaterThan(0);
+          expect(compressed.context.compression!.compressedAt).toBeGreaterThan(0);
 
           // When: Run after compression (agent should still work)
           const { result } = await runner.run(compressed);
@@ -205,6 +210,9 @@ describe('User Story: Context Compression with Real LLM', () => {
           // Then: Should have summary
           expect(compressed.context.compression).toBeDefined();
           expect(compressed.context.compression!.summary).toBeTruthy();
+          expect(compressed.context.compression!.summaryTokenCount).toBeGreaterThan(0);
+          expect(compressed.context.compression!.removedTokenCount).toBeGreaterThan(0);
+          expect(compressed.context.compression!.compressedAt).toBeGreaterThan(0);
 
           // When: Run after compression
           const { result } = await runner.run(compressed);
