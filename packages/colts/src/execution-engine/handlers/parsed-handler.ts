@@ -10,6 +10,7 @@
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
+import { updateExecState } from '../../execution/index.js';
 import { addAssistantMessage, incrementStepCount } from '../../state/index.js';
 
 export class ParsedHandler implements IPhaseHandler {
@@ -42,8 +43,10 @@ export class ParsedHandler implements IPhaseHandler {
 
       // Pass all actions to executing-tool phase for parallel execution
       const actions = execState.allActions ?? [execState.action];
-      execState.phase = { type: 'executing-tool', actions };
-      return { state: newState, phase: execState.phase, done: false };
+      const nextExec = updateExecState(execState, (draft) => {
+        draft.phase = { type: 'executing-tool', actions };
+      });
+      return { state: newState, execState: nextExec, phase: nextExec.phase, done: false };
     } else {
       // No action: write explicit thinking message (if any), then text message
       let newState = state;
@@ -55,8 +58,10 @@ export class ParsedHandler implements IPhaseHandler {
       newState = addAssistantMessage(newState, cleanedContent, { type: 'text' });
       newState = incrementStepCount(newState);
 
-      execState.phase = { type: 'completed', answer: cleanedContent };
-      return { state: newState, phase: execState.phase, done: true };
+      const nextExec = updateExecState(execState, (draft) => {
+        draft.phase = { type: 'completed', answer: cleanedContent };
+      });
+      return { state: newState, execState: nextExec, phase: nextExec.phase, done: true };
     }
   }
 }

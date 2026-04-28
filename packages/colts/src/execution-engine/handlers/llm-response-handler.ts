@@ -7,6 +7,7 @@
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
+import { updateExecState } from '../../execution/index.js';
 
 export class LLMResponseHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {
@@ -14,7 +15,9 @@ export class LLMResponseHandler implements IPhaseHandler {
   }
 
   execute(_ctx: PhaseHandlerContext, state: AgentState, execState: ExecutionState): AdvanceResult {
-    execState.phase = { type: 'parsing' };
-    return { state, phase: execState.phase, done: false };
+    const nextExec = updateExecState(execState, (draft) => {
+      draft.phase = { type: 'parsing' };
+    });
+    return { state, execState: nextExec, phase: nextExec.phase, done: false };
   }
 }

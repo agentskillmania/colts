@@ -8,6 +8,7 @@
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState, IToolRegistry } from '../../types.js';
 import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution/index.js';
+import { updateExecState } from '../../execution/index.js';
 import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
 import { addToolMessage, addUserMessage, incrementStepCount } from '../../state/index.js';
 
@@ -65,10 +66,7 @@ export class ExecutingToolHandler implements IPhaseHandler {
       resultMap[action.id] = result;
     }
 
-    // Backward compat: execState.action takes the first, execState.toolResult takes the first result
-    execState.toolResult = results[0]?.result;
-
-    execState.phase = { type: 'tool-result', results: resultMap };
+    const toolResult = results[0]?.result;
 
     // Write individual tool messages for each action
     let newState = state;
@@ -80,6 +78,11 @@ export class ExecutingToolHandler implements IPhaseHandler {
       });
     }
     newState = incrementStepCount(newState);
+
+    const nextExec = updateExecState(execState, (draft) => {
+      draft.toolResult = toolResult;
+      draft.phase = { type: 'tool-result', results: resultMap };
+    });
 
     // Skill signal: only check on the first result
     // Models should not mix skill calls with plain tool calls in one batch
@@ -94,11 +97,11 @@ export class ExecutingToolHandler implements IPhaseHandler {
             ? task
             : 'Follow the loaded skill instructions to complete the user request.';
         const withTask = addUserMessage(newState, instruction);
-        return { state: withTask, phase: execState.phase, done: false };
+        return { state: withTask, execState: nextExec, phase: nextExec.phase, done: false };
       }
     }
 
-    return { state: newState, phase: execState.phase, done: false };
+    return { state: newState, execState: nextExec, phase: nextExec.phase, done: false };
   }
 }
 

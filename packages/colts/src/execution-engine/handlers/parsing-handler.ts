@@ -2,13 +2,14 @@
  * @fileoverview Parsing Phase Handler
  *
  * Transitions from parsing to parsed. Extracts explicit thinking from
- * execState.llmThinking (native) or execState.llmResponse (<think> tags),
+ * execState.llmThinking (native) or execState.llmResponse (thinking tags),
  * cleans the content, and sets both execState.thought and execState.cleanedContent.
  */
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
+import { updateExecState } from '../../execution/index.js';
 import { extractThinkingAndContent } from '../../parser/index.js';
 
 export class ParsingHandler implements IPhaseHandler {
@@ -22,15 +23,17 @@ export class ParsingHandler implements IPhaseHandler {
 
     const { thought, cleanedContent } = extractThinkingAndContent(rawContent, nativeThinking);
 
-    execState.thought = thought;
-    execState.cleanedContent = cleanedContent;
+    const action = execState.action;
+    const nextExec = updateExecState(execState, (draft) => {
+      draft.thought = thought;
+      draft.cleanedContent = cleanedContent;
+      if (action) {
+        draft.phase = { type: 'parsed', thought, action };
+      } else {
+        draft.phase = { type: 'parsed', thought };
+      }
+    });
 
-    if (execState.action) {
-      execState.phase = { type: 'parsed', thought, action: execState.action };
-    } else {
-      execState.phase = { type: 'parsed', thought };
-    }
-
-    return { state, phase: execState.phase, done: false };
+    return { state, execState: nextExec, phase: nextExec.phase, done: false };
   }
 }

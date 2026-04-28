@@ -122,13 +122,14 @@ describe('Invariants', () => {
     });
 
     const state = createAgentState(defaultConfig);
-    const execState = createExecutionState();
+    let currentExecState = createExecutionState();
     const phases: string[] = [];
     let currentState = state;
 
-    while (!isTerminalPhase(execState.phase)) {
-      const result = await runner.advance(currentState, execState);
+    while (!isTerminalPhase(currentExecState.phase)) {
+      const result = await runner.advance(currentState, currentExecState);
       currentState = result.state;
+      currentExecState = result.execState;
       phases.push(result.phase.type);
 
       // Safety limit

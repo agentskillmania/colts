@@ -151,8 +151,8 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     expect(skillLoaded.name).toBe('research');
     expect(skillLoaded.tokenCount).toBeGreaterThan(0);
 
-    // execState.phase should be reset to idle
-    expect(execState.phase.type).toBe('idle');
+    // result.execState.phase should be reset to idle
+    expect(result.execState.phase.type).toBe('idle');
   });
 
   it('should produce skill:start with parent pushed for nested load', async () => {
@@ -320,8 +320,8 @@ describe('ToolResultHandler — RETURN_SKILL', () => {
     const toolEnd = result.effects![1] as { type: 'tool:end'; result: unknown };
     expect(toolEnd.result).toBe('Found 3 relevant papers');
 
-    // execState.phase should be reset to idle
-    expect(execState.phase.type).toBe('idle');
+    // result.execState.phase should be reset to idle
+    expect(result.execState.phase.type).toBe('idle');
   });
 
   it('should produce skill:end + tool:end + phase=idle for nested return', async () => {
@@ -372,8 +372,8 @@ describe('ToolResultHandler — RETURN_SKILL', () => {
     expect(result.state.context.skillState?.current).toBe('research');
     expect(result.state.context.skillState?.stack.length).toBe(0);
 
-    // execState.phase should be reset to idle
-    expect(execState.phase.type).toBe('idle');
+    // result.execState.phase should be reset to idle
+    expect(result.execState.phase.type).toBe('idle');
   });
 });
 

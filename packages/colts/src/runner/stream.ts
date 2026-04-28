@@ -13,7 +13,7 @@ import type {
   StreamEvent,
   AdvanceOptions,
 } from '../execution/index.js';
-import { createExecutionState, isTerminalPhase } from '../execution/index.js';
+import { createExecutionState, isTerminalPhase, updateExecState } from '../execution/index.js';
 import { addTokenStats, estimateTokens } from '../utils/tokens.js';
 import type { RunnerContext } from './advance.js';
 import { executeAdvance } from './advance.js';
@@ -26,14 +26,16 @@ import type { IContextCompressor } from '../types.js';
  * Stream LLM response during calling-llm phase.
  *
  * Shared between advanceStream() and stepStream() to avoid duplicate logic.
- * Yields token events in real-time and stores the complete response in execState.
+ * Yields token events in real-time and returns immutable ExecutionState
+ * with the complete response.
  *
  * @param ctx - Runner context
  * @param state - Current agent state
- * @param execState - Execution state
+ * @param execState - Execution state (immutable)
  * @param registry - Optional tool registry
  * @param signal - Optional abort signal
  * @yields StreamEvent token events
+ * @returns New immutable ExecutionState with LLM response data
  */
 export async function* streamCallingLLM(
   ctx: RunnerContext,
@@ -41,7 +43,7 @@ export async function* streamCallingLLM(
   execState: ExecutionState,
   registry?: IToolRegistry,
   signal?: AbortSignal
-): AsyncGenerator<StreamEvent> {
+): AsyncGenerator<StreamEvent, ExecutionState> {
   const tools = getToolsForLLM(registry, ctx.toolSchemaFormatter);
   const messages = execState.preparedMessages ?? buildMessagesFromCtx(ctx, state);
 
@@ -64,11 +66,12 @@ export async function* streamCallingLLM(
   };
 
   let accumulatedContent = '';
-  let accumulatedThinking = ''; // Accumulate thinking tokens across the stream
+  let accumulatedThinking = '';
   let responseContent = '';
   let responseToolCalls:
     | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
     | undefined;
+  let roundTokens: import('../types.js').TokenStats | undefined;
 
   for await (const event of ctx.llmProvider.stream({
     model: ctx.options.model,
@@ -97,14 +100,14 @@ export async function* streamCallingLLM(
     } else if (event.type === 'done') {
       responseContent = accumulatedContent;
       if (event.roundTotalTokens) {
-        execState.tokens = event.roundTotalTokens;
+        roundTokens = event.roundTotalTokens;
       }
     }
   }
 
-  // Guard: if aborted, do not mutate execState or yield stale llm:response
+  // Guard: if aborted, do not return mutated state
   if (signal?.aborted) {
-    return;
+    return execState;
   }
 
   // Estimate context size from prepared messages
@@ -113,7 +116,6 @@ export async function* streamCallingLLM(
       sum + estimateTokens(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)),
     0
   );
-  execState.estimatedContextSize = estimatedContextSize;
 
   // Yield llm:response event after LLM response, carrying the full output
   yield {
@@ -124,27 +126,34 @@ export async function* streamCallingLLM(
     timestamp: Date.now(),
   };
 
-  // Store complete response, fallback to accumulatedContent if 'done' event was missed
-  execState.llmResponse = responseContent || accumulatedContent;
-  execState.llmThinking = accumulatedThinking; // Preserve accumulated thinking for downstream parsing
-  if (responseToolCalls && responseToolCalls.length > 0) {
-    const toolCall = responseToolCalls[0];
-    execState.action = {
-      id: toolCall.id,
-      tool: toolCall.name,
-      arguments: toolCall.arguments,
-    };
-    execState.allActions = responseToolCalls.map((tc) => ({
-      id: tc.id,
-      tool: tc.name,
-      arguments: tc.arguments,
-    }));
-  } else {
-    // New response has no toolCalls; clear stale action to prevent reusing expired tool calls
-    execState.action = undefined;
-    execState.allActions = undefined;
-  }
-  execState.phase = { type: 'llm-response', response: responseContent };
+  // Build immutable ExecutionState with accumulated data
+  const finalResponse = responseContent || accumulatedContent;
+  const nextExec = updateExecState(execState, (draft) => {
+    draft.llmResponse = finalResponse;
+    draft.llmThinking = accumulatedThinking;
+    draft.estimatedContextSize = estimatedContextSize;
+    if (roundTokens) {
+      draft.tokens = roundTokens;
+    }
+    if (responseToolCalls && responseToolCalls.length > 0) {
+      draft.action = {
+        id: responseToolCalls[0].id,
+        tool: responseToolCalls[0].name,
+        arguments: responseToolCalls[0].arguments,
+      };
+      draft.allActions = responseToolCalls.map((tc) => ({
+        id: tc.id,
+        tool: tc.name,
+        arguments: tc.arguments,
+      }));
+    } else {
+      draft.action = undefined;
+      draft.allActions = undefined;
+    }
+    draft.phase = { type: 'llm-response', response: finalResponse };
+  });
+
+  return nextExec;
 }
 
 /**
@@ -152,7 +161,7 @@ export async function* streamCallingLLM(
  *
  * @param ctx - Runner context
  * @param state - Current agent state
- * @param execState - Execution state
+ * @param execState - Execution state (immutable)
  * @param toolRegistry - Optional tool registry
  * @param options - Optional advance options
  * @yields Stream events during phase advancement
@@ -182,21 +191,22 @@ export async function* executeAdvanceStream(
     };
 
     try {
-      yield* streamCallingLLM(ctx, state, execState, registry, options?.signal);
+      const nextExec = yield* streamCallingLLM(ctx, state, execState, registry, options?.signal);
+      yield {
+        type: 'phase-change',
+        from: { type: 'streaming' },
+        to: nextExec.phase,
+        timestamp: Date.now(),
+      };
+      return { state, execState: nextExec, phase: nextExec.phase, done: false };
     } catch (error) {
       const errorObj = error instanceof Error ? error : new Error(String(error));
-      execState.phase = { type: 'error', error: errorObj };
+      const nextExec = updateExecState(execState, (draft) => {
+        draft.phase = { type: 'error', error: errorObj };
+      });
       yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
-      return { state, phase: execState.phase, done: true };
+      return { state, execState: nextExec, phase: nextExec.phase, done: true };
     }
-
-    yield {
-      type: 'phase-change',
-      from: { type: 'streaming' },
-      to: execState.phase,
-      timestamp: Date.now(),
-    };
-    return { state, phase: execState.phase, done: false };
   }
 
   // For other phases, delegate to executeAdvance()
@@ -233,15 +243,15 @@ export async function* executeStepStream(
   options?: { signal?: AbortSignal }
 ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
   const registry = toolRegistry ?? ctx.toolRegistry;
-  const execState = createExecutionState();
+  let currentExecState = createExecutionState();
 
   let currentState = state;
   let stepTokens = { input: 0, output: 0 };
-  while (!isTerminalPhase(execState.phase)) {
+  while (!isTerminalPhase(currentExecState.phase)) {
     if (options?.signal?.aborted) {
       return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
     }
-    const fromPhase = execState.phase;
+    const fromPhase = currentExecState.phase;
 
     // TODO(M3): same calling-llm bypass as executeAdvanceStream above, see plan there
     if (fromPhase.type === 'calling-llm') {
@@ -253,10 +263,19 @@ export async function* executeStepStream(
       };
 
       try {
-        yield* streamCallingLLM(ctx, currentState, execState, registry, options?.signal);
+        currentExecState = yield* streamCallingLLM(
+          ctx,
+          currentState,
+          currentExecState,
+          registry,
+          options?.signal
+        );
       } catch (error) {
         const errorObj = error instanceof Error ? error : new Error(String(error));
-        execState.phase = { type: 'error', error: errorObj };
+        const nextExec = updateExecState(currentExecState, (draft) => {
+          draft.phase = { type: 'error', error: errorObj };
+        });
+        currentExecState = nextExec;
         yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
         return {
           state: currentState,
@@ -267,30 +286,30 @@ export async function* executeStepStream(
       yield {
         type: 'phase-change',
         from: { type: 'streaming' },
-        to: execState.phase,
+        to: currentExecState.phase,
         timestamp: Date.now(),
       };
 
-      if (execState.tokens) {
-        stepTokens = addTokenStats(stepTokens, execState.tokens);
+      if (currentExecState.tokens) {
+        stepTokens = addTokenStats(stepTokens, currentExecState.tokens);
         currentState = {
           ...currentState,
           context: {
             ...currentState.context,
             totalTokens: addTokenStats(
               currentState.context.totalTokens ?? { input: 0, output: 0 },
-              execState.tokens
+              currentExecState.tokens
             ),
           },
         };
       }
 
-      if (execState.estimatedContextSize !== undefined) {
+      if (currentExecState.estimatedContextSize !== undefined) {
         currentState = {
           ...currentState,
           context: {
             ...currentState.context,
-            estimatedContextSize: execState.estimatedContextSize,
+            estimatedContextSize: currentExecState.estimatedContextSize,
           },
         };
       }
@@ -301,11 +320,14 @@ export async function* executeStepStream(
     // All other phases: delegate to executeAdvance()
     const {
       state: newState,
+      execState: nextExecState,
       phase,
       done,
       effects,
       tokens,
-    } = await executeAdvance(ctx, currentState, execState, registry, options);
+    } = await executeAdvance(ctx, currentState, currentExecState, registry, options);
+
+    currentExecState = nextExecState;
 
     if (tokens) {
       stepTokens = addTokenStats(stepTokens, tokens);
@@ -356,7 +378,7 @@ export async function* executeStepStream(
       // same-skill/cyclic/plain tool → return continue
       return {
         state: currentState,
-        result: { type: 'continue', toolResult: execState.toolResult, tokens: stepTokens },
+        result: { type: 'continue', toolResult: currentExecState.toolResult, tokens: stepTokens },
       };
     }
 

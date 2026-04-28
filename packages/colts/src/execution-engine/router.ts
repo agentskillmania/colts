@@ -9,6 +9,7 @@
 import type { IPhaseHandler, PhaseHandlerContext } from './types.js';
 import type { AgentState, IToolRegistry } from '../types.js';
 import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../execution/index.js';
+import { updateExecState } from '../execution/index.js';
 
 /**
  * Phase router that dispatches to registered handlers
@@ -97,8 +98,10 @@ export class PhaseRouter {
     const handler = this.handlers.get(execState.phase.type);
     if (!handler) {
       const error = new Error(`Unknown phase: ${JSON.stringify(execState.phase)}`);
-      execState.phase = { type: 'error', error };
-      return { state, phase: execState.phase, done: true };
+      const nextExec = updateExecState(execState, (draft) => {
+        draft.phase = { type: 'error', error };
+      });
+      return { state, execState: nextExec, phase: nextExec.phase, done: true };
     }
     return await handler.execute(ctx, state, execState, toolRegistry, options);
   }

@@ -14,6 +14,6 @@ export class CompletedHandler implements IPhaseHandler {
   }
 
   execute(_ctx: PhaseHandlerContext, state: AgentState, execState: ExecutionState): AdvanceResult {
-    return { state, phase: execState.phase, done: true };
+    return { state, execState, phase: execState.phase, done: true };
   }
 }

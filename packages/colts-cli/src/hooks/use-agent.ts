@@ -720,7 +720,7 @@ export async function executeAdvance(
   consumer.resetAssistant();
 
   // advanceStream advances one phase at a time; loop until reaching terminal phase
-  const currentExecState = execState;
+  let currentExecState = execState;
   let currentPhase = currentExecState.phase;
 
   try {
@@ -749,6 +749,7 @@ export async function executeAdvance(
       if (iterResult.done && iterResult.value) {
         const result = iterResult.value;
         effectiveState = result.state;
+        currentExecState = result.execState;
         currentPhase = result.phase;
         setState(effectiveState);
         consumer.flush();

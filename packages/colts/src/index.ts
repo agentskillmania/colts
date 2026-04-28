@@ -103,6 +103,7 @@ export {
 // Execution Control
 export {
   createExecutionState,
+  updateExecState,
   toolCallToAction,
   isTerminalPhase,
   type Phase,

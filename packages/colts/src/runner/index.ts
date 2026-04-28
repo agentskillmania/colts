@@ -899,7 +899,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     stepNumber?: number
   ): Promise<{ state: AgentState; result: StepResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
-    const execState = createExecutionState();
+    let currentExecState = createExecutionState();
     const stepIdx = stepNumber ?? 0;
 
     this.emit('step:start', { step: stepIdx, state, timestamp: Date.now() });
@@ -909,14 +909,21 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     let stepTokens: TokenStats = { input: 0, output: 0 };
 
     try {
-      while (!isTerminalPhase(execState.phase)) {
+      while (!isTerminalPhase(currentExecState.phase)) {
         if (options?.signal?.aborted) {
           this.emit('abort', { step: stepIdx, timestamp: Date.now() });
           return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
         }
 
-        const from = execState.phase;
-        const result = await executeAdvance(this.ctx, currentState, execState, registry, options);
+        const from = currentExecState.phase;
+        const result = await executeAdvance(
+          this.ctx,
+          currentState,
+          currentExecState,
+          registry,
+          options
+        );
+        currentExecState = result.execState;
 
         let nextState = result.state;
 
@@ -981,7 +988,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         // Next step depends on handler output
         if (result.phase.type === 'tool-result' && result.effects && result.effects.length > 0) {
           // same-skill/cyclic/plain tool → return continue
-          const toolResult = execState.toolResult;
+          const toolResult = currentExecState.toolResult;
           const stepResult: StepResult = { type: 'continue', toolResult, tokens: stepTokens };
           this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
           return { state: currentState, result: stepResult };

@@ -8,7 +8,11 @@ import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
-import { createExecutionState, isTerminalPhase } from '../../../src/execution/index.js';
+import {
+  createExecutionState,
+  isTerminalPhase,
+  updateExecState,
+} from '../../../src/execution/index.js';
 import type { ExecutionState } from '../../../src/execution/index.js';
 import { z } from 'zod';
 
@@ -265,21 +269,26 @@ describe('advance()', () => {
 
     // Progress to executing-tool phase, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
-    result = await runner.advance(result.state, execState); // preparing -> calling-llm
-    result = await runner.advance(result.state, execState, registry); // calling-llm -> llm-response
-    result = await runner.advance(result.state, execState); // llm-response -> parsing
-    result = await runner.advance(result.state, execState); // parsing -> parsed
-    result = await runner.advance(result.state, execState, registry); // parsed -> executing-tool
+    result = await runner.advance(result.state, result.execState); // preparing -> calling-llm
+    result = await runner.advance(result.state, result.execState, registry); // calling-llm -> llm-response
+    result = await runner.advance(result.state, result.execState); // llm-response -> parsing
+    result = await runner.advance(result.state, result.execState); // parsing -> parsed
+    result = await runner.advance(result.state, result.execState, registry); // parsed -> executing-tool
 
-    expect(execState.phase.type).toBe('executing-tool');
+    expect(result.execState.phase.type).toBe('executing-tool');
 
-    // Manually clear actions to simulate invalid state
-    if (execState.phase.type === 'executing-tool') {
-      execState.phase.actions = [];
+    // Manually clear actions to simulate invalid state (immutable update)
+    if (result.execState.phase.type === 'executing-tool') {
+      result = {
+        ...result,
+        execState: updateExecState(result.execState, (draft) => {
+          draft.phase = { type: 'executing-tool', actions: [] };
+        }),
+      };
     }
 
     // When: Advance to tool-result without actions
-    result = await runner.advance(result.state, execState, registry);
+    result = await runner.advance(result.state, result.execState, registry);
 
     // Then: Error should be caught and converted to error phase
     expect(result.phase.type).toBe('error');
@@ -312,24 +321,24 @@ describe('advance()', () => {
     expect(result.done).toBe(false);
 
     // Phase: preparing -> calling-llm
-    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, result.execState);
     expect(result.phase.type).toBe('calling-llm');
     expect(result.done).toBe(false);
 
     // Phase: calling-llm -> llm-response (makes actual LLM call)
-    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, result.execState);
     expect(result.phase.type).toBe('llm-response');
     expect(result.done).toBe(false);
     expect(result.tokens).toEqual(mockTokens);
-    expect(execState.llmResponse).toBe('The answer is 42');
+    expect(result.execState.llmResponse).toBe('The answer is 42');
 
     // Phase: llm-response -> parsing
-    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, result.execState);
     expect(result.phase.type).toBe('parsing');
     expect(result.done).toBe(false);
 
     // Phase: parsing -> parsed
-    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, result.execState);
     expect(result.phase.type).toBe('parsed');
     expect(result.done).toBe(false);
     if (result.phase.type === 'parsed') {
@@ -339,7 +348,7 @@ describe('advance()', () => {
     }
 
     // Phase: parsed -> completed (no action needed)
-    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, result.execState);
     expect(result.phase.type).toBe('completed');
     expect(result.done).toBe(true);
     if (result.phase.type === 'completed') {
@@ -362,20 +371,21 @@ describe('advance()', () => {
     });
 
     const state = createAgentState(defaultConfig);
-    const execState = createExecutionState();
+    let currentExecState = createExecutionState();
     let currentState = state;
 
     // Progress through phases and verify data integrity
-    while (!isTerminalPhase(execState.phase)) {
-      const result = await runner.advance(currentState, execState);
-      // Update current state for next iteration
+    while (!isTerminalPhase(currentExecState.phase)) {
+      const result = await runner.advance(currentState, currentExecState);
+      // Update state and execState for next iteration
       currentState = result.state;
+      currentExecState = result.execState;
     }
 
     // Original state should be unchanged
     expect(state.context.stepCount).toBe(0);
     // All transitions completed
-    expect(execState.phase.type).toBe('completed');
+    expect(currentExecState.phase.type).toBe('completed');
   });
 
   it('should progress through phases for tool execution', async () => {
@@ -413,10 +423,10 @@ describe('advance()', () => {
 
     // Progress to parsed phase, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
-    result = await runner.advance(result.state, execState); // preparing -> calling-llm
-    result = await runner.advance(result.state, execState, registry); // calling-llm -> llm-response
-    result = await runner.advance(result.state, execState); // llm-response -> parsing
-    result = await runner.advance(result.state, execState); // parsing -> parsed
+    result = await runner.advance(result.state, result.execState); // preparing -> calling-llm
+    result = await runner.advance(result.state, result.execState, registry); // calling-llm -> llm-response
+    result = await runner.advance(result.state, result.execState); // llm-response -> parsing
+    result = await runner.advance(result.state, result.execState); // parsing -> parsed
 
     expect(result.phase.type).toBe('parsed');
     if (result.phase.type === 'parsed') {
@@ -425,12 +435,12 @@ describe('advance()', () => {
     }
 
     // Phase: parsed -> executing-tool
-    result = await runner.advance(result.state, execState, registry);
+    result = await runner.advance(result.state, result.execState, registry);
     expect(result.phase.type).toBe('executing-tool');
     expect(result.done).toBe(false);
 
     // Phase: executing-tool -> tool-result
-    result = await runner.advance(result.state, execState, registry);
+    result = await runner.advance(result.state, result.execState, registry);
     expect(result.phase.type).toBe('tool-result');
     expect(result.done).toBe(false);
     if (result.phase.type === 'tool-result') {
@@ -440,7 +450,7 @@ describe('advance()', () => {
     // New architecture: ToolResultHandler returns tool:end effect for plain tool result
     // phase stays tool-result, done=false (advance() does not auto-transition to completed)
     // User gets tool:end event through effects
-    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, result.execState);
     expect(result.phase.type).toBe('tool-result');
     expect(result.done).toBe(false);
     // Handler should produce tool:end effect
@@ -488,12 +498,12 @@ describe('advance()', () => {
 
     // Progress through phases to tool-result
     let result = await runner.advance(state, execState); // idle -> preparing
-    result = await runner.advance(result.state, execState); // preparing -> calling-llm
-    result = await runner.advance(result.state, execState, registry); // calling-llm -> llm-response
-    result = await runner.advance(result.state, execState); // llm-response -> parsing
-    result = await runner.advance(result.state, execState); // parsing -> parsed
-    result = await runner.advance(result.state, execState, registry); // parsed -> executing-tool
-    result = await runner.advance(result.state, execState, registry); // executing-tool -> tool-result
+    result = await runner.advance(result.state, result.execState); // preparing -> calling-llm
+    result = await runner.advance(result.state, result.execState, registry); // calling-llm -> llm-response
+    result = await runner.advance(result.state, result.execState); // llm-response -> parsing
+    result = await runner.advance(result.state, result.execState); // parsing -> parsed
+    result = await runner.advance(result.state, result.execState, registry); // parsed -> executing-tool
+    result = await runner.advance(result.state, result.execState, registry); // executing-tool -> tool-result
 
     // Verify tool result message is LLM-friendly, not raw JSON
     const messages = result.state.context.messages;
@@ -545,12 +555,12 @@ describe('advance()', () => {
     const execState = createExecutionState();
 
     let result = await runner.advance(state, execState);
-    result = await runner.advance(result.state, execState);
-    result = await runner.advance(result.state, execState, registry);
-    result = await runner.advance(result.state, execState);
-    result = await runner.advance(result.state, execState);
-    result = await runner.advance(result.state, execState, registry);
-    result = await runner.advance(result.state, execState, registry);
+    result = await runner.advance(result.state, result.execState);
+    result = await runner.advance(result.state, result.execState, registry);
+    result = await runner.advance(result.state, result.execState);
+    result = await runner.advance(result.state, result.execState);
+    result = await runner.advance(result.state, result.execState, registry);
+    result = await runner.advance(result.state, result.execState, registry);
 
     // Verify tool result message contains the actual result text
     const lastMsg = result.state.context.messages[result.state.context.messages.length - 1];
@@ -584,16 +594,24 @@ describe('advance()', () => {
 
     // Progress to parsed phase, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
-    result = await runner.advance(result.state, execState); // preparing -> calling-llm
-    result = await runner.advance(result.state, execState); // calling-llm -> llm-response
-    result = await runner.advance(result.state, execState); // llm-response -> parsing
-    result = await runner.advance(result.state, execState); // parsing -> parsed
+    result = await runner.advance(result.state, result.execState); // preparing -> calling-llm
+    result = await runner.advance(result.state, result.execState); // calling-llm -> llm-response
+    result = await runner.advance(result.state, result.execState); // llm-response -> parsing
+    result = await runner.advance(result.state, result.execState); // parsing -> parsed
 
     expect(result.phase.type).toBe('parsed');
 
-    // Simulate intervention: modify the action before executing
-    if (result.phase.type === 'parsed' && execState.allActions && execState.allActions.length > 0) {
-      execState.allActions[0].arguments = { expression: '3 + 3' };
+    // Simulate intervention: modify the action before executing using immutable update
+    let interventionExecState = result.execState;
+    if (
+      result.phase.type === 'parsed' &&
+      result.execState.allActions &&
+      result.execState.allActions.length > 0
+    ) {
+      const { updateExecState } = await import('../../../src/execution/index.js');
+      interventionExecState = updateExecState(result.execState, (draft) => {
+        draft.allActions![0].arguments = { expression: '3 + 3' };
+      });
     }
 
     // Continue execution with modified action
@@ -605,8 +623,8 @@ describe('advance()', () => {
       execute: async ({ expression }) => eval(expression).toString(),
     });
 
-    const stepResult = await runner.advance(result.state, execState, registry); // parsed -> executing-tool
-    const finalResult = await runner.advance(stepResult.state, execState, registry); // executing-tool -> tool-result
+    const stepResult = await runner.advance(result.state, interventionExecState, registry); // parsed -> executing-tool
+    const finalResult = await runner.advance(stepResult.state, stepResult.execState, registry); // executing-tool -> tool-result
 
     if (finalResult.phase.type === 'tool-result') {
       // Should be 6, not 4, because we modified the action
@@ -635,11 +653,11 @@ describe('advanceStream()', () => {
 
     // Progress to calling-llm first, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
-    result = await runner.advance(result.state, execState); // preparing -> calling-llm
+    result = await runner.advance(result.state, result.execState); // preparing -> calling-llm
 
     // Now use advanceStream
     const events: { type: string }[] = [];
-    for await (const event of runner.advanceStream(result.state, execState)) {
+    for await (const event of runner.advanceStream(result.state, result.execState)) {
       events.push({ type: event.type });
     }
 
@@ -693,11 +711,11 @@ describe('advanceStream()', () => {
 
     // Progress to calling-llm phase, correctly pass result.state
     let result = await runner.advance(state, execState); // idle -> preparing
-    result = await runner.advance(result.state, execState); // preparing -> calling-llm
+    result = await runner.advance(result.state, result.execState); // preparing -> calling-llm
 
     // Use advanceStream to trigger streaming LLM call
     const events: { type: string }[] = [];
-    for await (const event of runner.advanceStream(result.state, execState)) {
+    for await (const event of runner.advanceStream(result.state, result.execState)) {
       events.push({ type: event.type });
     }
 
@@ -731,21 +749,24 @@ describe('advanceStream()', () => {
     });
 
     const state = createAgentState(defaultConfig);
-    const execState = createExecutionState();
+    let currentExecState = createExecutionState();
 
     // Advance from idle, collecting events via advanceStream each step
     const eventTypes: string[] = [];
     let currentState = state;
     for (let i = 0; i < 20; i++) {
       const events: { type: string }[] = [];
-      for await (const event of runner.advanceStream(currentState, execState)) {
-        events.push({ type: event.type });
+      const gen = runner.advanceStream(currentState, currentExecState);
+      let iterResult;
+      while (!(iterResult = await gen.next()).done) {
+        events.push({ type: iterResult.value.type });
       }
+      // iterResult.value is the final AdvanceResult from the generator
+      const result = iterResult.value;
       eventTypes.push(...events.map((e) => e.type));
 
-      // Use blocking advance to progress execState
-      const result = await runner.advance(currentState, execState);
       currentState = result.state;
+      currentExecState = result.execState;
       if (isTerminalPhase(result.phase)) break;
     }
 
@@ -795,18 +816,18 @@ describe('advance() skillState regression (CR P0-1)', () => {
 
     // Progress to tool-result phase where SWITCH_SKILL fires
     let result = await runner.advance(state, execState); // idle → preparing
-    result = await runner.advance(result.state, execState); // preparing → calling-llm
-    result = await runner.advance(result.state, execState, registry); // calling-llm → llm-response
-    result = await runner.advance(result.state, execState); // llm-response → parsing
-    result = await runner.advance(result.state, execState); // parsing → parsed
-    result = await runner.advance(result.state, execState, registry); // parsed → executing-tool
-    result = await runner.advance(result.state, execState, registry); // executing-tool → tool-result
+    result = await runner.advance(result.state, result.execState); // preparing → calling-llm
+    result = await runner.advance(result.state, result.execState, registry); // calling-llm → llm-response
+    result = await runner.advance(result.state, result.execState); // llm-response → parsing
+    result = await runner.advance(result.state, result.execState); // parsing → parsed
+    result = await runner.advance(result.state, result.execState, registry); // parsed → executing-tool
+    result = await runner.advance(result.state, result.execState, registry); // executing-tool → tool-result
 
     // Executing-tool handler writes tool message and injects task user message
     // But skillState is not updated yet at this stage (handled by ToolResultHandler)
 
     // Advance once more: ToolResultHandler processes SWITCH_SKILL signal
-    result = await runner.advance(result.state, execState);
+    result = await runner.advance(result.state, result.execState);
 
     // New architecture: ToolResultHandler produces skill:start + tool:end effects
     // Phase becomes idle (indicating skill loaded, step loop should continue)

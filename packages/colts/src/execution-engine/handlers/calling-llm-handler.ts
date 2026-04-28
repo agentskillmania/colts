@@ -8,7 +8,7 @@
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState, IToolRegistry } from '../../types.js';
 import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution/index.js';
-import { toolCallToAction } from '../../execution/index.js';
+import { updateExecState, toolCallToAction } from '../../execution/index.js';
 import { getToolsForLLM } from '../../tools/llm-format.js';
 import { estimateTokens } from '../../utils/tokens.js';
 
@@ -45,8 +45,6 @@ export class CallingLLMHandler implements IPhaseHandler {
     });
 
     const responseText = response.content ?? '';
-    execState.llmResponse = responseText;
-    execState.llmThinking = response.thinking ?? ''; // Preserve native thinking from the LLM API
 
     // Estimate context size from prepared messages
     const preparedMessages =
@@ -63,34 +61,40 @@ export class CallingLLMHandler implements IPhaseHandler {
       0
     );
 
+    // Parse tool calls, handling parse errors via execution policy
+    let parsedAction: import('../../execution/index.js').Action | undefined;
+    let parsedAllActions: import('../../execution/index.js').Action[] | undefined;
+    let fallbackResponseText = responseText;
+
     if (response.toolCalls && response.toolCalls.length > 0) {
       try {
-        const toolCall = response.toolCalls[0];
-        execState.action = toolCallToAction(toolCall);
-        execState.allActions = response.toolCalls.map(toolCallToAction);
+        parsedAction = toolCallToAction(response.toolCalls[0]);
+        parsedAllActions = response.toolCalls.map(toolCallToAction);
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         const decision = await ctx.executionPolicy.onParseError(err, responseText, state, {
           retryCount: 0,
         });
         if (decision.decision === 'ignore') {
-          // Replace original LLM response with fallbackText and continue as plain text
-          execState.llmResponse = decision.fallbackText;
-          execState.action = undefined;
-          execState.allActions = undefined;
+          fallbackResponseText = decision.fallbackText;
         } else {
           throw decision.error;
         }
       }
-    } else {
-      execState.action = undefined;
-      execState.allActions = undefined;
     }
 
-    execState.phase = { type: 'llm-response', response: responseText };
+    const nextExec = updateExecState(execState, (draft) => {
+      draft.llmResponse = fallbackResponseText;
+      draft.llmThinking = response.thinking ?? '';
+      draft.action = parsedAction;
+      draft.allActions = parsedAllActions;
+      draft.phase = { type: 'llm-response', response: fallbackResponseText };
+    });
+
     return {
       state,
-      phase: execState.phase,
+      execState: nextExec,
+      phase: nextExec.phase,
       done: false,
       tokens: response.tokens,
       estimatedContextSize,

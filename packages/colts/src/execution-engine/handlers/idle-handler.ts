@@ -4,13 +4,12 @@
  * First phase in every ReAct cycle. Assembles messages using
  * IMessageAssembler and stores them in execState. Transitions
  * to preparing phase.
- *
- * Migrated from advanceToPreparing() in runner-advance.ts.
  */
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState, Message as LocalMessage, MessageRole } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
+import { updateExecState } from '../../execution/index.js';
 
 export class IdleHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {
@@ -24,13 +23,15 @@ export class IdleHandler implements IPhaseHandler {
       skillProvider: ctx.skillProvider,
       subAgentConfigs: ctx.subAgentConfigs,
     });
-    execState.preparedMessages = messages;
     const displayMessages: LocalMessage[] = messages.map((m) => ({
       role: m.role as MessageRole,
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       timestamp: Date.now(),
     }));
-    execState.phase = { type: 'preparing', messages: displayMessages };
-    return { state, phase: execState.phase, done: false };
+    const nextExec = updateExecState(execState, (draft) => {
+      draft.preparedMessages = messages;
+      draft.phase = { type: 'preparing', messages: displayMessages };
+    });
+    return { state, execState: nextExec, phase: nextExec.phase, done: false };
   }
 }
