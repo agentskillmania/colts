@@ -449,9 +449,16 @@ export async function* executeStepStream(
     // ToolResultHandler has processed tool-result phase (effects indicate processed)
     if (result.phase.type === 'tool-result' && result.effects && result.effects.length > 0) {
       // same-skill/cyclic/plain tool → return continue
+      const actions =
+        currentExecState.allActions ?? (currentExecState.action ? [currentExecState.action] : []);
       return {
         state: currentState,
-        result: { type: 'continue', toolResult: currentExecState.toolResult, tokens: stepTokens },
+        result: {
+          type: 'continue',
+          toolResult: currentExecState.toolResult,
+          actions,
+          tokens: stepTokens,
+        },
       };
     }
 

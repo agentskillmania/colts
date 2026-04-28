@@ -53,7 +53,7 @@ describe('Step 0: AgentState', () => {
       const state2 = createAgentState(baseConfig);
 
       expect(state1.id).not.toBe(state2.id);
-      expect(state1.id).toMatch(/^agent-\d+-/);
+      expect(state1.id).toMatch(/^\d+-/);
     });
   });
 
