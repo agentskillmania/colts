@@ -58,6 +58,8 @@ import { createDelegateTool } from '../subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
 import type { IExecutionPolicy } from '../policy/types.js';
 import { DefaultExecutionPolicy } from '../policy/default-policy.js';
+import type { AgentMiddleware } from '../middleware/types.js';
+import { MiddlewareExecutor } from '../middleware/executor.js';
 
 /**
  * Runner event map — fully aligned with AsyncGenerator StreamEvent / RunStreamEvent.
@@ -189,6 +191,9 @@ export interface RunnerOptions {
   /** Execution policy for stop conditions and error handling (defaults to DefaultExecutionPolicy) */
   executionPolicy?: IExecutionPolicy;
 
+  /** Middleware chain for intercepting advance/step/run execution (optional) */
+  middleware?: AgentMiddleware[];
+
   /** Enable thinking/reasoning mode for supported models (native thinking) */
   thinkingEnabled?: boolean;
 
@@ -297,6 +302,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private toolSchemaFormatter: IToolSchemaFormatter;
   private subAgentFactory: ISubAgentFactory;
   private executionPolicy: IExecutionPolicy;
+  private middlewareExecutor: MiddlewareExecutor;
+  private hasMiddleware: boolean;
   private options: RunnerOptions;
 
   /** Get the Skill provider (used by the CLI layer for the /skill command) */
@@ -401,6 +408,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     // Initialize execution policy
     this.executionPolicy = options.executionPolicy ?? new DefaultExecutionPolicy();
+
+    // Initialize middleware
+    this.middlewareExecutor = new MiddlewareExecutor(options.middleware ?? []);
+    this.hasMiddleware = !this.middlewareExecutor.isEmpty;
   }
 
   /**
@@ -439,6 +450,28 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    */
   unregisterTool(name: string): boolean {
     return this.toolRegistry.unregister(name);
+  }
+
+  /**
+   * Add a middleware at runtime
+   *
+   * Middleware added via use() is appended to the chain (runs after existing ones).
+   *
+   * @param middleware - Middleware to add
+   */
+  use(middleware: AgentMiddleware): void {
+    // Rebuild executor with the new middleware appended
+    const current = this.options.middleware ?? [];
+    this.options = { ...this.options, middleware: [...current, middleware] };
+    this.middlewareExecutor = new MiddlewareExecutor(this.options.middleware ?? []);
+    this.hasMiddleware = true;
+  }
+
+  /**
+   * Get the list of registered middlewares (read-only)
+   */
+  getMiddlewares(): readonly AgentMiddleware[] {
+    return this.middlewareExecutor.list;
   }
 
   /**
@@ -777,8 +810,39 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     options?: AdvanceOptions
   ): Promise<AdvanceResult> {
     const from = execState.phase;
+    const stepNum = options?._stepNumber ?? 0;
+    const runStep = options?._runStepCount ?? 0;
+
     try {
-      const result = await executeAdvance(this.ctx, state, execState, toolRegistry, options);
+      // ── beforeAdvance ──
+      if (this.hasMiddleware) {
+        const chain = await this.middlewareExecutor.runBeforeAdvance({
+          state,
+          execState,
+          fromPhase: from,
+          stepNumber: stepNum,
+          runStepCount: runStep,
+        });
+        if (chain.stopResult) return chain.stopResult;
+        if (chain.state) state = chain.state;
+        if (chain.execState) execState = chain.execState;
+      }
+
+      let result = await executeAdvance(this.ctx, state, execState, toolRegistry, options);
+
+      // ── afterAdvance ──
+      if (this.hasMiddleware) {
+        const chain = await this.middlewareExecutor.runAfterAdvance({
+          state: result.state,
+          execState: result.execState,
+          result,
+          stepNumber: stepNum,
+          runStepCount: runStep,
+        });
+        if (chain.stopResult) return chain.stopResult;
+        if (chain.state) result = { ...result, state: chain.state };
+        if (chain.execState) result = { ...result, execState: chain.execState };
+      }
 
       // Emit corresponding StreamEvent based on phase type
       if (result.phase.type === 'executing-tool') {
@@ -797,7 +861,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       if (result.phase.type === 'error') {
         this.emit('error', {
           error: result.phase.error,
-          context: { step: 0 },
+          context: { step: stepNum },
           timestamp: Date.now(),
         });
       }
@@ -805,7 +869,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       return result;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { error: err, context: { step: 0 }, timestamp: Date.now() });
+      this.emit('error', { error: err, context: { step: stepNum }, timestamp: Date.now() });
       throw error;
     }
   }
@@ -846,13 +910,46 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): AsyncGenerator<StreamEvent, AdvanceResult> {
+    const stepNum = options?._stepNumber ?? 0;
+    const runStep = options?._runStepCount ?? 0;
+
     try {
+      // ── beforeAdvance ──
+      if (this.hasMiddleware) {
+        const chain = await this.middlewareExecutor.runBeforeAdvance({
+          state,
+          execState,
+          fromPhase: execState.phase,
+          stepNumber: stepNum,
+          runStepCount: runStep,
+        });
+        if (chain.stopResult) return chain.stopResult;
+        if (chain.state) state = chain.state;
+        if (chain.execState) execState = chain.execState;
+      }
+
       const generator = executeAdvanceStream(this.ctx, state, execState, toolRegistry, options);
 
       while (true) {
         const { done, value } = await generator.next();
         if (done) {
-          return value as AdvanceResult;
+          let result = value as AdvanceResult;
+
+          // ── afterAdvance ──
+          if (this.hasMiddleware) {
+            const chain = await this.middlewareExecutor.runAfterAdvance({
+              state: result.state,
+              execState: result.execState,
+              result,
+              stepNumber: stepNum,
+              runStepCount: runStep,
+            });
+            if (chain.stopResult) return chain.stopResult;
+            if (chain.state) result = { ...result, state: chain.state };
+            if (chain.execState) result = { ...result, execState: chain.execState };
+          }
+
+          return result;
         }
         // Uniform forwarding: emit using the yield event's type and payload
         this.emit(value.type as keyof RunnerEventMap, value as never);
@@ -860,7 +957,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.emit('error', { error: err, context: { step: 0 }, timestamp: Date.now() });
+      this.emit('error', { error: err, context: { step: stepNum }, timestamp: Date.now() });
       throw error;
     }
   }
@@ -896,13 +993,60 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     state: AgentState,
     toolRegistry?: IToolRegistry,
     options?: { signal?: AbortSignal },
-    stepNumber?: number
+    stepNumber?: number,
+    runStepCount?: number
   ): Promise<{ state: AgentState; result: StepResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
     let currentExecState = createExecutionState();
     const stepIdx = stepNumber ?? 0;
 
+    // ── beforeStep ──
+    if (this.hasMiddleware) {
+      const chain = await this.middlewareExecutor.runBeforeStep({
+        state,
+        stepNumber: stepIdx,
+      });
+      if (chain.stopped) {
+        return {
+          state,
+          result: {
+            type: 'error',
+            error: new Error(`Stopped by middleware`),
+            tokens: { input: 0, output: 0 },
+          },
+        };
+      }
+      if (chain.state) state = chain.state;
+    }
+
     this.emit('step:start', { step: stepIdx, state, timestamp: Date.now() });
+
+    // Helper to apply afterStep middleware before returning
+    const finalizeStep = async (
+      stepState: AgentState,
+      stepResult: StepResult
+    ): Promise<{ state: AgentState; result: StepResult }> => {
+      this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
+      if (this.hasMiddleware) {
+        const chain = await this.middlewareExecutor.runAfterStep({
+          state: stepState,
+          result: stepResult,
+          stepNumber: stepIdx,
+        });
+        if (chain.state) stepState = chain.state;
+        if (chain.stopped) {
+          return {
+            state: stepState,
+            result: {
+              type: 'error',
+              error: new Error('Stopped by middleware'),
+              tokens: stepResult.tokens,
+            },
+          };
+        }
+      }
+      return { state: stepState, result: stepResult };
+    };
 
     // Loop advance() until a natural stopping point
     let currentState = state;
@@ -916,25 +1060,70 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         }
 
         const from = currentExecState.phase;
-        const result = await executeAdvance(
-          this.ctx,
-          currentState,
-          currentExecState,
-          registry,
-          options
-        );
-        currentExecState = result.execState;
 
-        let nextState = result.state;
-
-        if (result.tokens) {
-          stepTokens = addTokenStats(stepTokens, result.tokens);
-          nextState = updateTotalTokens(nextState, result.tokens);
+        // ── beforeAdvance ──
+        if (this.hasMiddleware) {
+          const chain = await this.middlewareExecutor.runBeforeAdvance({
+            state: currentState,
+            execState: currentExecState,
+            fromPhase: from,
+            stepNumber: stepIdx,
+            runStepCount: runStepCount ?? 0,
+          });
+          if (chain.stopResult)
+            return {
+              state: currentState,
+              result: {
+                type: 'error',
+                error: new Error('Stopped by middleware'),
+                tokens: stepTokens,
+              },
+            };
+          if (chain.state) currentState = chain.state;
+          if (chain.execState) currentExecState = chain.execState;
         }
 
-        if (result.estimatedContextSize !== undefined) {
+        const result = await executeAdvance(this.ctx, currentState, currentExecState, registry, {
+          ...options,
+          _stepNumber: stepIdx,
+          _runStepCount: runStepCount ?? 0,
+        });
+
+        // ── afterAdvance ──
+        let effectiveResult = result;
+        if (this.hasMiddleware) {
+          const chain = await this.middlewareExecutor.runAfterAdvance({
+            state: result.state,
+            execState: result.execState,
+            result,
+            stepNumber: stepIdx,
+            runStepCount: runStepCount ?? 0,
+          });
+          if (chain.stopResult)
+            return {
+              state: currentState,
+              result: {
+                type: 'error',
+                error: new Error('Stopped by middleware'),
+                tokens: stepTokens,
+              },
+            };
+          if (chain.state) effectiveResult = { ...result, state: chain.state };
+          if (chain.execState) effectiveResult = { ...effectiveResult, execState: chain.execState };
+        }
+
+        currentExecState = effectiveResult.execState;
+
+        let nextState = effectiveResult.state;
+
+        if (effectiveResult.tokens) {
+          stepTokens = addTokenStats(stepTokens, effectiveResult.tokens);
+          nextState = updateTotalTokens(nextState, effectiveResult.tokens);
+        }
+
+        if (effectiveResult.estimatedContextSize !== undefined) {
           nextState = updateState(nextState, (draft) => {
-            draft.context.estimatedContextSize = result.estimatedContextSize;
+            draft.context.estimatedContextSize = effectiveResult.estimatedContextSize;
           });
         }
 
@@ -946,58 +1135,65 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         currentState = await maybeCompress(this.compressor, nextState);
 
         // Emit executing-tool event
-        if (result.phase.type === 'executing-tool') {
-          if (result.phase.actions.length === 1) {
-            this.emit('tool:start', { action: result.phase.actions[0], timestamp: Date.now() });
+        if (effectiveResult.phase.type === 'executing-tool') {
+          if (effectiveResult.phase.actions.length === 1) {
+            this.emit('tool:start', {
+              action: effectiveResult.phase.actions[0],
+              timestamp: Date.now(),
+            });
           } else {
-            this.emit('tools:start', { actions: result.phase.actions, timestamp: Date.now() });
+            this.emit('tools:start', {
+              actions: effectiveResult.phase.actions,
+              timestamp: Date.now(),
+            });
           }
         }
 
         // Forward effects produced by handler
-        if (result.effects && result.effects.length > 0) {
-          for (const effect of result.effects) {
+        if (effectiveResult.effects && effectiveResult.effects.length > 0) {
+          for (const effect of effectiveResult.effects) {
             this.emit(effect.type as keyof RunnerEventMap, effect as never);
           }
         }
 
-        this.emit('phase-change', { from, to: result.phase, timestamp: Date.now() });
+        this.emit('phase-change', { from, to: effectiveResult.phase, timestamp: Date.now() });
 
         // Control flow is determined by phase + done
-        if (result.done && result.phase.type === 'completed') {
+        if (effectiveResult.done && effectiveResult.phase.type === 'completed') {
           const stepResult: StepResult = {
             type: 'done',
-            answer: result.phase.answer,
+            answer: effectiveResult.phase.answer,
             tokens: stepTokens,
           };
-          this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
-          return { state: currentState, result: stepResult };
+          return finalizeStep(currentState, stepResult);
         }
 
-        if (result.done && result.phase.type === 'error') {
+        if (effectiveResult.done && effectiveResult.phase.type === 'error') {
           const stepResult: StepResult = {
             type: 'error',
-            error: result.phase.error,
+            error: effectiveResult.phase.error,
             tokens: stepTokens,
           };
-          this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
-          return { state: currentState, result: stepResult };
+          return finalizeStep(currentState, stepResult);
         }
 
         // ToolResultHandler has processed tool-result phase (effects indicate processed)
         // Next step depends on handler output
-        if (result.phase.type === 'tool-result' && result.effects && result.effects.length > 0) {
+        if (
+          effectiveResult.phase.type === 'tool-result' &&
+          effectiveResult.effects &&
+          effectiveResult.effects.length > 0
+        ) {
           // same-skill/cyclic/plain tool → return continue
           const toolResult = currentExecState.toolResult;
           const stepResult: StepResult = { type: 'continue', toolResult, tokens: stepTokens };
-          this.emit('step:end', { step: stepIdx, result: stepResult, timestamp: Date.now() });
-          return { state: currentState, result: stepResult };
+          return finalizeStep(currentState, stepResult);
         }
 
         // ExecutingToolHandler returned tool-result (no effects) → continue loop for ToolResultHandler
         if (
-          result.phase.type === 'tool-result' &&
-          (!result.effects || result.effects.length === 0)
+          effectiveResult.phase.type === 'tool-result' &&
+          (!effectiveResult.effects || effectiveResult.effects.length === 0)
         ) {
           continue;
         }
@@ -1031,15 +1227,65 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     stepNumber?: number
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
     const stepIdx = stepNumber ?? 0;
+
+    // ── beforeStep ──
+    if (this.hasMiddleware) {
+      const chain = await this.middlewareExecutor.runBeforeStep({
+        state,
+        stepNumber: stepIdx,
+      });
+      if (chain.stopped) {
+        return {
+          state,
+          result: {
+            type: 'error',
+            error: new Error('Stopped by middleware'),
+            tokens: { input: 0, output: 0 },
+          },
+        };
+      }
+      if (chain.state) state = chain.state;
+    }
+
     this.emit('step:start', { step: stepIdx, state, timestamp: Date.now() });
     try {
-      const generator = executeStepStream(this.ctx, this.compressor, state, toolRegistry, options);
+      const mw = this.hasMiddleware ? this.middlewareExecutor : undefined;
+      const generator = executeStepStream(
+        this.ctx,
+        this.compressor,
+        state,
+        toolRegistry,
+        options,
+        mw,
+        stepIdx
+      );
 
       while (true) {
         const { done, value } = await generator.next();
         if (done) {
           const result = value as { state: AgentState; result: StepResult };
           this.emit('step:end', { step: stepIdx, result: result.result, timestamp: Date.now() });
+
+          // ── afterStep ──
+          if (this.hasMiddleware) {
+            const chain = await this.middlewareExecutor.runAfterStep({
+              state: result.state,
+              result: result.result,
+              stepNumber: stepIdx,
+            });
+            if (chain.state) result.state = chain.state;
+            if (chain.stopped) {
+              return {
+                state: result.state,
+                result: {
+                  type: 'error',
+                  error: new Error('Stopped by middleware'),
+                  tokens: result.result.tokens,
+                },
+              };
+            }
+          }
+
           return result;
         }
         // Uniform forwarding: emit using the yield event's type and payload
@@ -1077,22 +1323,47 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
     // Initialize skill state if needed
-    const initializedState = this.initializeSkillState(state);
+    let currentState = this.initializeSkillState(state);
 
-    this.emit('run:start', { state: initializedState, timestamp: Date.now() });
+    // ── beforeRun ──
+    if (this.hasMiddleware) {
+      const chain = await this.middlewareExecutor.runBeforeRun({ state: currentState });
+      if (chain.stopped) {
+        const runResult: RunResult = {
+          type: 'error',
+          error: new Error('Stopped by middleware'),
+          totalSteps: 0,
+          tokens: { input: 0, output: 0 },
+        };
+        return { state: currentState, result: runResult };
+      }
+      if (chain.state) currentState = chain.state;
+    }
+
+    this.emit('run:start', { state: currentState, timestamp: Date.now() });
     const registry = toolRegistry ?? this.toolRegistry;
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
-    let currentState = initializedState;
     let totalSteps = 0;
     let runTokens: TokenStats = { input: 0, output: 0 };
+
+    // Helper to emit run:end and run afterRun middleware
+    const finalizeRun = async (
+      runState: AgentState,
+      runResult: RunResult
+    ): Promise<{ state: AgentState; result: RunResult }> => {
+      this.emit('run:end', { state: runState, result: runResult, timestamp: Date.now() });
+      if (this.hasMiddleware) {
+        await this.middlewareExecutor.runAfterRun({ state: runState, result: runResult });
+      }
+      return { state: runState, result: runResult };
+    };
 
     try {
       while (totalSteps < RUN_HARD_LIMIT) {
         if (options?.signal?.aborted) {
           const runResult: RunResult = { type: 'abort', totalSteps, tokens: runTokens };
           this.emit('abort', { totalSteps, timestamp: Date.now() });
-          this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
-          return { state: currentState, result: runResult };
+          return finalizeRun(currentState, runResult);
         }
 
         // Call step() to get full event propagation (advance → step → run)
@@ -1100,6 +1371,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           currentState,
           registry,
           options,
+          totalSteps,
           totalSteps
         );
 
@@ -1113,8 +1385,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             totalSteps: totalSteps + 1,
             tokens: runTokens,
           };
-          this.emit('run:end', { state: newState, result: runResult, timestamp: Date.now() });
-          return { state: newState, result: runResult };
+          return finalizeRun(newState, runResult);
         }
 
         currentState = newState;
@@ -1156,8 +1427,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             runResult = { type: 'max_steps', totalSteps, tokens: runTokens };
           }
 
-          this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
-          return { state: currentState, result: runResult };
+          return finalizeRun(currentState, runResult);
         }
 
         // Auto-compress between steps
@@ -1178,8 +1448,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
       // Hard limit reached (safety net for policy bugs)
       const runResult: RunResult = { type: 'max_steps', totalSteps, tokens: runTokens };
-      this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
-      return { state: currentState, result: runResult };
+      return finalizeRun(currentState, runResult);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: totalSteps }, timestamp: Date.now() });
@@ -1212,36 +1481,91 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     toolRegistry?: IToolRegistry
   ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
     // Initialize skill state if needed
-    const initializedState = this.initializeSkillState(state);
+    let currentState = this.initializeSkillState(state);
 
-    this.emit('run:start', { state: initializedState, timestamp: Date.now() });
+    // ── beforeRun ──
+    if (this.hasMiddleware) {
+      const chain = await this.middlewareExecutor.runBeforeRun({ state: currentState });
+      if (chain.stopped) {
+        const runResult: RunResult = {
+          type: 'error',
+          error: new Error('Stopped by middleware'),
+          totalSteps: 0,
+          tokens: { input: 0, output: 0 },
+        };
+        return { state: currentState, result: runResult };
+      }
+      if (chain.state) currentState = chain.state;
+    }
+
+    this.emit('run:start', { state: currentState, timestamp: Date.now() });
     const registry = toolRegistry ?? this.toolRegistry;
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
-    let currentState = initializedState;
     let totalSteps = 0;
     let runTokens: TokenStats = { input: 0, output: 0 };
+
+    // Helper for run:end + afterRun middleware (yields complete event before return)
+    const finalizeRunStream = async function* (
+      this: AgentRunner,
+      runState: AgentState,
+      runResult: RunResult
+    ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
+      this.emit('run:end', { state: runState, result: runResult, timestamp: Date.now() });
+      if (this.hasMiddleware) {
+        await this.middlewareExecutor.runAfterRun({ state: runState, result: runResult });
+      }
+      yield { type: 'complete', result: runResult, timestamp: Date.now() };
+      return { state: runState, result: runResult };
+    }.bind(this);
 
     try {
       while (totalSteps < RUN_HARD_LIMIT) {
         if (options?.signal?.aborted) {
           const runResult: RunResult = { type: 'abort', totalSteps, tokens: runTokens };
           this.emit('abort', { totalSteps, timestamp: Date.now() });
-          this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
-          yield { type: 'complete', result: runResult, timestamp: Date.now() };
-          return { state: currentState, result: runResult };
+          return yield* finalizeRunStream(currentState, runResult);
         }
 
         // Step start
         this.emit('step:start', { step: totalSteps, state: currentState, timestamp: Date.now() });
         yield { type: 'step:start', step: totalSteps, state: currentState, timestamp: Date.now() };
 
-        // Use stepStream to get real-time tokens and phase events
+        // ── beforeStep ──
+        if (this.hasMiddleware) {
+          const chain = await this.middlewareExecutor.runBeforeStep({
+            state: currentState,
+            stepNumber: totalSteps,
+          });
+          if (chain.stopped) {
+            const stepResult = {
+              type: 'error' as const,
+              error: new Error('Stopped by middleware'),
+              tokens: { input: 0, output: 0 } as TokenStats,
+            };
+            this.emit('step:end', { step: totalSteps, result: stepResult, timestamp: Date.now() });
+            yield { type: 'step:end', step: totalSteps, result: stepResult, timestamp: Date.now() };
+            totalSteps++;
+            const runResult: RunResult = {
+              type: 'error',
+              error: stepResult.error,
+              totalSteps,
+              tokens: runTokens,
+            };
+            return yield* finalizeRunStream(currentState, runResult);
+          }
+          if (chain.state) currentState = chain.state;
+        }
+
+        // Use executeStepStream to get real-time tokens and phase events
+        const mw = this.hasMiddleware ? this.middlewareExecutor : undefined;
         const iterator = executeStepStream(
           this.ctx,
           this.compressor,
           currentState,
           registry,
-          options
+          options,
+          mw,
+          totalSteps
         );
         let stepResult: { state: AgentState; result: StepResult };
 
@@ -1266,13 +1590,43 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             totalSteps: totalSteps + 1,
             tokens: runTokens,
           };
-          this.emit('run:end', {
+          return yield* finalizeRunStream(stepResult.state, runResult);
+        }
+
+        // ── afterStep ──
+        if (this.hasMiddleware) {
+          const chain = await this.middlewareExecutor.runAfterStep({
             state: stepResult.state,
-            result: runResult,
-            timestamp: Date.now(),
+            result: stepResult.result,
+            stepNumber: totalSteps,
           });
-          yield { type: 'complete', result: runResult, timestamp: Date.now() };
-          return { state: stepResult.state, result: runResult };
+          if (chain.state) stepResult = { ...stepResult, state: chain.state };
+          if (chain.stopped) {
+            const stoppedResult = {
+              type: 'error' as const,
+              error: new Error('Stopped by middleware'),
+              tokens: stepResult.result.tokens,
+            };
+            this.emit('step:end', {
+              step: totalSteps,
+              result: stoppedResult,
+              timestamp: Date.now(),
+            });
+            yield {
+              type: 'step:end',
+              step: totalSteps,
+              result: stoppedResult,
+              timestamp: Date.now(),
+            };
+            totalSteps++;
+            const runResult: RunResult = {
+              type: 'error',
+              error: stoppedResult.error,
+              totalSteps,
+              tokens: runTokens,
+            };
+            return yield* finalizeRunStream(stepResult.state, runResult);
+          }
         }
 
         currentState = stepResult.state;
@@ -1348,17 +1702,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             runResult = { type: 'max_steps', totalSteps, tokens: runTokens };
           }
 
-          this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
-          yield { type: 'complete', result: runResult, timestamp: Date.now() };
-          return { state: currentState, result: runResult };
+          return yield* finalizeRunStream(currentState, runResult);
         }
       }
 
       // Hard limit reached (safety net for policy bugs)
       const runResult: RunResult = { type: 'max_steps', totalSteps, tokens: runTokens };
-      this.emit('run:end', { state: currentState, result: runResult, timestamp: Date.now() });
-      yield { type: 'complete', result: runResult, timestamp: Date.now() };
-      return { state: currentState, result: runResult };
+      return yield* finalizeRunStream(currentState, runResult);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: totalSteps }, timestamp: Date.now() });

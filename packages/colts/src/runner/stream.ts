@@ -21,6 +21,7 @@ import { buildMessagesFromCtx } from './advance.js';
 import { getToolsForLLM } from '../tools/llm-format.js';
 import { maybeCompress } from './compression.js';
 import type { IContextCompressor } from '../types.js';
+import type { MiddlewareExecutor } from '../middleware/executor.js';
 
 /**
  * Stream LLM response during calling-llm phase.
@@ -240,18 +241,41 @@ export async function* executeStepStream(
   compressor: IContextCompressor | undefined,
   state: AgentState,
   toolRegistry?: IToolRegistry,
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal },
+  middlewareExecutor?: MiddlewareExecutor,
+  stepNumber?: number
 ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
   const registry = toolRegistry ?? ctx.toolRegistry;
   let currentExecState = createExecutionState();
+  const stepIdx = stepNumber ?? 0;
 
   let currentState = state;
   let stepTokens = { input: 0, output: 0 };
+  let advanceCount = 0;
   while (!isTerminalPhase(currentExecState.phase)) {
     if (options?.signal?.aborted) {
       return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
     }
     const fromPhase = currentExecState.phase;
+
+    // ── beforeAdvance ──
+    if (middlewareExecutor) {
+      const chain = await middlewareExecutor.runBeforeAdvance({
+        state: currentState,
+        execState: currentExecState,
+        fromPhase,
+        stepNumber: stepIdx,
+        runStepCount: advanceCount,
+      });
+      if (chain.stopResult) {
+        return {
+          state: currentState,
+          result: { type: 'error', error: new Error('Stopped by middleware'), tokens: stepTokens },
+        };
+      }
+      if (chain.state) currentState = chain.state;
+      if (chain.execState) currentExecState = chain.execState;
+    }
 
     // TODO(M3): same calling-llm bypass as executeAdvanceStream above, see plan there
     if (fromPhase.type === 'calling-llm') {
@@ -314,67 +338,116 @@ export async function* executeStepStream(
         };
       }
 
+      // ── afterAdvance (calling-llm path) ──
+      if (middlewareExecutor) {
+        const advanceResult: AdvanceResult = {
+          state: currentState,
+          execState: currentExecState,
+          phase: currentExecState.phase,
+          done: false,
+        };
+        const chain = await middlewareExecutor.runAfterAdvance({
+          state: currentState,
+          execState: currentExecState,
+          result: advanceResult,
+          stepNumber: stepIdx,
+          runStepCount: advanceCount,
+        });
+        if (chain.stopResult) {
+          return {
+            state: currentState,
+            result: {
+              type: 'error',
+              error: new Error('Stopped by middleware'),
+              tokens: stepTokens,
+            },
+          };
+        }
+        if (chain.state) currentState = chain.state;
+        if (chain.execState) currentExecState = chain.execState;
+      }
+
+      advanceCount++;
       continue;
     }
 
     // All other phases: delegate to executeAdvance()
-    const {
-      state: newState,
-      execState: nextExecState,
-      phase,
-      done,
-      effects,
-      tokens,
-    } = await executeAdvance(ctx, currentState, currentExecState, registry, options);
+    let result = await executeAdvance(ctx, currentState, currentExecState, registry, options);
 
-    currentExecState = nextExecState;
+    currentExecState = result.execState;
 
-    if (tokens) {
-      stepTokens = addTokenStats(stepTokens, tokens);
+    if (result.tokens) {
+      stepTokens = addTokenStats(stepTokens, result.tokens);
     }
 
     if (options?.signal?.aborted) {
       return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
     }
 
-    currentState = await maybeCompress(compressor, newState);
+    // ── afterAdvance (executeAdvance path) ──
+    if (middlewareExecutor) {
+      const chain = await middlewareExecutor.runAfterAdvance({
+        state: result.state,
+        execState: result.execState,
+        result,
+        stepNumber: stepIdx,
+        runStepCount: advanceCount,
+      });
+      if (chain.stopResult) {
+        return {
+          state: currentState,
+          result: { type: 'error', error: new Error('Stopped by middleware'), tokens: stepTokens },
+        };
+      }
+      if (chain.state) result = { ...result, state: chain.state };
+      if (chain.execState) result = { ...result, execState: chain.execState };
+    }
+
+    advanceCount++;
+
+    currentState = await maybeCompress(compressor, result.state);
 
     // Emit tool events based on phase transitions
-    if (phase.type === 'executing-tool') {
-      if (phase.actions.length === 1) {
-        yield { type: 'tool:start', action: phase.actions[0], timestamp: Date.now() };
+    if (result.phase.type === 'executing-tool') {
+      if (result.phase.actions.length === 1) {
+        yield { type: 'tool:start', action: result.phase.actions[0], timestamp: Date.now() };
       } else {
-        yield { type: 'tools:start', actions: phase.actions, timestamp: Date.now() };
+        yield { type: 'tools:start', actions: result.phase.actions, timestamp: Date.now() };
       }
     }
 
     // Forward effects produced by handler
-    if (effects && effects.length > 0) {
-      for (const effect of effects) {
+    if (result.effects && result.effects.length > 0) {
+      for (const effect of result.effects) {
         yield effect as StreamEvent;
       }
     }
 
-    yield { type: 'phase-change', from: fromPhase, to: phase, timestamp: Date.now() };
+    yield { type: 'phase-change', from: fromPhase, to: result.phase, timestamp: Date.now() };
 
     // Control flow is determined by phase + done
-    if (done && phase.type === 'completed') {
+    if (result.done && result.phase.type === 'completed') {
       return {
         state: currentState,
-        result: { type: 'done', answer: phase.answer, tokens: stepTokens },
+        result: { type: 'done', answer: result.phase.answer, tokens: stepTokens },
       };
     }
 
-    if (done && phase.type === 'error') {
-      yield { type: 'error', error: phase.error, context: { step: 0 }, timestamp: Date.now() };
+    if (result.done && result.phase.type === 'error') {
+      yield {
+        type: 'error',
+        error: result.phase.error,
+        context: { step: 0 },
+        timestamp: Date.now(),
+      };
       return {
         state: currentState,
-        result: { type: 'error', error: phase.error, tokens: stepTokens },
+        result: { type: 'error', error: result.phase.error, tokens: stepTokens },
       };
     }
 
     // ToolResultHandler has processed tool-result phase (effects indicate processed)
-    if (phase.type === 'tool-result' && effects && effects.length > 0) {
+    if (result.phase.type === 'tool-result' && result.effects && result.effects.length > 0) {
       // same-skill/cyclic/plain tool → return continue
       return {
         state: currentState,
@@ -383,12 +456,12 @@ export async function* executeStepStream(
     }
 
     // ExecutingToolHandler returned tool-result (no effects) → continue loop for ToolResultHandler
-    if (phase.type === 'tool-result' && (!effects || effects.length === 0)) {
+    if (result.phase.type === 'tool-result' && (!result.effects || result.effects.length === 0)) {
       continue;
     }
 
     // Skill loaded/returned → phase reset to idle, continue loop
-    if (phase.type === 'idle') {
+    if (result.phase.type === 'idle') {
       continue;
     }
   }
