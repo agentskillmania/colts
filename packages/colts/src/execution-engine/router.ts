@@ -8,7 +8,7 @@
 
 import type { IPhaseHandler, PhaseHandlerContext } from './types.js';
 import type { AgentState, IToolRegistry } from '../types.js';
-import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../execution.js';
+import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../execution/index.js';
 
 /**
  * Phase router that dispatches to registered handlers

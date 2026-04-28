@@ -20,8 +20,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { createRealLLMClient } from './helpers.js';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState, addUserMessage } from '../../src/state.js';
+import { AgentRunner } from '../../src/runner/index.js';
+import { createAgentState, addUserMessage } from '../../src/state/index.js';
 import type { AgentConfig } from '../../src/types.js';
 import {
   ToolRegistry,

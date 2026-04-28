@@ -4,9 +4,9 @@
  * Phase-based execution state machine for fine-grained control.
  */
 
-import type { AgentState, Message } from './types.js';
-import type { ToolCall } from './parser.js';
-import type { DelegateResult } from './subagent/types.js';
+import type { AgentState, Message } from '../types.js';
+import type { ToolCall } from '../parser/index.js';
+import type { DelegateResult } from '../subagent/types.js';
 import type { TokenStats } from '@agentskillmania/llm-client';
 
 // ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ export interface AdvanceOptions {
  */
 export interface AdvanceResult {
   /** Updated state */
-  state: import('./types.js').AgentState;
+  state: import('../types.js').AgentState;
   /** Current execution phase */
   phase: Phase;
   /** Whether execution is complete */
@@ -212,7 +212,7 @@ export type RunResult =
  * Events emitted during runStream()
  */
 export type RunStreamEvent =
-  | { type: 'step:start'; step: number; state: import('./types.js').AgentState; timestamp: number }
+  | { type: 'step:start'; step: number; state: import('../types.js').AgentState; timestamp: number }
   | { type: 'step:end'; step: number; result: StepResult; timestamp: number }
   | StreamEvent
   | { type: 'complete'; result: RunResult; timestamp: number };

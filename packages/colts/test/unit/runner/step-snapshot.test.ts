@@ -7,10 +7,10 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
-import type { AgentConfig } from '../../src/types.js';
-import { ToolRegistry } from '../../src/tools/registry.js';
+import { AgentRunner } from '../../../src/runner/index.js';
+import { createAgentState } from '../../../src/state/index.js';
+import type { AgentConfig } from '../../../src/types.js';
+import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
 
 // ---------------------------------------------------------------------------
@@ -305,7 +305,7 @@ describe('stepStream() streaming path - basic scenarios', () => {
     const state = createAgentState(defaultConfig);
 
     const events: Array<{ type: string; error?: Error }> = [];
-    let finalResult: import('../../src/execution.js').StepResult | undefined;
+    let finalResult: import('../../../src/execution/index.js').StepResult | undefined;
     const iterator = runner.stepStream(state);
     while (true) {
       const { done, value } = await iterator.next();
@@ -344,7 +344,10 @@ describe('stepStream() streaming path - basic scenarios', () => {
     const state = createAgentState(defaultConfig);
 
     const iterator = runner.stepStream(state);
-    let lastValue: { state: typeof state; result: import('../../src/execution.js').StepResult };
+    let lastValue: {
+      state: typeof state;
+      result: import('../../../src/execution/index.js').StepResult;
+    };
     while (true) {
       const { done, value } = await iterator.next();
       if (done) {

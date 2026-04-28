@@ -13,7 +13,7 @@ import type {
   ToolErrorDecision,
   ParseErrorDecision,
 } from './types.js';
-import type { StepResult } from '../execution.js';
+import type { StepResult } from '../execution/index.js';
 
 export class DefaultExecutionPolicy implements IExecutionPolicy {
   shouldStop(

@@ -4,11 +4,11 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
-import type { AgentConfig } from '../../src/types.js';
-import type { SubAgentConfig } from '../../src/subagent/types.js';
-import { ToolRegistry } from '../../src/tools/registry.js';
+import { AgentRunner } from '../../../src/runner/index.js';
+import { createAgentState } from '../../../src/state/index.js';
+import type { AgentConfig } from '../../../src/types.js';
+import type { SubAgentConfig } from '../../../src/subagent/types.js';
+import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
 
 // Helper to create mock LLM client
@@ -785,7 +785,7 @@ describe('runStream()', () => {
     const client = createMockLLMClient([mockResponse]);
 
     // Create a mock compressor that implements IContextCompressor
-    const mockCompressor: import('../../src/types.js').IContextCompressor = {
+    const mockCompressor: import('../../../src/types.js').IContextCompressor = {
       shouldCompress: vi.fn().mockReturnValue(true),
       compress: vi.fn().mockResolvedValue({
         summary: 'Test summary',

@@ -5,8 +5,8 @@
  * Never modifies messages — only affects what buildMessages() sends to the LLM.
  */
 
-import type { AgentState, ILLMProvider, CompressionConfig, CompressResult } from './types.js';
-import { estimateTokens } from './state.js';
+import type { AgentState, ILLMProvider, CompressionConfig, CompressResult } from '../types.js';
+import { estimateTokens } from '../utils/tokens.js';
 
 /**
  * Context compression strategy

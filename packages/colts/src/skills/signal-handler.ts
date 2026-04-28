@@ -9,7 +9,7 @@
 import type { AgentState } from '../types.js';
 import type { SkillSignal } from './types.js';
 import { isSkillSignal } from './types.js';
-import { updateState } from '../state.js';
+import { updateState } from '../state/index.js';
 
 /**
  * Result of processing a SkillSignal

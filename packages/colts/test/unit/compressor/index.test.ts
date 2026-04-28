@@ -6,9 +6,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { DefaultContextCompressor } from '../../src/compressor.js';
-import { createAgentState } from '../../src/state.js';
-import type { AgentState, ILLMProvider, CompressionConfig } from '../../src/types.js';
+import { DefaultContextCompressor } from '../../../src/compressor/index.js';
+import { createAgentState } from '../../../src/state/index.js';
+import type { AgentState, ILLMProvider, CompressionConfig } from '../../../src/types.js';
 
 // Helper: create an AgentState with a specified number of messages
 function createStateWithMessages(count: number): AgentState {

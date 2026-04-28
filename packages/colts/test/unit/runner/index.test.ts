@@ -4,12 +4,12 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMClient, LLMResponse, TokenStats } from '@agentskillmania/llm-client';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState, addUserMessage, addAssistantMessage } from '../../src/state.js';
-import type { AgentConfig, IContextCompressor, CompressResult } from '../../src/types.js';
-import type { ISkillProvider, SkillManifest } from '../../src/skills/types.js';
-import type { SubAgentConfig } from '../../src/subagent/types.js';
-import { FilesystemSkillProvider } from '../../src/skills/filesystem-provider.js';
+import { AgentRunner } from '../../../src/runner/index.js';
+import { createAgentState, addUserMessage, addAssistantMessage } from '../../../src/state/index.js';
+import type { AgentConfig, IContextCompressor, CompressResult } from '../../../src/types.js';
+import type { ISkillProvider, SkillManifest } from '../../../src/skills/types.js';
+import type { SubAgentConfig } from '../../../src/subagent/types.js';
+import { FilesystemSkillProvider } from '../../../src/skills/filesystem-provider.js';
 
 describe('AgentRunner', () => {
   // Mock LLMClient

@@ -5,16 +5,16 @@
  * The router dispatches to registered IPhaseHandler instances.
  */
 
-import type { AgentState, ILLMProvider, IToolRegistry } from './types.js';
-import type { ISkillProvider } from './skills/types.js';
-import type { SubAgentConfig } from './subagent/types.js';
-import type { AdvanceResult, ExecutionState, AdvanceOptions } from './execution.js';
-import type { IMessageAssembler } from './message-assembler/types.js';
-import type { IPhaseHandler } from './execution-engine/types.js';
-import type { IToolSchemaFormatter } from './tools/schema-formatter.js';
-import type { IExecutionPolicy } from './policy/types.js';
-import { PhaseRouter } from './execution-engine/router.js';
-import { createDefaultPhaseHandlers } from './execution-engine/default-registry.js';
+import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
+import type { ISkillProvider } from '../skills/types.js';
+import type { SubAgentConfig } from '../subagent/types.js';
+import type { AdvanceResult, ExecutionState, AdvanceOptions } from '../execution/index.js';
+import type { IMessageAssembler } from '../message-assembler/types.js';
+import type { IPhaseHandler } from '../execution-engine/types.js';
+import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
+import type { IExecutionPolicy } from '../policy/types.js';
+import { PhaseRouter } from '../execution-engine/router.js';
+import { createDefaultPhaseHandlers } from '../execution-engine/default-registry.js';
 
 /**
  * Runner context passed to extracted functions instead of `this`

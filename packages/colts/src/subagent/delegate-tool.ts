@@ -9,7 +9,7 @@ import { z } from 'zod';
 import type { Tool } from '../tools/registry.js';
 import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from './types.js';
 import { DefaultSubAgentFactory } from './types.js';
-import { createAgentState, addUserMessage } from '../state.js';
+import { createAgentState, addUserMessage } from '../state/index.js';
 import type { ILLMProvider, IToolRegistry } from '../types.js';
 
 /**

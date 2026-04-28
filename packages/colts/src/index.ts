@@ -38,7 +38,7 @@ export type {
 export { ConfigurationError } from './types.js';
 
 // Context Compression
-export { DefaultContextCompressor } from './compressor.js';
+export { DefaultContextCompressor } from './compressor/index.js';
 
 // State operations
 export {
@@ -54,7 +54,7 @@ export {
   restoreSnapshot,
   serializeState,
   deserializeState,
-} from './state.js';
+} from './state/index.js';
 
 // Parser
 export {
@@ -65,7 +65,7 @@ export {
   ParseError,
   type ToolCall,
   type ParseResult,
-} from './parser.js';
+} from './parser/index.js';
 
 // Tools
 export {
@@ -98,7 +98,7 @@ export {
   type ChatOptions,
   type ChatResult,
   type ChatStreamChunk,
-} from './runner.js';
+} from './runner/index.js';
 
 // Execution Control
 export {
@@ -114,7 +114,7 @@ export {
   type ExecutionState,
   type RunResult,
   type RunStreamEvent,
-} from './execution.js';
+} from './execution/index.js';
 
 // Skills
 export { FilesystemSkillProvider, createLoadSkillTool } from './skills/index.js';

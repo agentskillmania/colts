@@ -4,12 +4,12 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
-import type { AgentConfig } from '../../src/types.js';
-import type { SubAgentConfig } from '../../src/subagent/types.js';
-import { ToolRegistry } from '../../src/tools/registry.js';
-import { createExecutionState } from '../../src/execution.js';
+import { AgentRunner } from '../../../src/runner/index.js';
+import { createAgentState } from '../../../src/state/index.js';
+import type { AgentConfig } from '../../../src/types.js';
+import type { SubAgentConfig } from '../../../src/subagent/types.js';
+import { ToolRegistry } from '../../../src/tools/registry.js';
+import { createExecutionState } from '../../../src/execution/index.js';
 import { z } from 'zod';
 
 // Helper to create mock LLM client
@@ -847,9 +847,9 @@ describe('step()', () => {
     it('should handle error phase from executeAdvanceStream', async () => {
       // Test executeAdvanceStream when executeAdvance returns error phase
       // This covers the error handling path in executeAdvanceStream
-      const { executeAdvanceStream } = await import('../../src/runner-stream.js');
-      const { createExecutionState } = await import('../../src/execution.js');
-      const { ToolRegistry } = await import('../../src/tools/registry.js');
+      const { executeAdvanceStream } = await import('../../../src/runner/stream.js');
+      const { createExecutionState } = await import('../../../src/execution/index.js');
+      const { ToolRegistry } = await import('../../../src/tools/registry.js');
 
       const mockClient = {
         call: vi.fn().mockResolvedValue({

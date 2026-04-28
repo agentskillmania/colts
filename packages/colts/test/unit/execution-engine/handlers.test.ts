@@ -17,9 +17,9 @@ import { CompletedHandler } from '../../../src/execution-engine/handlers/complet
 import { ErrorHandler } from '../../../src/execution-engine/handlers/error-handler.js';
 import type { PhaseHandlerContext } from '../../../src/execution-engine/types.js';
 import type { AgentState, IToolRegistry } from '../../../src/types.js';
-import type { ExecutionState } from '../../../src/execution.js';
-import { createExecutionState } from '../../../src/execution.js';
-import { createAgentState } from '../../../src/state.js';
+import type { ExecutionState } from '../../../src/execution/index.js';
+import { createExecutionState } from '../../../src/execution/index.js';
+import { createAgentState } from '../../../src/state/index.js';
 import type { ToolSchema } from '../../../src/tools/registry.js';
 import { DefaultToolSchemaFormatter } from '../../../src/tools/schema-formatter.js';
 
@@ -1044,7 +1044,7 @@ describe('Execution Policy integration', () => {
       });
 
       // Make toolCallToAction throw to trigger onParseError
-      const executionModule = await import('../../../src/execution.js');
+      const executionModule = await import('../../../src/execution/index.js');
       vi.spyOn(executionModule, 'toolCallToAction').mockImplementation(() => {
         throw new Error('Simulated parse failure');
       });
@@ -1096,7 +1096,7 @@ describe('Execution Policy integration', () => {
       // CallingLLMHandler internally calls toolCallToAction, which only maps fields and won't throw.
       // We use vi.mock to replace toolCallToAction in execution.ts to make it throw,
       // triggering the onParseError → ignore path.
-      const executionModule = await import('../../../src/execution.js');
+      const executionModule = await import('../../../src/execution/index.js');
       const originalFn = executionModule.toolCallToAction;
       vi.spyOn(executionModule, 'toolCallToAction').mockImplementation(() => {
         throw new Error('Simulated parse failure');

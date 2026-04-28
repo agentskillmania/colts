@@ -15,20 +15,19 @@ import type {
   IContextCompressor,
   CompressionConfig,
   LLMQuickInit,
-} from './types.js';
-import { ConfigurationError } from './types.js';
-import { DefaultContextCompressor } from './compressor.js';
+} from '../types.js';
+import { ConfigurationError } from '../types.js';
+import { DefaultContextCompressor } from '../compressor/index.js';
 import {
   addUserMessage,
   addAssistantMessage,
   incrementStepCount,
   updateState,
-  addTokenStats,
   updateTotalTokens,
-  estimateTokens,
-} from './state.js';
-import { ToolRegistry } from './tools/registry.js';
-import type { Tool as ColtsTool } from './tools/registry.js';
+} from '../state/index.js';
+import { addTokenStats, estimateTokens } from '../utils/tokens.js';
+import { ToolRegistry } from '../tools/registry.js';
+import type { Tool as ColtsTool } from '../tools/registry.js';
 import type {
   StepResult,
   AdvanceResult,
@@ -38,27 +37,27 @@ import type {
   RunStreamEvent,
   Phase,
   Action,
-} from './execution.js';
-import type { AdvanceOptions } from './execution.js';
-import { createExecutionState, isTerminalPhase } from './execution.js';
-import { getToolsForLLM } from './tools/llm-format.js';
-import type { IToolSchemaFormatter } from './tools/schema-formatter.js';
-import { DefaultToolSchemaFormatter } from './tools/schema-formatter.js';
-import { DefaultMessageAssembler } from './message-assembler/index.js';
-import type { IMessageAssembler } from './message-assembler/types.js';
-import { compressState, maybeCompress } from './runner-compression.js';
-import { executeAdvance, createRouter } from './runner-advance.js';
-import type { RunnerContext } from './runner-advance.js';
-import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './runner-stream.js';
-import type { ISkillProvider } from './skills/types.js';
-import { FilesystemSkillProvider } from './skills/filesystem-provider.js';
-import { createLoadSkillTool, createReturnSkillTool } from './skills/index.js';
-import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from './subagent/types.js';
-import { DefaultSubAgentFactory } from './subagent/types.js';
-import { createDelegateTool } from './subagent/delegate-tool.js';
+} from '../execution/index.js';
+import type { AdvanceOptions } from '../execution/index.js';
+import { createExecutionState, isTerminalPhase } from '../execution/index.js';
+import { getToolsForLLM } from '../tools/llm-format.js';
+import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
+import { DefaultToolSchemaFormatter } from '../tools/schema-formatter.js';
+import { DefaultMessageAssembler } from '../message-assembler/index.js';
+import type { IMessageAssembler } from '../message-assembler/types.js';
+import { compressState, maybeCompress } from './compression.js';
+import { executeAdvance, createRouter } from './advance.js';
+import type { RunnerContext } from './advance.js';
+import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './stream.js';
+import type { ISkillProvider } from '../skills/types.js';
+import { FilesystemSkillProvider } from '../skills/filesystem-provider.js';
+import { createLoadSkillTool, createReturnSkillTool } from '../skills/index.js';
+import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from '../subagent/types.js';
+import { DefaultSubAgentFactory } from '../subagent/types.js';
+import { createDelegateTool } from '../subagent/delegate-tool.js';
 import { EventEmitter } from 'eventemitter3';
-import type { IExecutionPolicy } from './policy/types.js';
-import { DefaultExecutionPolicy } from './policy/default-policy.js';
+import type { IExecutionPolicy } from '../policy/types.js';
+import { DefaultExecutionPolicy } from '../policy/default-policy.js';
 
 /**
  * Runner event map — fully aligned with AsyncGenerator StreamEvent / RunStreamEvent.

@@ -11,7 +11,7 @@ import {
   ParseError,
   type ToolCall,
   type ParseResult,
-} from '../../src/parser.js';
+} from '../../../src/parser/index.js';
 import type { LLMResponse } from '@agentskillmania/llm-client';
 
 describe('Response Parser (Step 2)', () => {

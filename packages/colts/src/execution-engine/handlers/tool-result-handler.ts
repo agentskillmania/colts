@@ -15,7 +15,7 @@
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState } from '../../types.js';
-import type { ExecutionState, AdvanceResult, ToolPostEffect } from '../../execution.js';
+import type { ExecutionState, AdvanceResult, ToolPostEffect } from '../../execution/index.js';
 import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
 import { applySkillSignal, formatSkillToolResult } from '../../skills/signal-handler.js';
 

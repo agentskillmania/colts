@@ -6,7 +6,7 @@
  */
 
 import { produce } from 'immer';
-import type { AgentState, IContextCompressor } from './types.js';
+import type { AgentState, IContextCompressor } from '../types.js';
 
 /**
  * Manually compress state using the given compressor

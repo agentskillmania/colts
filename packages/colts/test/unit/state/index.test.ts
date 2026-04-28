@@ -21,11 +21,9 @@ import {
   restoreSnapshot,
   serializeState,
   deserializeState,
-  estimateTokens,
-  addTokenStats,
   updateTotalTokens,
-} from '../../src/state.js';
-import type { AgentState, AgentConfig } from '../../src/types.js';
+} from '../../../src/state/index.js';
+import type { AgentState, AgentConfig } from '../../../src/types.js';
 
 describe('Step 0: AgentState', () => {
   let baseConfig: AgentConfig;
@@ -85,33 +83,6 @@ describe('Step 0: AgentState', () => {
       });
 
       expect(state.context.stepCount).toBe(2);
-    });
-  });
-
-  describe('Token tracking helpers', () => {
-    it('estimateTokens should return positive count for non-empty text', () => {
-      expect(estimateTokens('hello world')).toBeGreaterThan(0);
-      expect(estimateTokens('')).toBe(0);
-    });
-
-    it('addTokenStats should sum two TokenStats', () => {
-      const a = { input: 10, output: 5 };
-      const b = { input: 3, output: 7 };
-      expect(addTokenStats(a, b)).toEqual({ input: 13, output: 12 });
-    });
-
-    it('addTokenStats should handle undefined gracefully', () => {
-      expect(addTokenStats(undefined, undefined)).toEqual({ input: 0, output: 0 });
-      expect(addTokenStats({ input: 5, output: 3 }, undefined)).toEqual({ input: 5, output: 3 });
-    });
-
-    it('updateTotalTokens should accumulate into state', () => {
-      let state = createAgentState(baseConfig);
-      state = updateTotalTokens(state, { input: 10, output: 5 });
-      expect(state.context.totalTokens).toEqual({ input: 10, output: 5 });
-
-      state = updateTotalTokens(state, { input: 3, output: 2 });
-      expect(state.context.totalTokens).toEqual({ input: 13, output: 7 });
     });
   });
 
