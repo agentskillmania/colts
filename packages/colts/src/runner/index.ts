@@ -43,6 +43,7 @@ import { createExecutionState, isTerminalPhase } from '../execution/index.js';
 import { getToolsForLLM } from '../tools/llm-format.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 import { DefaultToolSchemaFormatter } from '../tools/schema-formatter.js';
+export type { RunnerOptions } from './options.js';
 import { DefaultMessageAssembler } from '../message-assembler/index.js';
 import type { IMessageAssembler } from '../message-assembler/types.js';
 import { compressState, maybeCompress } from './compression.js';
@@ -59,6 +60,7 @@ import { EventEmitter } from 'eventemitter3';
 import type { IExecutionPolicy } from '../policy/types.js';
 import { DefaultExecutionPolicy } from '../policy/default-policy.js';
 import type { AgentMiddleware } from '../middleware/types.js';
+import type { RunnerOptions } from './options.js';
 import { MiddlewareExecutor } from '../middleware/executor.js';
 
 /**
@@ -141,65 +143,9 @@ export interface RunnerEventMap {
 }
 
 /**
- * Configuration options for AgentRunner
- *
- * Supports both injection and quick initialization patterns
+ * AgentRunner - Stateless executor for AgentState
+ * (RunnerOptions is defined in ./options.ts and re-exported above)
  */
-export interface RunnerOptions {
-  /** Model identifier to use for LLM calls */
-  model: string;
-
-  // --- LLM: injection or quick initialization (mutually exclusive) ---
-  /** LLM provider instance (injection mode) */
-  llmClient?: ILLMProvider;
-  /** LLM quick initialization config (quick init mode) */
-  llm?: LLMQuickInit;
-
-  // --- Tools: injection or quick initialization (can be merged) ---
-  /** Tool registry instance (injection mode) */
-  toolRegistry?: IToolRegistry;
-  /** Tools array for quick initialization */
-  tools?: ColtsTool[];
-
-  /** System prompt/instructions (optional) - merged with AgentConfig.instructions */
-  systemPrompt?: string;
-
-  /** Request timeout in milliseconds (optional) */
-  requestTimeout?: number;
-
-  /** Default max steps for run() (default: 10) */
-  maxSteps?: number;
-
-  /** Context compressor: pass CompressionConfig for built-in, or IContextCompressor for custom */
-  compressor?: CompressionConfig | IContextCompressor;
-
-  // --- Skills: injection or quick initialization ---
-  /** Skill provider instance (injection mode) */
-  skillProvider?: ISkillProvider;
-  /** Skill directory list (quick init, creates FilesystemSkillProvider internally) */
-  skillDirectories?: string[];
-
-  // --- SubAgents ---
-  /** Sub-agent configuration list, auto-registers delegate tool when provided */
-  subAgents?: SubAgentConfig[];
-
-  // --- Extensibility ---
-  /** Tool schema formatter (defaults to DefaultToolSchemaFormatter) */
-  toolSchemaFormatter?: IToolSchemaFormatter;
-  /** Sub-agent factory (defaults to DefaultSubAgentFactory) */
-  subAgentFactory?: ISubAgentFactory;
-  /** Execution policy for stop conditions and error handling (defaults to DefaultExecutionPolicy) */
-  executionPolicy?: IExecutionPolicy;
-
-  /** Middleware chain for intercepting advance/step/run execution (optional) */
-  middleware?: AgentMiddleware[];
-
-  /** Enable thinking/reasoning mode for supported models (native thinking) */
-  thinkingEnabled?: boolean;
-
-  /** Enable prompt-level thinking guidance for models without native thinking support */
-  enablePromptThinking?: boolean;
-}
 
 /**
  * Options for individual chat calls
@@ -807,11 +753,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     state: AgentState,
     execState: ExecutionState,
     toolRegistry?: IToolRegistry,
-    options?: AdvanceOptions
+    options?: AdvanceOptions,
+    stepNumber?: number
   ): Promise<AdvanceResult> {
     const from = execState.phase;
-    const stepNum = options?._stepNumber ?? 0;
-    const runStep = options?._runStepCount ?? 0;
+    const stepNum = stepNumber ?? 0;
 
     try {
       // ── beforeAdvance ──
@@ -821,7 +767,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           execState,
           fromPhase: from,
           stepNumber: stepNum,
-          runStepCount: runStep,
+          runnerOptions: this.options,
         });
         if (chain.stopResult) return chain.stopResult;
         if (chain.state) state = chain.state;
@@ -837,7 +783,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           execState: result.execState,
           result,
           stepNumber: stepNum,
-          runStepCount: runStep,
+          runnerOptions: this.options,
         });
         if (chain.stopResult) return chain.stopResult;
         if (chain.state) result = { ...result, state: chain.state };
@@ -908,11 +854,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     state: AgentState,
     execState: ExecutionState,
     toolRegistry?: IToolRegistry,
-    options?: AdvanceOptions
+    options?: AdvanceOptions,
+    stepNumber?: number
   ): AsyncGenerator<StreamEvent, AdvanceResult> {
-    const stepNum = options?._stepNumber ?? 0;
-    const runStep = options?._runStepCount ?? 0;
-
+    const stepNum = stepNumber ?? 0;
     try {
       // ── beforeAdvance ──
       if (this.hasMiddleware) {
@@ -921,7 +866,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           execState,
           fromPhase: execState.phase,
           stepNumber: stepNum,
-          runStepCount: runStep,
+          runnerOptions: this.options,
         });
         if (chain.stopResult) return chain.stopResult;
         if (chain.state) state = chain.state;
@@ -942,7 +887,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               execState: result.execState,
               result,
               stepNumber: stepNum,
-              runStepCount: runStep,
+              runnerOptions: this.options,
             });
             if (chain.stopResult) return chain.stopResult;
             if (chain.state) result = { ...result, state: chain.state };
@@ -993,8 +938,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     state: AgentState,
     toolRegistry?: IToolRegistry,
     options?: { signal?: AbortSignal },
-    stepNumber?: number,
-    runStepCount?: number
+    stepNumber?: number
   ): Promise<{ state: AgentState; result: StepResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
     let currentExecState = createExecutionState();
@@ -1005,6 +949,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       const chain = await this.middlewareExecutor.runBeforeStep({
         state,
         stepNumber: stepIdx,
+        runnerOptions: this.options,
       });
       if (chain.stopped) {
         return {
@@ -1032,6 +977,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           state: stepState,
           result: stepResult,
           stepNumber: stepIdx,
+          runnerOptions: this.options,
         });
         if (chain.state) stepState = chain.state;
         if (chain.stopped) {
@@ -1068,7 +1014,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             execState: currentExecState,
             fromPhase: from,
             stepNumber: stepIdx,
-            runStepCount: runStepCount ?? 0,
+            runnerOptions: this.options,
           });
           if (chain.stopResult)
             return {
@@ -1083,11 +1029,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           if (chain.execState) currentExecState = chain.execState;
         }
 
-        const result = await executeAdvance(this.ctx, currentState, currentExecState, registry, {
-          ...options,
-          _stepNumber: stepIdx,
-          _runStepCount: runStepCount ?? 0,
-        });
+        const result = await executeAdvance(
+          this.ctx,
+          currentState,
+          currentExecState,
+          registry,
+          options
+        );
 
         // ── afterAdvance ──
         let effectiveResult = result;
@@ -1097,7 +1045,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             execState: result.execState,
             result,
             stepNumber: stepIdx,
-            runStepCount: runStepCount ?? 0,
+            runnerOptions: this.options,
           });
           if (chain.stopResult)
             return {
@@ -1241,6 +1189,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       const chain = await this.middlewareExecutor.runBeforeStep({
         state,
         stepNumber: stepIdx,
+        runnerOptions: this.options,
       });
       if (chain.stopped) {
         return {
@@ -1265,7 +1214,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         toolRegistry,
         options,
         mw,
-        stepIdx
+        stepIdx,
+        this.options
       );
 
       while (true) {
@@ -1280,6 +1230,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               state: result.state,
               result: result.result,
               stepNumber: stepIdx,
+              runnerOptions: this.options,
             });
             if (chain.state) result.state = chain.state;
             if (chain.stopped) {
@@ -1335,7 +1286,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     // ── beforeRun ──
     if (this.hasMiddleware) {
-      const chain = await this.middlewareExecutor.runBeforeRun({ state: currentState });
+      const chain = await this.middlewareExecutor.runBeforeRun({
+        state: currentState,
+        runnerOptions: this.options,
+      });
       if (chain.stopped) {
         const runResult: RunResult = {
           type: 'error',
@@ -1361,7 +1315,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     ): Promise<{ state: AgentState; result: RunResult }> => {
       this.emit('run:end', { state: runState, result: runResult, timestamp: Date.now() });
       if (this.hasMiddleware) {
-        await this.middlewareExecutor.runAfterRun({ state: runState, result: runResult });
+        await this.middlewareExecutor.runAfterRun({
+          state: runState,
+          result: runResult,
+          runnerOptions: this.options,
+        });
       }
       return { state: runState, result: runResult };
     };
@@ -1379,7 +1337,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           currentState,
           registry,
           options,
-          totalSteps,
           totalSteps
         );
 
@@ -1493,7 +1450,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     // ── beforeRun ──
     if (this.hasMiddleware) {
-      const chain = await this.middlewareExecutor.runBeforeRun({ state: currentState });
+      const chain = await this.middlewareExecutor.runBeforeRun({
+        state: currentState,
+        runnerOptions: this.options,
+      });
       if (chain.stopped) {
         const runResult: RunResult = {
           type: 'error',
@@ -1520,7 +1480,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
       this.emit('run:end', { state: runState, result: runResult, timestamp: Date.now() });
       if (this.hasMiddleware) {
-        await this.middlewareExecutor.runAfterRun({ state: runState, result: runResult });
+        await this.middlewareExecutor.runAfterRun({
+          state: runState,
+          result: runResult,
+          runnerOptions: this.options,
+        });
       }
       yield { type: 'complete', result: runResult, timestamp: Date.now() };
       return { state: runState, result: runResult };
@@ -1543,6 +1507,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           const chain = await this.middlewareExecutor.runBeforeStep({
             state: currentState,
             stepNumber: totalSteps,
+            runnerOptions: this.options,
           });
           if (chain.stopped) {
             const stepResult = {
@@ -1607,6 +1572,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             state: stepResult.state,
             result: stepResult.result,
             stepNumber: totalSteps,
+            runnerOptions: this.options,
           });
           if (chain.state) stepResult = { ...stepResult, state: chain.state };
           if (chain.stopped) {

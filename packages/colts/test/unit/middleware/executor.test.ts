@@ -65,7 +65,6 @@ describe('MiddlewareExecutor', () => {
         execState: makeExecState(),
         fromPhase: { type: 'idle' },
         stepNumber: 0,
-        runStepCount: 0,
       });
 
       expect(result.stopResult).toBeUndefined();
@@ -92,7 +91,6 @@ describe('MiddlewareExecutor', () => {
         execState: makeExecState(),
         fromPhase: { type: 'idle' },
         stepNumber: 0,
-        runStepCount: 0,
       });
 
       // 后者覆盖前者
@@ -115,7 +113,6 @@ describe('MiddlewareExecutor', () => {
         execState: makeExecState(),
         fromPhase: { type: 'idle' },
         stepNumber: 0,
-        runStepCount: 0,
       });
 
       expect(result.stopResult).toBeUndefined();
@@ -137,7 +134,6 @@ describe('MiddlewareExecutor', () => {
         execState: makeExecState(),
         fromPhase: { type: 'idle' },
         stepNumber: 0,
-        runStepCount: 0,
       });
 
       expect(result.stopResult).toBe(customResult);
@@ -152,7 +148,6 @@ describe('MiddlewareExecutor', () => {
         execState: makeExecState(),
         fromPhase: { type: 'idle' },
         stepNumber: 0,
-        runStepCount: 0,
       });
 
       expect(result.stopResult).toBeUndefined();
@@ -185,7 +180,6 @@ describe('MiddlewareExecutor', () => {
         execState: makeExecState(),
         result: makeAdvanceResult(),
         stepNumber: 0,
-        runStepCount: 0,
       });
 
       expect(order).toEqual(['mw2', 'mw1']);
@@ -209,7 +203,6 @@ describe('MiddlewareExecutor', () => {
         execState: makeExecState(),
         result: makeAdvanceResult(),
         stepNumber: 0,
-        runStepCount: 0,
       });
 
       expect(result.stopResult).toBe(customResult);
@@ -403,7 +396,6 @@ describe('MiddlewareExecutor', () => {
           execState: makeExecState(),
           fromPhase: { type: 'idle' },
           stepNumber: 0,
-          runStepCount: 0,
         })
       ).rejects.toThrow('middleware error');
     });

@@ -13,6 +13,7 @@ import type {
   StepResult,
   RunResult,
 } from '../execution/index.js';
+import type { RunnerOptions } from '../runner/options.js';
 
 // ─── Return Types ────────────────────────────────────────────────
 
@@ -64,8 +65,8 @@ export interface BeforeAdvanceContext {
   readonly fromPhase: Phase;
   /** 当前 step 序号（从 0 开始） */
   readonly stepNumber: number;
-  /** run 级别的已执行 step 总数 */
-  readonly runStepCount: number;
+  /** runner 配置（只读） */
+  readonly runnerOptions: Readonly<RunnerOptions>;
 }
 
 /** afterAdvance 的上下文 */
@@ -78,8 +79,8 @@ export interface AfterAdvanceContext {
   readonly result: Readonly<AdvanceResult>;
   /** 当前 step 序号 */
   readonly stepNumber: number;
-  /** run 级别的已执行 step 总数 */
-  readonly runStepCount: number;
+  /** runner 配置（只读） */
+  readonly runnerOptions: Readonly<RunnerOptions>;
 }
 
 /** beforeStep 的上下文 */
@@ -88,6 +89,8 @@ export interface BeforeStepContext {
   readonly state: AgentState;
   /** 当前 step 序号 */
   readonly stepNumber: number;
+  /** runner 配置（只读） */
+  readonly runnerOptions: Readonly<RunnerOptions>;
 }
 
 /** afterStep 的上下文 */
@@ -98,12 +101,16 @@ export interface AfterStepContext {
   readonly result: Readonly<StepResult>;
   /** 当前 step 序号 */
   readonly stepNumber: number;
+  /** runner 配置（只读） */
+  readonly runnerOptions: Readonly<RunnerOptions>;
 }
 
 /** beforeRun 的上下文 */
 export interface BeforeRunContext {
   /** 初始 agent state（只读） */
   readonly state: AgentState;
+  /** runner 配置（只读） */
+  readonly runnerOptions: Readonly<RunnerOptions>;
 }
 
 /** afterRun 的上下文 */
@@ -112,6 +119,8 @@ export interface AfterRunContext {
   readonly state: AgentState;
   /** run 的返回结果 */
   readonly result: Readonly<RunResult>;
+  /** runner 配置（只读） */
+  readonly runnerOptions: Readonly<RunnerOptions>;
 }
 
 // ─── Middleware Interface ────────────────────────────────────────

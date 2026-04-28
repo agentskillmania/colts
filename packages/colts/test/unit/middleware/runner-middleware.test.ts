@@ -82,6 +82,24 @@ describe('AgentRunner + Middleware: advance()', () => {
     expect(result.phase.type).toBe('preparing');
   });
 
+  it('should pass stepNumber to advance middleware context', async () => {
+    const client = singleResponse();
+    const beforeFn = vi.fn().mockResolvedValue(undefined);
+
+    const mw: AgentMiddleware = { name: 'spy', beforeAdvance: beforeFn };
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, middleware: [mw] });
+
+    const state = createAgentState(defaultConfig);
+    const execState = createExecutionState();
+    await runner.advance(state, execState, undefined, undefined, 3);
+
+    expect(beforeFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stepNumber: 3,
+      })
+    );
+  });
+
   it('should apply state override from beforeAdvance', async () => {
     const client = singleResponse();
     const overriddenState = createAgentState({ ...defaultConfig, name: 'overridden' });

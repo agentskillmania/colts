@@ -22,6 +22,7 @@ import { getToolsForLLM } from '../tools/llm-format.js';
 import { maybeCompress } from './compression.js';
 import type { IContextCompressor } from '../types.js';
 import type { MiddlewareExecutor } from '../middleware/executor.js';
+import type { RunnerOptions } from './options.js';
 
 /**
  * Stream LLM response during calling-llm phase.
@@ -243,7 +244,8 @@ export async function* executeStepStream(
   toolRegistry?: IToolRegistry,
   options?: { signal?: AbortSignal },
   middlewareExecutor?: MiddlewareExecutor,
-  stepNumber?: number
+  stepNumber?: number,
+  runnerOptions?: Readonly<RunnerOptions>
 ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
   const registry = toolRegistry ?? ctx.toolRegistry;
   let currentExecState = createExecutionState();
@@ -251,7 +253,6 @@ export async function* executeStepStream(
 
   let currentState = state;
   let stepTokens = { input: 0, output: 0 };
-  let advanceCount = 0;
   while (!isTerminalPhase(currentExecState.phase)) {
     if (options?.signal?.aborted) {
       return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
@@ -265,7 +266,7 @@ export async function* executeStepStream(
         execState: currentExecState,
         fromPhase,
         stepNumber: stepIdx,
-        runStepCount: advanceCount,
+        runnerOptions: runnerOptions!,
       });
       if (chain.stopResult) {
         return {
@@ -351,7 +352,7 @@ export async function* executeStepStream(
           execState: currentExecState,
           result: advanceResult,
           stepNumber: stepIdx,
-          runStepCount: advanceCount,
+          runnerOptions: runnerOptions!,
         });
         if (chain.stopResult) {
           return {
@@ -367,7 +368,6 @@ export async function* executeStepStream(
         if (chain.execState) currentExecState = chain.execState;
       }
 
-      advanceCount++;
       continue;
     }
 
@@ -391,7 +391,7 @@ export async function* executeStepStream(
         execState: result.execState,
         result,
         stepNumber: stepIdx,
-        runStepCount: advanceCount,
+        runnerOptions: runnerOptions!,
       });
       if (chain.stopResult) {
         return {
@@ -402,8 +402,6 @@ export async function* executeStepStream(
       if (chain.state) result = { ...result, state: chain.state };
       if (chain.execState) result = { ...result, execState: chain.execState };
     }
-
-    advanceCount++;
 
     currentState = await maybeCompress(compressor, result.state);
 
