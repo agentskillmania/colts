@@ -5,11 +5,11 @@
  * names and payload structures are fully consistent.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
-import type { AgentState, LLMResponse, ILLMProvider } from '../../src/types.js';
-import type { StepResult } from '../../src/execution.js';
-import { createExecutionState } from '../../src/execution.js';
+import { AgentRunner } from '../../../src/runner/index.js';
+import { createAgentState } from '../../../src/state/index.js';
+import type { AgentState, LLMResponse, ILLMProvider } from '../../../src/types.js';
+import type { StepResult } from '../../../src/execution/index.js';
+import { createExecutionState } from '../../../src/execution/index.js';
 
 const defaultConfig = {
   systemPrompt: 'You are a helpful assistant.',

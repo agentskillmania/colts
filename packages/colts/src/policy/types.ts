@@ -6,7 +6,7 @@
  */
 
 import type { AgentState } from '../types.js';
-import type { StepResult, Action } from '../execution.js';
+import type { StepResult, Action } from '../execution/index.js';
 
 /**
  * Stop decision returned by IExecutionPolicy.shouldStop()

@@ -7,8 +7,8 @@ import { describe, it, expect } from 'vitest';
 import { PhaseRouter } from '../../src/execution-engine/router.js';
 import type { IPhaseHandler, PhaseHandlerContext } from '../../src/execution-engine/types.js';
 import type { AgentState } from '../../src/types.js';
-import type { ExecutionState, AdvanceResult } from '../../src/execution.js';
-import { createExecutionState } from '../../src/execution.js';
+import type { ExecutionState, AdvanceResult } from '../../src/execution/index.js';
+import { createExecutionState } from '../../src/execution/index.js';
 import { DefaultToolSchemaFormatter } from '../../src/tools/schema-formatter.js';
 
 function createMockHandler(phaseType: string, resultPhase?: Partial<AdvanceResult>): IPhaseHandler {

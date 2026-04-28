@@ -7,7 +7,7 @@
  */
 
 import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
-import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../execution.js';
+import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../execution/index.js';
 import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { ISkillProvider } from '../skills/types.js';
 import type { SubAgentConfig } from '../subagent/types.js';

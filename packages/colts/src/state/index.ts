@@ -6,17 +6,9 @@
  */
 
 import { produce, Draft } from 'immer';
-import { encodingForModel } from 'js-tiktoken';
-import type { AgentState, AgentConfig, Message, Snapshot, TokenStats } from './types.js';
-
-/**
- * Generate unique ID
- *
- * @returns Unique identifier string
- */
-function generateId(): string {
-  return `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
+import type { AgentState, AgentConfig, Message, Snapshot, TokenStats } from '../types.js';
+import { generateId } from '../utils/id.js';
+import { estimateTokens, addTokenStats } from '../utils/tokens.js';
 
 /**
  * Compute checksum (simple implementation, production can use stricter algorithm)
@@ -41,20 +33,6 @@ function computeChecksum(state: AgentState): string {
  * @param config - Agent configuration
  * @returns New AgentState (immutable)
  */
-const enc = encodingForModel('gpt-4');
-
-/** Estimate token count of a string via js-tiktoken */
-export function estimateTokens(text: string): number {
-  return enc.encode(text).length;
-}
-
-/** Add two TokenStats, handling undefined */
-export function addTokenStats(a?: TokenStats, b?: TokenStats): TokenStats {
-  return {
-    input: (a?.input ?? 0) + (b?.input ?? 0),
-    output: (a?.output ?? 0) + (b?.output ?? 0),
-  };
-}
 
 /** Add token usage to AgentContext.totalTokens */
 export function updateTotalTokens(state: AgentState, usage: TokenStats): AgentState {

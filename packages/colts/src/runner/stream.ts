@@ -5,22 +5,22 @@
  * Extracted from AgentRunner for maintainability.
  */
 
-import type { AgentState, IToolRegistry } from './types.js';
+import type { AgentState, IToolRegistry } from '../types.js';
 import type {
   AdvanceResult,
   ExecutionState,
   StepResult,
   StreamEvent,
   AdvanceOptions,
-} from './execution.js';
-import { createExecutionState, isTerminalPhase } from './execution.js';
-import { addTokenStats, estimateTokens } from './state.js';
-import type { RunnerContext } from './runner-advance.js';
-import { executeAdvance } from './runner-advance.js';
-import { buildMessagesFromCtx } from './runner-advance.js';
-import { getToolsForLLM } from './tools/llm-format.js';
-import { maybeCompress } from './runner-compression.js';
-import type { IContextCompressor } from './types.js';
+} from '../execution/index.js';
+import { createExecutionState, isTerminalPhase } from '../execution/index.js';
+import { addTokenStats, estimateTokens } from '../utils/tokens.js';
+import type { RunnerContext } from './advance.js';
+import { executeAdvance } from './advance.js';
+import { buildMessagesFromCtx } from './advance.js';
+import { getToolsForLLM } from '../tools/llm-format.js';
+import { maybeCompress } from './compression.js';
+import type { IContextCompressor } from '../types.js';
 
 /**
  * Stream LLM response during calling-llm phase.

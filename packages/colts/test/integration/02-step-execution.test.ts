@@ -15,10 +15,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { createRealLLMClient } from './helpers.js';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
+import { AgentRunner } from '../../src/runner/index.js';
+import { createAgentState } from '../../src/state/index.js';
 import type { AgentConfig } from '../../src/types.js';
-import { createExecutionState, isTerminalPhase } from '../../src/execution.js';
+import { createExecutionState, isTerminalPhase } from '../../src/execution/index.js';
 import { ToolRegistry, calculatorTool } from '../../src/index.js';
 
 describe('User Story: Step Control with Real LLM', () => {

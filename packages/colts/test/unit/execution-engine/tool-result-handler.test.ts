@@ -9,9 +9,9 @@ import { describe, it, expect } from 'vitest';
 import { ToolResultHandler } from '../../../src/execution-engine/handlers/tool-result-handler.js';
 import type { PhaseHandlerContext } from '../../../src/execution-engine/types.js';
 import type { AgentState } from '../../../src/types.js';
-import type { ExecutionState } from '../../../src/execution.js';
-import { createExecutionState } from '../../../src/execution.js';
-import { createAgentState, updateState } from '../../../src/state.js';
+import type { ExecutionState } from '../../../src/execution/index.js';
+import { createExecutionState } from '../../../src/execution/index.js';
+import { createAgentState, updateState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 
 // ---------------------------------------------------------------------------

@@ -7,10 +7,10 @@
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState, IToolRegistry } from '../../types.js';
-import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution.js';
-import { toolCallToAction } from '../../execution.js';
+import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution/index.js';
+import { toolCallToAction } from '../../execution/index.js';
 import { getToolsForLLM } from '../../tools/llm-format.js';
-import { estimateTokens } from '../../state.js';
+import { estimateTokens } from '../../utils/tokens.js';
 
 export class CallingLLMHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

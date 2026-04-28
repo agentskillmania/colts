@@ -6,7 +6,7 @@
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState } from '../../types.js';
-import type { ExecutionState, AdvanceResult } from '../../execution.js';
+import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
 
 export class ErrorHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

@@ -4,11 +4,11 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
-import type { AgentConfig } from '../../src/types.js';
-import { createExecutionState, isTerminalPhase } from '../../src/execution.js';
-import type { ExecutionState } from '../../src/execution.js';
+import { AgentRunner } from '../../../src/runner/index.js';
+import { createAgentState } from '../../../src/state/index.js';
+import type { AgentConfig } from '../../../src/types.js';
+import { createExecutionState, isTerminalPhase } from '../../../src/execution/index.js';
+import type { ExecutionState } from '../../../src/execution/index.js';
 
 // Helper to create mock LLM client
 function createMockLLMClient(responses: LLMResponse[]): LLMClient {

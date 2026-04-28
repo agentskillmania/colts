@@ -7,9 +7,9 @@
 
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState, IToolRegistry } from '../../types.js';
-import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution.js';
+import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution/index.js';
 import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
-import { addToolMessage, addUserMessage, incrementStepCount } from '../../state.js';
+import { addToolMessage, addUserMessage, incrementStepCount } from '../../state/index.js';
 
 export class ExecutingToolHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

@@ -17,7 +17,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { createRealLLMClient } from './helpers.js';
 import { AgentRunner, ToolRegistry, calculatorTool } from '../../src/index.js';
-import { createAgentState } from '../../src/state.js';
+import { createAgentState } from '../../src/state/index.js';
 import type { AgentConfig } from '../../src/types.js';
 import { z } from 'zod';
 

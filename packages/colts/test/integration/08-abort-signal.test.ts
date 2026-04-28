@@ -15,11 +15,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { createRealLLMClient } from './helpers.js';
-import { AgentRunner } from '../../src/runner.js';
-import { createAgentState } from '../../src/state.js';
+import { AgentRunner } from '../../src/runner/index.js';
+import { createAgentState } from '../../src/state/index.js';
 import type { AgentConfig } from '../../src/types.js';
 import { ToolRegistry, calculatorTool, createAskHumanTool } from '../../src/index.js';
-import { addUserMessage } from '../../src/state.js';
+import { addUserMessage } from '../../src/state/index.js';
 
 describe('User Story: AbortSignal Cancellation', () => {
   let client: ReturnType<typeof createRealLLMClient>;
