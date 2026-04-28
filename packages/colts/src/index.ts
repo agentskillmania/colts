@@ -154,3 +154,19 @@ export type {
   ParseErrorDecision,
 } from './policy/types.js';
 export { DefaultExecutionPolicy } from './policy/default-policy.js';
+
+// Middleware
+export type {
+  AgentMiddleware,
+  AdvanceHookReturn,
+  StepHookReturn,
+  RunHookReturn,
+  AfterRunHookReturn,
+  BeforeAdvanceContext,
+  AfterAdvanceContext,
+  BeforeStepContext,
+  AfterStepContext,
+  BeforeRunContext,
+  AfterRunContext,
+} from './middleware/index.js';
+export { MiddlewareExecutor } from './middleware/index.js';
