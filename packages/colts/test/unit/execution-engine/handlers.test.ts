@@ -109,8 +109,8 @@ describe('IdleHandler', () => {
     expect(result.phase.type).toBe('preparing');
     expect(result.done).toBe(false);
     expect(result.state).toBe(state);
-    expect(execState.preparedMessages).toBeDefined();
-    expect(execState.preparedMessages!.length).toBeGreaterThan(0);
+    expect(result.execState.preparedMessages).toBeDefined();
+    expect(result.execState.preparedMessages!.length).toBeGreaterThan(0);
   });
 
   it('should pass skillProvider and subAgentConfigs to assembler', () => {
@@ -179,8 +179,8 @@ describe('CallingLLMHandler', () => {
 
     expect(result.phase.type).toBe('llm-response');
     expect(result.done).toBe(false);
-    expect(execState.llmResponse).toBe('mock response');
-    expect(execState.action).toBeUndefined();
+    expect(result.execState.llmResponse).toBe('mock response');
+    expect(result.execState.action).toBeUndefined();
   });
 
   it('should extract tool calls from LLM response', async () => {
@@ -208,10 +208,10 @@ describe('CallingLLMHandler', () => {
     const result = await handler.execute(ctx, state, execState);
 
     expect(result.phase.type).toBe('llm-response');
-    expect(execState.action).toBeDefined();
-    expect(execState.action!.tool).toBe('calculator');
-    expect(execState.action!.arguments).toEqual({ expression: '2+2' });
-    expect(execState.allActions).toHaveLength(1);
+    expect(result.execState.action).toBeDefined();
+    expect(result.execState.action!.tool).toBe('calculator');
+    expect(result.execState.action!.arguments).toEqual({ expression: '2+2' });
+    expect(result.execState.allActions).toHaveLength(1);
   });
 
   it('should use ctx.toolRegistry when no override provided', async () => {
@@ -248,10 +248,10 @@ describe('CallingLLMHandler', () => {
 
     const ctx = createMockCtx(); // response has no tool calls
 
-    await handler.execute(ctx, state, execState);
+    const result = await handler.execute(ctx, state, execState);
 
-    expect(execState.action).toBeUndefined();
-    expect(execState.allActions).toBeUndefined();
+    expect(result.execState.action).toBeUndefined();
+    expect(result.execState.allActions).toBeUndefined();
   });
 });
 
@@ -304,8 +304,8 @@ describe('ParsingHandler', () => {
       expect(result.phase.thought).toBe('I need to calculate something');
       expect(result.phase.action).toBeDefined();
     }
-    expect(execState.thought).toBe('I need to calculate something');
-    expect(execState.cleanedContent).toBe('');
+    expect(result.execState.thought).toBe('I need to calculate something');
+    expect(result.execState.cleanedContent).toBe('');
     expect(result.done).toBe(false);
   });
 
@@ -323,7 +323,7 @@ describe('ParsingHandler', () => {
       expect(result.phase.thought).toBe('Here is the answer');
       expect(result.phase.action).toBeUndefined();
     }
-    expect(execState.cleanedContent).toBe('');
+    expect(result.execState.cleanedContent).toBe('');
   });
 
   it('should use empty string when llmResponse is undefined', () => {
@@ -334,8 +334,8 @@ describe('ParsingHandler', () => {
     const ctx = createMockCtx();
     const result = handler.execute(ctx, state, execState);
 
-    expect(execState.thought).toBe('');
-    expect(execState.cleanedContent).toBe('');
+    expect(result.execState.thought).toBe('');
+    expect(result.execState.cleanedContent).toBe('');
     if (result.phase.type === 'parsed') {
       expect(result.phase.thought).toBe('');
     }
@@ -348,10 +348,10 @@ describe('ParsingHandler', () => {
     execState.llmThinking = 'Native thinking';
 
     const ctx = createMockCtx();
-    handler.execute(ctx, state, execState);
+    const result = handler.execute(ctx, state, execState);
 
-    expect(execState.thought).toBe('Native thinking');
-    expect(execState.cleanedContent).toBe('<think>Tag thinking</think>Some content');
+    expect(result.execState.thought).toBe('Native thinking');
+    expect(result.execState.cleanedContent).toBe('<think>Tag thinking</think>Some content');
   });
 
   it('should have empty thought when no explicit thinking exists', () => {
@@ -360,10 +360,10 @@ describe('ParsingHandler', () => {
     execState.llmResponse = 'Plain content without thinking';
 
     const ctx = createMockCtx();
-    handler.execute(ctx, state, execState);
+    const result = handler.execute(ctx, state, execState);
 
-    expect(execState.thought).toBe('');
-    expect(execState.cleanedContent).toBe('Plain content without thinking');
+    expect(result.execState.thought).toBe('');
+    expect(result.execState.cleanedContent).toBe('Plain content without thinking');
   });
 });
 
@@ -465,7 +465,7 @@ describe('ExecutingToolHandler', () => {
 
     expect(result.phase.type).toBe('tool-result');
     expect(result.done).toBe(false);
-    expect(execState.toolResult).toBe('42');
+    expect(result.execState.toolResult).toBe('42');
     // Tool message added to state
     expect(result.state.context.messages.length).toBeGreaterThan(0);
   });
@@ -1103,15 +1103,15 @@ describe('Execution Policy integration', () => {
       });
 
       try {
-        await handler.execute(ctx, state, execState);
+        const result = await handler.execute(ctx, state, execState);
 
         // onParseError should be called
         expect(onParseError).toHaveBeenCalled();
         // llmResponse should be set to fallbackText (core assertion of P0-3 fix)
-        expect(execState.llmResponse).toBe('Fallback text from policy');
+        expect(result.execState.llmResponse).toBe('Fallback text from policy');
         // action and allActions should be cleared
-        expect(execState.action).toBeUndefined();
-        expect(execState.allActions).toBeUndefined();
+        expect(result.execState.action).toBeUndefined();
+        expect(result.execState.allActions).toBeUndefined();
       } finally {
         // Restore original implementation
         vi.restoreAllMocks();

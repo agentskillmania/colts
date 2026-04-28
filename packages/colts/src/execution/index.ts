@@ -8,6 +8,7 @@ import type { AgentState, Message } from '../types.js';
 import type { ToolCall } from '../parser/index.js';
 import type { DelegateResult } from '../subagent/types.js';
 import type { TokenStats } from '@agentskillmania/llm-client';
+import { produce, type Draft } from 'immer';
 
 // ---------------------------------------------------------------------------
 // ToolPostEffect — lifecycle side effects produced by handler
@@ -121,7 +122,9 @@ export interface AdvanceOptions {
 export interface AdvanceResult {
   /** Updated state */
   state: import('../types.js').AgentState;
-  /** Current execution phase */
+  /** Updated execution state (immutable) */
+  execState: ExecutionState;
+  /** Current execution phase (= execState.phase) */
   phase: Phase;
   /** Whether execution is complete */
   done: boolean;
@@ -173,6 +176,20 @@ export function createExecutionState(): ExecutionState {
   return {
     phase: { type: 'idle' },
   };
+}
+
+/**
+ * Update execution state using Immer (immutable)
+ *
+ * @param execState - Current execution state (not modified)
+ * @param recipe - Update function that can modify the draft
+ * @returns New ExecutionState (immutable)
+ */
+export function updateExecState(
+  execState: ExecutionState,
+  recipe: (draft: Draft<ExecutionState>) => void
+): ExecutionState {
+  return produce(execState, recipe);
 }
 
 /**

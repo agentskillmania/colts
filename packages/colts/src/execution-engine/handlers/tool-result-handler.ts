@@ -16,6 +16,7 @@
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult, ToolPostEffect } from '../../execution/index.js';
+import { updateExecState } from '../../execution/index.js';
 import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
 import { applySkillSignal, formatSkillToolResult } from '../../skills/signal-handler.js';
 
@@ -96,8 +97,16 @@ export class ToolResultHandler implements IPhaseHandler {
               result,
             });
           }
-          execState.phase = { type: 'idle' };
-          return { state: currentState, phase: execState.phase, done: false, effects };
+          const nextExec = updateExecState(execState, (draft) => {
+            draft.phase = { type: 'idle' };
+          });
+          return {
+            state: currentState,
+            execState: nextExec,
+            phase: nextExec.phase,
+            done: false,
+            effects,
+          };
         }
 
         case 'returned': {
@@ -121,8 +130,16 @@ export class ToolResultHandler implements IPhaseHandler {
               result,
             });
           }
-          execState.phase = { type: 'idle' };
-          return { state: currentState, phase: execState.phase, done: false, effects };
+          const nextExec = updateExecState(execState, (draft) => {
+            draft.phase = { type: 'idle' };
+          });
+          return {
+            state: currentState,
+            execState: nextExec,
+            phase: nextExec.phase,
+            done: false,
+            effects,
+          };
         }
 
         case 'top-level-return': {
@@ -147,8 +164,16 @@ export class ToolResultHandler implements IPhaseHandler {
             });
           }
           // Top-level skill return does not end directly; let LLM output results to user
-          execState.phase = { type: 'idle' };
-          return { state: currentState, phase: execState.phase, done: false, effects };
+          const nextExec = updateExecState(execState, (draft) => {
+            draft.phase = { type: 'idle' };
+          });
+          return {
+            state: currentState,
+            execState: nextExec,
+            phase: nextExec.phase,
+            done: false,
+            effects,
+          };
         }
 
         case 'same-skill': {
@@ -165,7 +190,7 @@ export class ToolResultHandler implements IPhaseHandler {
               result,
             });
           }
-          return { state: currentState, phase: execState.phase, done: false, effects };
+          return { state: currentState, execState, phase: execState.phase, done: false, effects };
         }
 
         case 'cyclic': {
@@ -182,7 +207,7 @@ export class ToolResultHandler implements IPhaseHandler {
               result,
             });
           }
-          return { state: currentState, phase: execState.phase, done: false, effects };
+          return { state: currentState, execState, phase: execState.phase, done: false, effects };
         }
 
         case 'not-found': {
@@ -200,8 +225,16 @@ export class ToolResultHandler implements IPhaseHandler {
               result,
             });
           }
-          execState.phase = { type: 'error', error: sigResult.error };
-          return { state: currentState, phase: execState.phase, done: true, effects };
+          const nextExec = updateExecState(execState, (draft) => {
+            draft.phase = { type: 'error', error: sigResult.error };
+          });
+          return {
+            state: currentState,
+            execState: nextExec,
+            phase: nextExec.phase,
+            done: true,
+            effects,
+          };
         }
       }
     }
@@ -222,6 +255,6 @@ export class ToolResultHandler implements IPhaseHandler {
       });
     }
 
-    return { state: currentState, phase: execState.phase, done: false, effects };
+    return { state: currentState, execState, phase: execState.phase, done: false, effects };
   }
 }

@@ -41,18 +41,22 @@ describe('AbortSignal (Step 16)', () => {
       });
 
       const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
-      const state = createAgentState(defaultConfig);
-      const execState = createExecutionState();
+      let state = createAgentState(defaultConfig);
+      let execState = createExecutionState();
 
       const controller = new AbortController();
       controller.abort();
 
       // Advance to calling-llm phase first
-      await runner.advance(state, execState);
-      await runner.advance(state, execState);
+      let result = await runner.advance(state, execState);
+      state = result.state;
+      execState = result.execState;
+      result = await runner.advance(state, execState);
+      state = result.state;
+      execState = result.execState;
 
       // Now at calling-llm, advance with pre-aborted signal
-      const result = await runner.advance(state, execState, undefined, {
+      result = await runner.advance(state, execState, undefined, {
         signal: controller.signal,
       });
 
@@ -63,15 +67,19 @@ describe('AbortSignal (Step 16)', () => {
     it('should pass signal to LLM provider call', async () => {
       const client = createMockClient();
       const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
-      const state = createAgentState(defaultConfig);
-      const execState = createExecutionState();
+      let state = createAgentState(defaultConfig);
+      let execState = createExecutionState();
 
       const controller = new AbortController();
       const signal = controller.signal;
 
       // Advance to calling-llm phase
-      await runner.advance(state, execState);
-      await runner.advance(state, execState);
+      let result = await runner.advance(state, execState);
+      state = result.state;
+      execState = result.execState;
+      result = await runner.advance(state, execState);
+      state = result.state;
+      execState = result.execState;
 
       // Now at calling-llm, advance with signal
       await runner.advance(state, execState, undefined, { signal });

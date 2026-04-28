@@ -9,6 +9,7 @@ import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 import type { ISkillProvider } from '../skills/types.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from '../execution/index.js';
+import { updateExecState } from '../execution/index.js';
 import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { IPhaseHandler } from '../execution-engine/types.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
@@ -86,8 +87,10 @@ export async function executeAdvance(
     return await ctx.phaseRouter.execute(ctx, state, execState, toolRegistry, options);
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
-    execState.phase = { type: 'error', error: errorObj };
-    return { state, phase: execState.phase, done: true };
+    const nextExec = updateExecState(execState, (draft) => {
+      draft.phase = { type: 'error', error: errorObj };
+    });
+    return { state, execState: nextExec, phase: nextExec.phase, done: true };
   }
 }
 

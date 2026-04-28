@@ -9,7 +9,7 @@ import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import type { SubAgentConfig } from '../../../src/subagent/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
-import { createExecutionState } from '../../../src/execution/index.js';
+import { createExecutionState, updateExecState } from '../../../src/execution/index.js';
 import { z } from 'zod';
 
 // Helper to create mock LLM client
@@ -870,24 +870,28 @@ describe('step()', () => {
       const state = createAgentState(defaultConfig);
 
       // Create custom execState with an invalid phase to trigger default case in executeAdvance
-      const execState = createExecutionState();
-      (execState as { phase: { type: string } }).phase = {
-        type: 'invalid-phase',
-      } as ExecutionState['phase'];
+      const execState = updateExecState(createExecutionState(), (draft) => {
+        draft.phase = { type: 'invalid-phase' } as ExecutionState['phase'];
+      });
 
       const events: { type: string; error?: Error }[] = [];
+      let resultExecState = execState;
 
       try {
         const generator = executeAdvanceStream(ctx, state, execState, undefined, undefined);
-        for await (const event of generator) {
-          events.push(event as { type: string; error?: Error });
+        let iterResult;
+        while (!(iterResult = await generator.next()).done) {
+          events.push(iterResult.value as { type: string; error?: Error });
+        }
+        if (iterResult.done && iterResult.value) {
+          resultExecState = iterResult.value.execState;
         }
       } catch (error) {
         // Expected
       }
 
-      // Should have error phase in execState
-      expect(execState.phase.type).toBe('error');
+      // Should have error phase in result execState
+      expect(resultExecState.phase.type).toBe('error');
     });
   });
 });
