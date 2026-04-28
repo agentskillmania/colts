@@ -1186,7 +1186,15 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         ) {
           // same-skill/cyclic/plain tool → return continue
           const toolResult = currentExecState.toolResult;
-          const stepResult: StepResult = { type: 'continue', toolResult, tokens: stepTokens };
+          const actions =
+            currentExecState.allActions ??
+            (currentExecState.action ? [currentExecState.action] : []);
+          const stepResult: StepResult = {
+            type: 'continue',
+            toolResult,
+            actions,
+            tokens: stepTokens,
+          };
           return finalizeStep(currentState, stepResult);
         }
 

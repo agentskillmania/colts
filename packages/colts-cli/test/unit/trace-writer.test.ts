@@ -141,7 +141,12 @@ describe('TraceWriter', () => {
       tracer.consume({
         type: 'step:end',
         step: 1,
-        result: { type: 'continue', toolResult: 'ok' },
+        result: {
+          type: 'continue',
+          toolResult: 'ok',
+          actions: [],
+          tokens: { input: 0, output: 0 },
+        },
       });
       await tracer.flush();
 
@@ -683,7 +688,7 @@ describe('TraceWriter', () => {
       tracer.consume({
         type: 'step:end',
         step: 1,
-        result: { type: 'continue', toolResult: 925 },
+        result: { type: 'continue', toolResult: 925, actions: [], tokens: { input: 0, output: 0 } },
       });
 
       // step 2

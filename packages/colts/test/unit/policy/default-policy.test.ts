@@ -48,7 +48,7 @@ describe('DefaultExecutionPolicy', () => {
     it('should stop with max_steps when stepCount >= maxSteps', () => {
       const decision = policy.shouldStop(
         dummyState,
-        { type: 'continue', toolResult: 'ok' },
+        { type: 'continue', toolResult: 'ok', actions: [], tokens: { input: 0, output: 0 } },
         {
           stepCount: 10,
           maxSteps: 10,
@@ -64,7 +64,7 @@ describe('DefaultExecutionPolicy', () => {
     it('should stop with max_steps when stepCount exceeds maxSteps', () => {
       const decision = policy.shouldStop(
         dummyState,
-        { type: 'continue', toolResult: 'ok' },
+        { type: 'continue', toolResult: 'ok', actions: [], tokens: { input: 0, output: 0 } },
         {
           stepCount: 15,
           maxSteps: 10,
@@ -80,7 +80,7 @@ describe('DefaultExecutionPolicy', () => {
     it('should continue when step result is continue and under maxSteps', () => {
       const decision = policy.shouldStop(
         dummyState,
-        { type: 'continue', toolResult: 'ok' },
+        { type: 'continue', toolResult: 'ok', actions: [], tokens: { input: 0, output: 0 } },
         {
           stepCount: 5,
           maxSteps: 10,
@@ -92,7 +92,7 @@ describe('DefaultExecutionPolicy', () => {
     it('should continue when step result is continue and stepCount equals zero', () => {
       const decision = policy.shouldStop(
         dummyState,
-        { type: 'continue', toolResult: 'ok' },
+        { type: 'continue', toolResult: 'ok', actions: [], tokens: { input: 0, output: 0 } },
         {
           stepCount: 0,
           maxSteps: 10,

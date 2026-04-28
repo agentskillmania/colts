@@ -67,7 +67,7 @@ export type Phase =
  * Result of a single step (one ReAct cycle)
  */
 export type StepResult =
-  | { type: 'continue'; toolResult: unknown; tokens: TokenStats }
+  | { type: 'continue'; toolResult: unknown; actions: Action[]; tokens: TokenStats }
   | { type: 'done'; answer: string; tokens: TokenStats }
   | { type: 'error'; error: Error; tokens: TokenStats }
   | { type: 'abort'; tokens: TokenStats };
