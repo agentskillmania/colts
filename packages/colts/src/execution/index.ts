@@ -114,10 +114,6 @@ export interface AdvanceOptions {
   priority?: number;
   /** AbortSignal to cancel execution */
   signal?: AbortSignal;
-  /** @internal step number passed to middleware context */
-  _stepNumber?: number;
-  /** @internal run step count passed to middleware context */
-  _runStepCount?: number;
 }
 
 /**
