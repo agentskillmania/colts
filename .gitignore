@@ -8,5 +8,6 @@ dist/
 coverage/
 .test-output/
 .vibe/
+.superpowers/
 AGENTS.md
 CLAUDE.md
