@@ -60,7 +60,7 @@ export function buildTestConfig(overrides?: Partial<AppConfig>): AppConfig {
       name: 'test-agent',
       instructions: 'You are a helpful assistant. Answer concisely.',
     },
-    maxSteps: 20,
+    maxSteps: 500,
     requestTimeout: 60000,
     ...overrides,
   } as AppConfig;

@@ -196,7 +196,7 @@ describe('run()', () => {
     }
   });
 
-  it('should use default maxSteps of 20', async () => {
+  it('should use default maxSteps of 500', async () => {
     const toolCallResponse: LLMResponse = {
       content: 'Thinking...',
       toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
@@ -204,7 +204,7 @@ describe('run()', () => {
       stopReason: 'tool_calls',
     };
 
-    const responses = Array(22).fill(toolCallResponse);
+    const responses = Array(502).fill(toolCallResponse);
     const client = createMockLLMClient(responses);
 
     const registry = new ToolRegistry();
@@ -222,7 +222,7 @@ describe('run()', () => {
 
     expect(result.type).toBe('max_steps');
     if (result.type === 'max_steps') {
-      expect(result.totalSteps).toBe(20);
+      expect(result.totalSteps).toBe(500);
     }
   });
 

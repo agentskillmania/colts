@@ -72,7 +72,7 @@ export class DefaultSubAgentFactory implements ISubAgentFactory {
   /** Default max steps when SubAgentConfig.maxSteps is not set */
   private defaultMaxSteps: number;
 
-  constructor(defaultMaxSteps = 20) {
+  constructor(defaultMaxSteps = 500) {
     this.defaultMaxSteps = defaultMaxSteps;
   }
 

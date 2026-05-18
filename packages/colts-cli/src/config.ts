@@ -90,7 +90,7 @@ export interface AppConfig {
 }
 
 /** Default maximum number of steps */
-const DEFAULT_MAX_STEPS = 20;
+const DEFAULT_MAX_STEPS = 500;
 
 /** Default request timeout (ms) */
 const DEFAULT_REQUEST_TIMEOUT = 1_800_000;
@@ -113,7 +113,7 @@ agent:
     - Report results clearly and concisely.
     - If something is unclear, ask the user for clarification.
 
-maxSteps: 20
+maxSteps: 500
 requestTimeout: 1800000
 
 skillDirectories:
