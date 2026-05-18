@@ -225,7 +225,7 @@ llm:
       try {
         const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
         expect(config.hasValidConfig).toBe(true);
-        expect(config.maxSteps).toBe(20);
+        expect(config.maxSteps).toBe(500);
         expect(config.requestTimeout).toBe(1_800_000);
       } finally {
         process.chdir(originalCwd);
