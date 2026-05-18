@@ -8,6 +8,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Settings } from '@agentskillmania/settings-yaml';
+import type { SubAgentConfig } from '@agentskillmania/colts';
 
 /** Default configuration directory */
 const CONFIG_DIR = path.join(os.homedir(), '.agentskillmania', 'colts');
@@ -27,6 +28,12 @@ export interface ColtsConfig extends Record<string, unknown> {
     model?: string;
     /** Custom base URL for the provider API */
     baseUrl?: string;
+    /** Enable native thinking/reasoning mode */
+    thinkingEnabled?: boolean;
+    /** Enable prompt-level thinking guidance (for models without native thinking) */
+    enablePromptThinking?: boolean;
+    /** Concurrency limit: max concurrent LLM requests */
+    maxConcurrency?: number;
   };
   /** Agent character settings */
   agent?: {
@@ -40,27 +47,9 @@ export interface ColtsConfig extends Record<string, unknown> {
   /** Request timeout in milliseconds */
   requestTimeout?: number;
   /** Skill directory paths */
-  skills?: string[];
+  skillDirectories?: string[];
   /** SubAgent definitions */
-  subAgents?: Array<{
-    /** SubAgent name */
-    name: string;
-    /** SubAgent description */
-    description: string;
-    /** SubAgent configuration */
-    config: {
-      /** SubAgent name */
-      name: string;
-      /** SubAgent instructions */
-      instructions: string;
-      /** Available tools */
-      tools?: Array<{ name: string; description: string; parameters?: Record<string, unknown> }>;
-    };
-    /** Maximum steps for this sub-agent */
-    maxSteps?: number;
-    /** Whether delegation is allowed */
-    allowDelegation?: boolean;
-  }>;
+  subAgents?: SubAgentConfig[];
   /** List of tools requiring user confirmation */
   confirmTools?: string[];
 }
@@ -81,6 +70,7 @@ export interface AppConfig {
     baseUrl?: string;
     thinkingEnabled?: boolean;
     enablePromptThinking?: boolean;
+    maxConcurrency?: number;
   };
   /** Agent configuration */
   agent?: {
@@ -92,9 +82,9 @@ export interface AppConfig {
   /** Request timeout in milliseconds */
   requestTimeout?: number;
   /** Skill directory list */
-  skills?: string[];
+  skillDirectories?: string[];
   /** SubAgent configuration list */
-  subAgents?: ColtsConfig['subAgents'];
+  subAgents?: SubAgentConfig[];
   /** List of tools requiring user confirmation */
   confirmTools?: string[];
 }
@@ -109,6 +99,9 @@ const DEFAULT_REQUEST_TIMEOUT = 1_800_000;
 const DEFAULT_CONFIG_YAML = `llm:
   provider: openai
   model: gpt-4
+  thinkingEnabled: false
+  enablePromptThinking: false
+  maxConcurrency: 5
 
 agent:
   name: colts-agent
@@ -123,7 +116,7 @@ agent:
 maxSteps: 20
 requestTimeout: 1800000
 
-skills:
+skillDirectories:
   - ./skills
   - ~/.agentskillmania/colts/skills
 
@@ -217,6 +210,9 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
         apiKey: config.llm!.apiKey!,
         model: config.llm!.model ?? 'gpt-4',
         baseUrl: config.llm!.baseUrl,
+        thinkingEnabled: config.llm!.thinkingEnabled,
+        enablePromptThinking: config.llm!.enablePromptThinking,
+        maxConcurrency: config.llm!.maxConcurrency,
       },
       agent: {
         name: config.agent?.name ?? 'colts-agent',
@@ -224,7 +220,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
       },
       maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
       requestTimeout: config.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT,
-      skills: config.skills,
+      skillDirectories: config.skillDirectories,
       subAgents: config.subAgents,
       confirmTools: config.confirmTools,
     };
