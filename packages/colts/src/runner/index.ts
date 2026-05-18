@@ -296,7 +296,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Store options with defaults
     this.options = {
       ...options,
-      maxSteps: options.maxSteps ?? 10,
+      maxSteps: options.maxSteps ?? 20,
     };
 
     // Initialize message assembler (default implementation)
@@ -1304,7 +1304,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     this.emit('run:start', { state: currentState, timestamp: Date.now() });
     const registry = toolRegistry ?? this.toolRegistry;
-    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
+    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 20;
     let totalSteps = 0;
     let runTokens: TokenStats = { input: 0, output: 0 };
 
@@ -1468,7 +1468,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     this.emit('run:start', { state: currentState, timestamp: Date.now() });
     const registry = toolRegistry ?? this.toolRegistry;
-    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 10;
+    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 20;
     let totalSteps = 0;
     let runTokens: TokenStats = { input: 0, output: 0 };
 

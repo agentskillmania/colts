@@ -63,7 +63,7 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
     subAgentConfigs,
     llmProvider,
     model,
-    defaultMaxSteps = 10,
+    defaultMaxSteps = 20,
     parentToolRegistry,
     subAgentFactory = new DefaultSubAgentFactory(defaultMaxSteps),
   } = deps;

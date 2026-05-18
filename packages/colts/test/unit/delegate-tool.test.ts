@@ -677,7 +677,7 @@ describe('createDelegateTool', () => {
   // Default maxSteps
   // ----------------------------------------------------------
   describe('default maxSteps', () => {
-    it('should use default defaultMaxSteps=10 when not provided', async () => {
+    it('should use default defaultMaxSteps=20 when not provided', async () => {
       const client = createToolCallLoopLLMClient('search', 20);
 
       const tool = createDelegateTool({
@@ -687,14 +687,14 @@ describe('createDelegateTool', () => {
         // do not provide defaultMaxSteps
       });
 
-      // writer has no maxSteps, uses default 10
+      // writer has no maxSteps, uses default 20
       const result = (await tool.execute({
         agent: 'writer',
         task: 'Long task',
       })) as DelegateResult;
 
       expect(result.answer).toBe('Max steps reached');
-      expect(result.totalSteps).toBe(10);
+      expect(result.totalSteps).toBe(20);
     });
 
     it('sub-agent custom maxSteps should override defaultMaxSteps', async () => {
