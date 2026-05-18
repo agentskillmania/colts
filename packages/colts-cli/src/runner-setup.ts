@@ -59,13 +59,15 @@ export function createRunnerFromConfig(config: AppConfig): AgentRunner | null {
       apiKey: config.llm.apiKey,
       provider: config.llm.provider,
       baseUrl: config.llm.baseUrl,
+      maxConcurrency: config.llm.maxConcurrency,
     },
     maxSteps: config.maxSteps,
     requestTimeout: config.requestTimeout,
-    skillDirectories: config.skills,
+    skillDirectories: config.skillDirectories,
     toolRegistry: registry,
     thinkingEnabled: config.llm.thinkingEnabled,
     enablePromptThinking: config.llm.enablePromptThinking,
+    subAgents: config.subAgents,
   };
 
   const runner = new AgentRunner(runnerOptions);

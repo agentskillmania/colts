@@ -256,6 +256,137 @@ requestTimeout: 60000
         process.chdir(originalCwd);
       }
     });
+
+    it('should read skillDirectories from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+skillDirectories:
+  - ./my-skills
+  - /absolute/skills/path
+`;
+      const localConfig = path.join(testDir, 'colts.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.skillDirectories).toEqual(['./my-skills', '/absolute/skills/path']);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should read thinkingEnabled from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+  thinkingEnabled: true
+`;
+      const localConfig = path.join(testDir, 'colts.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.thinkingEnabled).toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should read enablePromptThinking from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+  enablePromptThinking: true
+`;
+      const localConfig = path.join(testDir, 'colts.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.enablePromptThinking).toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should read maxConcurrency from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+  maxConcurrency: 10
+`;
+      const localConfig = path.join(testDir, 'colts.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.maxConcurrency).toBe(10);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should read subAgents from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+subAgents:
+  - name: research-agent
+    description: Research assistant
+    config:
+      name: research-agent
+      instructions: You are a research assistant.
+      tools:
+        - name: web_search
+          description: Search the web
+    maxSteps: 10
+    allowDelegation: false
+`;
+      const localConfig = path.join(testDir, 'colts.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.subAgents).toHaveLength(1);
+        expect(config.subAgents?.[0]?.name).toBe('research-agent');
+        expect(config.subAgents?.[0]?.description).toBe('Research assistant');
+        expect(config.subAgents?.[0]?.maxSteps).toBe(10);
+        expect(config.subAgents?.[0]?.allowDelegation).toBe(false);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
   });
 
   describe('saveConfig', () => {
