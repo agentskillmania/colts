@@ -130,7 +130,11 @@ describe('Runner: stopped result propagation', () => {
       }),
       stream: async function* () {
         yield { type: 'text', delta: 'Hello!' };
-        yield { type: 'done', accumulatedContent: 'Hello!', roundTotalTokens: { input: 10, output: 5 } };
+        yield {
+          type: 'done',
+          accumulatedContent: 'Hello!',
+          roundTotalTokens: { input: 10, output: 5 },
+        };
       },
     };
 
