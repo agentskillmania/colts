@@ -809,13 +809,13 @@ describe('AgentRunner', () => {
       expect(loadSkillTool).toBeDefined();
     });
 
-    it('should create FilesystemSkillProvider from skillDirectories', () => {
+    it('should create FilesystemSkillProvider from skillDirs', () => {
       const client = createMockClient();
 
       const runner = new AgentRunner({
         model: 'gpt-4',
         llmClient: client,
-        skillDirectories: ['/nonexistent/skills'],
+        skillDirs: ['/nonexistent/skills'],
       });
 
       expect(runner).toBeDefined();
@@ -825,7 +825,7 @@ describe('AgentRunner', () => {
       expect(loadSkillTool).toBeDefined();
     });
 
-    it('should prefer skillProvider over skillDirectories when both are provided', () => {
+    it('should prefer skillProvider over skillDirs when both are provided', () => {
       const client = createMockClient();
       const injectedProvider = createMockSkillProvider([
         { name: 'injected-skill', description: 'From injection', source: '/injected' },
@@ -835,11 +835,11 @@ describe('AgentRunner', () => {
         model: 'gpt-4',
         llmClient: client,
         skillProvider: injectedProvider,
-        skillDirectories: ['/nonexistent/skills'],
+        skillDirs: ['/nonexistent/skills'],
       });
 
       expect(runner).toBeDefined();
-      // Should use injected provider, skillDirectories is ignored
+      // Should use injected provider, skillDirs is ignored
       const tools = runner.getToolRegistry().toToolSchemas();
       const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
       expect(loadSkillTool).toBeDefined();

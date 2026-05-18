@@ -47,7 +47,7 @@ export interface ColtsConfig extends Record<string, unknown> {
   /** Request timeout in milliseconds */
   requestTimeout?: number;
   /** Skill directory paths */
-  skillDirectories?: string[];
+  skillDirs?: string[];
   /** SubAgent definitions */
   subAgents?: SubAgentConfig[];
   /** List of tools requiring user confirmation */
@@ -82,7 +82,7 @@ export interface AppConfig {
   /** Request timeout in milliseconds */
   requestTimeout?: number;
   /** Skill directory list */
-  skillDirectories?: string[];
+  skillDirs?: string[];
   /** SubAgent configuration list */
   subAgents?: SubAgentConfig[];
   /** List of tools requiring user confirmation */
@@ -116,7 +116,7 @@ agent:
 maxSteps: 500
 requestTimeout: 1800000
 
-skillDirectories:
+skillDirs:
   - ./skills
   - ~/.agentskillmania/colts/skills
 
@@ -220,7 +220,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
       },
       maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
       requestTimeout: config.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT,
-      skillDirectories: config.skillDirectories,
+      skillDirs: config.skillDirs,
       subAgents: config.subAgents,
       confirmTools: config.confirmTools,
     };

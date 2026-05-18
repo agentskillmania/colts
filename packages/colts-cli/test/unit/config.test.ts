@@ -257,13 +257,13 @@ requestTimeout: 60000
       }
     });
 
-    it('should read skillDirectories from YAML', async () => {
+    it('should read skillDirs from YAML', async () => {
       const yamlContent = `
 llm:
   provider: openai
   apiKey: sk-test-key
   model: gpt-4
-skillDirectories:
+skillDirs:
   - ./my-skills
   - /absolute/skills/path
 `;
@@ -276,7 +276,7 @@ skillDirectories:
       try {
         const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
         expect(config.hasValidConfig).toBe(true);
-        expect(config.skillDirectories).toEqual(['./my-skills', '/absolute/skills/path']);
+        expect(config.skillDirs).toEqual(['./my-skills', '/absolute/skills/path']);
       } finally {
         process.chdir(originalCwd);
       }
