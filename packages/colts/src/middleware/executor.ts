@@ -93,11 +93,13 @@ export class MiddlewareExecutor {
       const ret: AdvanceHookReturn = await mw.beforeAdvance(ctx);
 
       if (ret && typeof ret === 'object') {
+        // Extract state and execState BEFORE checking for stop
+        // so that the stopping middleware's state changes are preserved
+        if (ret.state) state = ret.state;
+        if ('execState' in ret && ret.execState) execState = ret.execState;
         if ('stop' in ret && ret.stop) {
           return { stopResult: ret.result, state, execState };
         }
-        if (ret.state) state = ret.state;
-        if ('execState' in ret && ret.execState) execState = ret.execState;
       }
     }
 
@@ -119,11 +121,12 @@ export class MiddlewareExecutor {
       const ret: AdvanceHookReturn = await mw.afterAdvance(ctx);
 
       if (ret && typeof ret === 'object') {
+        // Extract state and execState BEFORE checking for stop
+        if (ret.state) state = ret.state;
+        if ('execState' in ret && ret.execState) execState = ret.execState;
         if ('stop' in ret && ret.stop) {
           return { stopResult: ret.result, state, execState };
         }
-        if (ret.state) state = ret.state;
-        if ('execState' in ret && ret.execState) execState = ret.execState;
       }
     }
 
@@ -141,10 +144,11 @@ export class MiddlewareExecutor {
       const ret: StepHookReturn = await mw.beforeStep(ctx);
 
       if (ret && typeof ret === 'object') {
+        // Extract state BEFORE checking for stop
+        if (ret.state) state = ret.state;
         if ('stop' in ret && ret.stop) {
           return { stopped: true, state, result: ret.result };
         }
-        if (ret.state) state = ret.state;
       }
     }
 
@@ -161,10 +165,11 @@ export class MiddlewareExecutor {
       const ret: StepHookReturn = await mw.afterStep(ctx);
 
       if (ret && typeof ret === 'object') {
+        // Extract state BEFORE checking for stop
+        if (ret.state) state = ret.state;
         if ('stop' in ret && ret.stop) {
           return { stopped: true, state, result: ret.result };
         }
-        if (ret.state) state = ret.state;
       }
     }
 
@@ -182,10 +187,11 @@ export class MiddlewareExecutor {
       const ret: RunHookReturn = await mw.beforeRun(ctx);
 
       if (ret && typeof ret === 'object') {
+        // Extract state BEFORE checking for stop
+        if (ret.state) state = ret.state;
         if ('stop' in ret && ret.stop) {
           return { stopped: true, state, result: ret.result };
         }
-        if (ret.state) state = ret.state;
       }
     }
 

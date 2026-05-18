@@ -1028,12 +1028,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           });
           if (chain.stopResult) {
             // If middleware provided a stopped result with completed phase, use it
-            if (
-              chain.stopResult.done &&
-              chain.stopResult.phase.type === 'completed'
-            ) {
+            if (chain.stopResult.done && chain.stopResult.phase.type === 'completed') {
               return {
-                state: currentState,
+                state: chain.state ?? chain.stopResult.state ?? currentState,
                 result: {
                   type: 'stopped',
                   data: chain.stopResult.phase.answer,
@@ -1043,7 +1040,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             }
             // Otherwise fall back to error (backward compatible)
             return {
-              state: currentState,
+              state: chain.state ?? currentState,
               result: {
                 type: 'error',
                 error: new Error('Stopped by middleware'),
@@ -1075,12 +1072,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           });
           if (chain.stopResult) {
             // If middleware provided a stopped result with completed phase, use it
-            if (
-              chain.stopResult.done &&
-              chain.stopResult.phase.type === 'completed'
-            ) {
+            if (chain.stopResult.done && chain.stopResult.phase.type === 'completed') {
               return {
-                state: currentState,
+                state: chain.state ?? chain.stopResult.state ?? currentState,
                 result: {
                   type: 'stopped',
                   data: chain.stopResult.phase.answer,
@@ -1090,7 +1084,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             }
             // Otherwise fall back to error (backward compatible)
             return {
-              state: currentState,
+              state: chain.state ?? currentState,
               result: {
                 type: 'error',
                 error: new Error('Stopped by middleware'),
@@ -1588,17 +1582,23 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             this.emit('step:end', { step: totalSteps, result: stepResult, timestamp: Date.now() });
             yield { type: 'step:end', step: totalSteps, result: stepResult, timestamp: Date.now() };
             totalSteps++;
-            const runResult: RunResult = chain.result?.type === 'stopped' ? {
-              type: 'stopped',
-              data: chain.result.data as string | undefined,
-              totalSteps,
-              tokens: runTokens,
-            } : {
-              type: 'error',
-              error: stepResult.type === 'error' ? stepResult.error : new Error('Stopped by middleware'),
-              totalSteps,
-              tokens: runTokens,
-            };
+            const runResult: RunResult =
+              chain.result?.type === 'stopped'
+                ? {
+                    type: 'stopped',
+                    data: chain.result.data as string | undefined,
+                    totalSteps,
+                    tokens: runTokens,
+                  }
+                : {
+                    type: 'error',
+                    error:
+                      stepResult.type === 'error'
+                        ? stepResult.error
+                        : new Error('Stopped by middleware'),
+                    totalSteps,
+                    tokens: runTokens,
+                  };
             return yield* finalizeRunStream(currentState, runResult);
           }
           if (chain.state) currentState = chain.state;
@@ -1669,17 +1669,23 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               timestamp: Date.now(),
             };
             totalSteps++;
-            const runResult: RunResult = stoppedResult.type === 'stopped' ? {
-              type: 'stopped',
-              data: stoppedResult.data as string | undefined,
-              totalSteps,
-              tokens: runTokens,
-            } : {
-              type: 'error',
-              error: stoppedResult.type === 'error' ? stoppedResult.error : new Error('Stopped by middleware'),
-              totalSteps,
-              tokens: runTokens,
-            };
+            const runResult: RunResult =
+              stoppedResult.type === 'stopped'
+                ? {
+                    type: 'stopped',
+                    data: stoppedResult.data as string | undefined,
+                    totalSteps,
+                    tokens: runTokens,
+                  }
+                : {
+                    type: 'error',
+                    error:
+                      stoppedResult.type === 'error'
+                        ? stoppedResult.error
+                        : new Error('Stopped by middleware'),
+                    totalSteps,
+                    tokens: runTokens,
+                  };
             return yield* finalizeRunStream(stepResult.state, runResult);
           }
         }
