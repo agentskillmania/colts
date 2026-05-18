@@ -38,6 +38,8 @@ export interface StepChainResult {
   stopped: boolean;
   /** 合并后的 state override */
   state?: AgentState;
+  /** 受控中断时附带的自定义 result */
+  result?: import('../execution/index.js').StepResult;
 }
 
 /** run 级别 hook 链的执行结果 */
@@ -46,6 +48,8 @@ export interface RunChainResult {
   stopped: boolean;
   /** 合并后的 state override */
   state?: AgentState;
+  /** 受控中断时附带的自定义 result */
+  result?: import('../execution/index.js').RunResult;
 }
 
 // ─── Executor ────────────────────────────────────────────────────
@@ -138,7 +142,7 @@ export class MiddlewareExecutor {
 
       if (ret && typeof ret === 'object') {
         if ('stop' in ret && ret.stop) {
-          return { stopped: true, state };
+          return { stopped: true, state, result: ret.result };
         }
         if (ret.state) state = ret.state;
       }
@@ -158,7 +162,7 @@ export class MiddlewareExecutor {
 
       if (ret && typeof ret === 'object') {
         if ('stop' in ret && ret.stop) {
-          return { stopped: true, state };
+          return { stopped: true, state, result: ret.result };
         }
         if (ret.state) state = ret.state;
       }
@@ -179,7 +183,7 @@ export class MiddlewareExecutor {
 
       if (ret && typeof ret === 'object') {
         if ('stop' in ret && ret.stop) {
-          return { stopped: true, state };
+          return { stopped: true, state, result: ret.result };
         }
         if (ret.state) state = ret.state;
       }
