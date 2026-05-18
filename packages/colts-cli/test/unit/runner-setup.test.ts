@@ -45,7 +45,7 @@ describe('runner-setup', () => {
     },
     maxSteps: 50,
     requestTimeout: 60000,
-    skillDirectories: ['./skills', '/absolute/skills'],
+    skillDirs: ['./skills', '/absolute/skills'],
     subAgents: [
       {
         name: 'research-agent',
@@ -93,9 +93,9 @@ describe('runner-setup', () => {
       expect(llm.maxConcurrency).toBe(10);
     });
 
-    it('should pass skillDirectories to runner options', () => {
+    it('should pass skillDirs to runner options', () => {
       createRunnerFromConfig(validConfig);
-      expect((capturedOptions as Record<string, unknown>).skillDirectories).toEqual([
+      expect((capturedOptions as Record<string, unknown>).skillDirs).toEqual([
         './skills',
         '/absolute/skills',
       ]);
@@ -138,7 +138,7 @@ describe('runner-setup', () => {
       };
       const runner = createRunnerFromConfig(minimalConfig);
       expect(runner).not.toBeNull();
-      expect((capturedOptions as Record<string, unknown>).skillDirectories).toBeUndefined();
+      expect((capturedOptions as Record<string, unknown>).skillDirs).toBeUndefined();
       expect((capturedOptions as Record<string, unknown>).subAgents).toBeUndefined();
       expect((capturedOptions as Record<string, unknown>).thinkingEnabled).toBeUndefined();
       expect((capturedOptions as Record<string, unknown>).enablePromptThinking).toBeUndefined();

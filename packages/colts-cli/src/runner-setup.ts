@@ -63,7 +63,7 @@ export function createRunnerFromConfig(config: AppConfig): AgentRunner | null {
     },
     maxSteps: config.maxSteps,
     requestTimeout: config.requestTimeout,
-    skillDirectories: config.skillDirectories,
+    skillDirs: config.skillDirs,
     toolRegistry: registry,
     thinkingEnabled: config.llm.thinkingEnabled,
     enablePromptThinking: config.llm.enablePromptThinking,

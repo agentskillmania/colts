@@ -327,8 +327,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Initialize skill provider (injection > quick init)
     if (options.skillProvider) {
       this._skillProvider = options.skillProvider;
-    } else if (options.skillDirectories && options.skillDirectories.length > 0) {
-      this._skillProvider = new FilesystemSkillProvider(options.skillDirectories);
+    } else if (options.skillDirs && options.skillDirs.length > 0) {
+      this._skillProvider = new FilesystemSkillProvider(options.skillDirs);
     }
 
     // Auto-register skill tools

@@ -55,7 +55,7 @@ export interface RunnerOptions {
   /** Skill provider 实例（注入模式） */
   skillProvider?: ISkillProvider;
   /** Skill 目录列表（快速初始化，内部创建 FilesystemSkillProvider） */
-  skillDirectories?: string[];
+  skillDirs?: string[];
 
   // --- SubAgents ---
   /** Sub-agent 配置列表，提供时自动注册 delegate 工具 */
