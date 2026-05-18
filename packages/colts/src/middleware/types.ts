@@ -35,18 +35,24 @@ export type AdvanceHookReturn =
  *
  * - void → 继续
  * - { state? } → 继续，覆盖 state
- * - { stop: true } → 受控中断，runner 返回 error StepResult
+ * - { stop: true, result? } → 受控中断，有 result 则用 result，无则由 runner 生成默认中断结果
  */
-export type StepHookReturn = void | { state?: AgentState; stop?: false } | { stop: true };
+export type StepHookReturn =
+  | void
+  | { state?: AgentState; stop?: false }
+  | { stop: true; result?: StepResult };
 
 /**
  * Run 级别钩子的返回值
  *
  * - void → 继续
  * - { state? } → 继续，覆盖 state
- * - { stop: true } → 受控中断，runner 返回 error RunResult
+ * - { stop: true, result? } → 受控中断，有 result 则用 result，无则由 runner 生成默认中断结果
  */
-export type RunHookReturn = void | { state?: AgentState; stop?: false } | { stop: true };
+export type RunHookReturn =
+  | void
+  | { state?: AgentState; stop?: false }
+  | { stop: true; result?: RunResult };
 
 /**
  * afterRun 钩子的返回值（纯观察，无中断能力）
