@@ -70,7 +70,8 @@ export type StepResult =
   | { type: 'continue'; toolResult: unknown; actions: Action[]; tokens: TokenStats }
   | { type: 'done'; answer: string; tokens: TokenStats }
   | { type: 'error'; error: Error; tokens: TokenStats }
-  | { type: 'abort'; tokens: TokenStats };
+  | { type: 'abort'; tokens: TokenStats }
+  | { type: 'stopped'; data?: unknown; tokens: TokenStats };
 
 /**
  * Events emitted during step/advance stream
@@ -223,7 +224,8 @@ export type RunResult =
   | { type: 'success'; answer: string; totalSteps: number; tokens: TokenStats }
   | { type: 'max_steps'; totalSteps: number; tokens: TokenStats }
   | { type: 'error'; error: Error; totalSteps: number; tokens: TokenStats }
-  | { type: 'abort'; totalSteps: number; tokens: TokenStats };
+  | { type: 'abort'; totalSteps: number; tokens: TokenStats }
+  | { type: 'stopped'; data?: string; totalSteps: number; tokens: TokenStats };
 
 /**
  * Events emitted during runStream()
