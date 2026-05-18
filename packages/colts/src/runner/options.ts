@@ -45,7 +45,7 @@ export interface RunnerOptions {
   /** 请求超时（毫秒） */
   requestTimeout?: number;
 
-  /** run() 的默认最大步数（默认 10） */
+  /** run() 的默认最大步数（默认 20） */
   maxSteps?: number;
 
   /** 上下文压缩器：传 CompressionConfig 使用内置，传 IContextCompressor 使用自定义 */
