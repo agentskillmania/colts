@@ -42,6 +42,13 @@ export class DefaultExecutionPolicy implements IExecutionPolicy {
         runResultType: 'abort',
       };
     }
+    if (stepResult.type === 'stopped') {
+      return {
+        decision: 'stop',
+        reason: 'Stopped by middleware',
+        runResultType: 'stopped',
+      };
+    }
     if (meta.stepCount >= meta.maxSteps) {
       return {
         decision: 'stop',

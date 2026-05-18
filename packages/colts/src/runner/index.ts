@@ -952,6 +952,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         runnerOptions: this.options,
       });
       if (chain.stopped) {
+        // If middleware provided a custom result, use it directly
+        if (chain.result) {
+          return { state, result: chain.result };
+        }
+        // Otherwise fall back to error (backward compatible)
         return {
           state,
           result: {
@@ -981,6 +986,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         });
         if (chain.state) stepState = chain.state;
         if (chain.stopped) {
+          // If middleware provided a custom result, use it directly
+          if (chain.result) {
+            return { state: stepState, result: chain.result };
+          }
+          // Otherwise fall back to error (backward compatible)
           return {
             state: stepState,
             result: {
@@ -1016,7 +1026,22 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             stepNumber: stepIdx,
             runnerOptions: this.options,
           });
-          if (chain.stopResult)
+          if (chain.stopResult) {
+            // If middleware provided a stopped result with completed phase, use it
+            if (
+              chain.stopResult.done &&
+              chain.stopResult.phase.type === 'completed'
+            ) {
+              return {
+                state: currentState,
+                result: {
+                  type: 'stopped',
+                  data: chain.stopResult.phase.answer,
+                  tokens: stepTokens,
+                },
+              };
+            }
+            // Otherwise fall back to error (backward compatible)
             return {
               state: currentState,
               result: {
@@ -1025,6 +1050,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
                 tokens: stepTokens,
               },
             };
+          }
           if (chain.state) currentState = chain.state;
           if (chain.execState) currentExecState = chain.execState;
         }
@@ -1047,7 +1073,22 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             stepNumber: stepIdx,
             runnerOptions: this.options,
           });
-          if (chain.stopResult)
+          if (chain.stopResult) {
+            // If middleware provided a stopped result with completed phase, use it
+            if (
+              chain.stopResult.done &&
+              chain.stopResult.phase.type === 'completed'
+            ) {
+              return {
+                state: currentState,
+                result: {
+                  type: 'stopped',
+                  data: chain.stopResult.phase.answer,
+                  tokens: stepTokens,
+                },
+              };
+            }
+            // Otherwise fall back to error (backward compatible)
             return {
               state: currentState,
               result: {
@@ -1056,6 +1097,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
                 tokens: stepTokens,
               },
             };
+          }
           if (chain.state) effectiveResult = { ...result, state: chain.state };
           if (chain.execState) effectiveResult = { ...effectiveResult, execState: chain.execState };
         }
@@ -1192,6 +1234,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         runnerOptions: this.options,
       });
       if (chain.stopped) {
+        // If middleware provided a custom result, use it directly
+        if (chain.result) {
+          return { state, result: chain.result };
+        }
+        // Otherwise fall back to error (backward compatible)
         return {
           state,
           result: {
@@ -1234,6 +1281,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             });
             if (chain.state) result.state = chain.state;
             if (chain.stopped) {
+              // If middleware provided a custom result, use it directly
+              if (chain.result) {
+                return { state: result.state, result: chain.result };
+              }
+              // Otherwise fall back to error (backward compatible)
               return {
                 state: result.state,
                 result: {
@@ -1291,6 +1343,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         runnerOptions: this.options,
       });
       if (chain.stopped) {
+        // If middleware provided a custom result, use it directly
+        if (chain.result) {
+          return { state: currentState, result: chain.result };
+        }
+        // Otherwise fall back to error (backward compatible)
         const runResult: RunResult = {
           type: 'error',
           error: new Error('Stopped by middleware'),
@@ -1388,6 +1445,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           } else if (decision.runResultType === 'abort') {
             runResult = { type: 'abort', totalSteps, tokens: runTokens };
             this.emit('abort', { totalSteps, timestamp: Date.now() });
+          } else if (decision.runResultType === 'stopped') {
+            runResult = {
+              type: 'stopped',
+              data: (result as { type: 'stopped'; data?: string }).data,
+              totalSteps,
+              tokens: runTokens,
+            };
           } else {
             runResult = { type: 'max_steps', totalSteps, tokens: runTokens };
           }
@@ -1455,6 +1519,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         runnerOptions: this.options,
       });
       if (chain.stopped) {
+        // If middleware provided a custom result, use it directly
+        if (chain.result) {
+          return { state: currentState, result: chain.result };
+        }
+        // Otherwise fall back to error (backward compatible)
         const runResult: RunResult = {
           type: 'error',
           error: new Error('Stopped by middleware'),
@@ -1510,7 +1579,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             runnerOptions: this.options,
           });
           if (chain.stopped) {
-            const stepResult = {
+            // If middleware provided a custom result, use it directly
+            const stepResult = chain.result ?? {
               type: 'error' as const,
               error: new Error('Stopped by middleware'),
               tokens: { input: 0, output: 0 } as TokenStats,
@@ -1518,9 +1588,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             this.emit('step:end', { step: totalSteps, result: stepResult, timestamp: Date.now() });
             yield { type: 'step:end', step: totalSteps, result: stepResult, timestamp: Date.now() };
             totalSteps++;
-            const runResult: RunResult = {
+            const runResult: RunResult = chain.result?.type === 'stopped' ? {
+              type: 'stopped',
+              data: chain.result.data as string | undefined,
+              totalSteps,
+              tokens: runTokens,
+            } : {
               type: 'error',
-              error: stepResult.error,
+              error: stepResult.type === 'error' ? stepResult.error : new Error('Stopped by middleware'),
               totalSteps,
               tokens: runTokens,
             };
@@ -1576,7 +1651,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           });
           if (chain.state) stepResult = { ...stepResult, state: chain.state };
           if (chain.stopped) {
-            const stoppedResult = {
+            // If middleware provided a custom result, use it directly
+            const stoppedResult = chain.result ?? {
               type: 'error' as const,
               error: new Error('Stopped by middleware'),
               tokens: stepResult.result.tokens,
@@ -1593,9 +1669,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               timestamp: Date.now(),
             };
             totalSteps++;
-            const runResult: RunResult = {
+            const runResult: RunResult = stoppedResult.type === 'stopped' ? {
+              type: 'stopped',
+              data: stoppedResult.data as string | undefined,
+              totalSteps,
+              tokens: runTokens,
+            } : {
               type: 'error',
-              error: stoppedResult.error,
+              error: stoppedResult.type === 'error' ? stoppedResult.error : new Error('Stopped by middleware'),
               totalSteps,
               tokens: runTokens,
             };
@@ -1672,6 +1753,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           } else if (decision.runResultType === 'abort') {
             runResult = { type: 'abort', totalSteps, tokens: runTokens };
             this.emit('abort', { totalSteps, timestamp: Date.now() });
+          } else if (decision.runResultType === 'stopped') {
+            runResult = {
+              type: 'stopped',
+              data: (stepResult.result as { type: 'stopped'; data?: string }).data,
+              totalSteps,
+              tokens: runTokens,
+            };
           } else {
             runResult = { type: 'max_steps', totalSteps, tokens: runTokens };
           }
