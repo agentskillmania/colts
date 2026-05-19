@@ -124,4 +124,6 @@ export type {
   ClientStats,
   /** Scheduler lifecycle events. */
   SchedulerEvent,
+  /** Model metadata for context management. */
+  ModelMeta,
 } from './types.js';

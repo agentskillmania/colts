@@ -324,4 +324,32 @@ describe('PiAiAdapter', () => {
       expect(events.map((e) => e.type)).toEqual(['text', 'text', 'tool_call', 'done']);
     });
   });
+
+  describe('getModelMeta', () => {
+    it('should return contextWindow and maxTokens for a known model', () => {
+      vi.mocked(getModel).mockReturnValue({
+        id: 'gpt-4',
+        name: 'GPT-4',
+        api: 'openai-completions',
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        reasoning: false,
+        input: ['text'],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 8192,
+        maxTokens: 4096,
+      } as never);
+
+      const meta = adapter.getModelMeta('gpt-4');
+      expect(meta.contextWindow).toBe(8192);
+      expect(meta.maxTokens).toBe(4096);
+    });
+
+    it('should return fallback values for unknown model', () => {
+      vi.mocked(getModel).mockReturnValue(null);
+      const meta = adapter.getModelMeta('unknown-model');
+      expect(meta.contextWindow).toBe(128000);
+      expect(meta.maxTokens).toBe(4096);
+    });
+  });
 });

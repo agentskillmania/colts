@@ -205,6 +205,20 @@ export class PiAiAdapter {
   }
 
   /**
+   * Get model metadata (context window size, max output tokens).
+   *
+   * @param modelId - Model identifier (e.g., 'gpt-4', 'claude-3-5-sonnet')
+   * @returns Model metadata including context window and max tokens
+   */
+  getModelMeta(modelId: string): import('./types.js').ModelMeta {
+    const model = this.createModel(modelId);
+    return {
+      contextWindow: model.contextWindow,
+      maxTokens: model.maxTokens,
+    };
+  }
+
+  /**
    * Build a Context instance from messages.
    *
    * @param messages - Array of conversation messages
