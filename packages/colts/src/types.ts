@@ -345,6 +345,12 @@ export interface CompressResult {
   removedTokenCount?: number;
   /** When compression occurred */
   compressedAt?: number;
+  /** Messages whose tool output content was replaced with stubs */
+  prunedMessages?: Array<{
+    index: number;
+    newContent: string;
+    newTokenCount: number;
+  }>;
 }
 
 /**
@@ -397,6 +403,10 @@ export interface CompressionConfig {
   summaryModel?: string;
   /** LLM provider for summary generation (defaults to the main provider) */
   summaryProvider?: ILLMProvider;
+  /** Model context window size in tokens (for percentage-based triggering) */
+  contextWindowSize?: number;
+  /** Minimum token count for a tool output to be pruned (default: 150) */
+  pruneThreshold?: number;
 }
 
 // ========== Skill Interfaces ==========
