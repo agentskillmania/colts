@@ -300,8 +300,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       requestTimeout: options.requestTimeout ?? 1800000,
     };
 
-    // Initialize message assembler (default implementation)
-    this.messageAssembler = new DefaultMessageAssembler();
+    // Initialize message assembler (injected or default)
+    this.messageAssembler = options.messageAssembler ?? new DefaultMessageAssembler();
 
     // Initialize phase router (default handlers)
     this.phaseRouter = createRouter();
