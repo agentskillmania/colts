@@ -175,17 +175,19 @@ export class PiAiAdapter {
    * @internal
    */
   private createModel(modelId: string): Model<string> {
-    // Try to get model from pi-ai registry
-    const model = getModel('openai', modelId as never);
-    if (model) {
-      // If we have a custom base URL, override the model's baseUrl
-      if (this.customBaseUrl) {
-        return {
-          ...model,
-          baseUrl: this.customBaseUrl,
-        } as Model<string>;
+    // Try to get model from pi-ai registry across known providers
+    const providers = ['openai', 'opencode', 'opencode-go', 'anthropic', 'google'] as const;
+    for (const provider of providers) {
+      const model = getModel(provider, modelId as never);
+      if (model) {
+        if (this.customBaseUrl) {
+          return {
+            ...model,
+            baseUrl: this.customBaseUrl,
+          } as Model<string>;
+        }
+        return model as Model<string>;
       }
-      return model as Model<string>;
     }
 
     // Fallback: create a custom model for OpenAI-compatible APIs
