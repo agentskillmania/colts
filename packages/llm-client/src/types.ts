@@ -792,3 +792,13 @@ export interface TrackedProvider extends ProviderConfig {
    */
   activeCount: number;
 }
+
+/**
+ * Model metadata for context management.
+ */
+export interface ModelMeta {
+  /** Maximum context window size in tokens */
+  contextWindow: number;
+  /** Maximum output tokens per request */
+  maxTokens: number;
+}
