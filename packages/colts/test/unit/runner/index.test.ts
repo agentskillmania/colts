@@ -10,6 +10,7 @@ import type { AgentConfig, IContextCompressor, CompressResult } from '../../../s
 import type { ISkillProvider, SkillManifest } from '../../../src/skills/types.js';
 import type { SubAgentConfig } from '../../../src/subagent/types.js';
 import { FilesystemSkillProvider } from '../../../src/skills/filesystem-provider.js';
+import type { IMessageAssembler } from '../../../src/message-assembler/types.js';
 
 describe('AgentRunner', () => {
   // Mock LLMClient
@@ -85,6 +86,36 @@ describe('AgentRunner', () => {
           model: 'gpt-4',
         } as any);
       }).toThrow('Must specify either llmClient or llm');
+    });
+
+    it('should use injected messageAssembler', async () => {
+      const client = createMockClient();
+      const mockResponse: LLMResponse = {
+        content: 'Hello!',
+        tokens: { input: 1, output: 1 },
+        stopReason: 'stop',
+      };
+      vi.mocked(client.call).mockResolvedValue(mockResponse);
+
+      const customAssembler: IMessageAssembler = {
+        build: vi.fn().mockReturnValue([
+          { role: 'user', content: 'custom-system', timestamp: Date.now() },
+          { role: 'user', content: 'Hi there!', timestamp: Date.now() },
+        ]),
+      };
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        messageAssembler: customAssembler,
+      });
+
+      const state = createAgentState(defaultConfig);
+      await runner.chat(state, 'Hi there!');
+
+      expect(customAssembler.build).toHaveBeenCalled();
+      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      expect(callArg.messages[0].content).toBe('custom-system');
     });
   });
 

@@ -17,6 +17,7 @@ import type { SubAgentConfig, ISubAgentFactory } from '../subagent/types.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 import type { IExecutionPolicy } from '../policy/types.js';
 import type { AgentMiddleware } from '../middleware/types.js';
+import type { IMessageAssembler } from '../message-assembler/types.js';
 
 /**
  * AgentRunner 配置选项
@@ -77,4 +78,7 @@ export interface RunnerOptions {
 
   /** 启用 prompt 级 thinking 引导（不支持原生 thinking 的模型） */
   enablePromptThinking?: boolean;
+
+  /** 自定义消息组装器（默认 DefaultMessageAssembler） */
+  messageAssembler?: IMessageAssembler;
 }

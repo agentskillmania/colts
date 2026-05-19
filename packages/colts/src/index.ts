@@ -90,6 +90,10 @@ export {
 export type { IToolSchemaFormatter } from './tools/schema-formatter.js';
 export { DefaultToolSchemaFormatter } from './tools/schema-formatter.js';
 
+// Message Assembler
+export type { IMessageAssembler, BuildMessagesOptions } from './message-assembler/types.js';
+export { DefaultMessageAssembler } from './message-assembler/default-assembler.js';
+
 // Runner
 export {
   AgentRunner,
