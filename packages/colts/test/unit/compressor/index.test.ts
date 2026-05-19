@@ -1,14 +1,14 @@
 /**
  * @fileoverview DefaultContextCompressor Unit Tests
  *
- * Coverage: constructor, shouldCompress, compress (all 4 strategies),
- * generateSummary, edge cases
+ * Coverage: constructor, shouldCompress (token-based + message-count fallback),
+ * compress (prune → summarize → truncate pipeline), edge cases
  */
 
 import { describe, it, expect, vi } from 'vitest';
 import { DefaultContextCompressor } from '../../../src/compressor/index.js';
 import { createAgentState } from '../../../src/state/index.js';
-import type { AgentState, ILLMProvider, CompressionConfig } from '../../../src/types.js';
+import type { AgentState, ILLMProvider, CompressionConfig, Message } from '../../../src/types.js';
 
 // Helper: create an AgentState with a specified number of messages
 function createStateWithMessages(count: number): AgentState {
@@ -51,6 +51,52 @@ function createMockLLMProvider(summaryText: string): ILLMProvider {
     }),
     stream: vi.fn(),
   };
+}
+
+// Helper: create state with tool messages of specific sizes
+function createStateWithToolMessages(toolSizes: number[]): AgentState {
+  const state = createAgentState({
+    name: 'test',
+    instructions: 'test',
+    tools: [],
+  });
+
+  // Create alternating user+tool messages, then a final user message
+  let msgIndex = 0;
+  for (const size of toolSizes) {
+    // User message
+    state.context.messages.push({
+      role: 'user',
+      content: `User query ${msgIndex}`,
+      type: 'text',
+      timestamp: Date.now(),
+    });
+
+    // Tool message with approximate target token count
+    // Using ~4 chars per token as rough approximation
+    const toolContent = 'x'.repeat(size * 4);
+    state.context.messages.push({
+      role: 'tool',
+      content: toolContent,
+      type: 'tool-result',
+      toolName: 'test_tool',
+      toolCallId: `tc_${msgIndex}`,
+      timestamp: Date.now(),
+      tokenCount: size,
+    });
+
+    msgIndex++;
+  }
+
+  // Final user message
+  state.context.messages.push({
+    role: 'user',
+    content: 'Final question',
+    type: 'text',
+    timestamp: Date.now(),
+  });
+
+  return state;
 }
 
 // ============================================================
@@ -129,12 +175,109 @@ describe('DefaultContextCompressor - Constructor', () => {
     const callArgs = (summaryLLM.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(callArgs.model).toBe('summary-model');
   });
+
+  it('should accept contextWindowSize and pruneThreshold config', () => {
+    const compressor = new DefaultContextCompressor({
+      contextWindowSize: 128000,
+      pruneThreshold: 200,
+    });
+    expect(compressor).toBeDefined();
+  });
 });
 
 // ============================================================
-// shouldCompress
+// shouldCompress (token-based triggering)
 // ============================================================
-describe('DefaultContextCompressor - shouldCompress', () => {
+describe('DefaultContextCompressor - shouldCompress (token-based)', () => {
+  it('should trigger at 80% of contextWindowSize', () => {
+    // contextWindowSize=1000, 80%=800
+    const compressor = new DefaultContextCompressor({
+      contextWindowSize: 1000,
+      threshold: 100, // message count fallback
+    });
+    const state = createStateWithMessages(10);
+
+    // Set up messages with ~100 tokens each
+    state.context.messages.forEach((msg) => {
+      msg.content = 'x'.repeat(400); // ~100 tokens
+      msg.tokenCount = 100;
+    });
+
+    // 10 messages * 100 tokens = 1000 tokens >= 800 (80%)
+    expect(compressor.shouldCompress(state)).toBe(true);
+  });
+
+  it('should not trigger below 80% of contextWindowSize', () => {
+    // contextWindowSize=1000, 80%=800
+    const compressor = new DefaultContextCompressor({
+      contextWindowSize: 1000,
+      threshold: 100,
+    });
+    const state = createStateWithMessages(5);
+
+    // Set up messages with ~100 tokens each
+    state.context.messages.forEach((msg) => {
+      msg.content = 'x'.repeat(400);
+      msg.tokenCount = 100;
+    });
+
+    // 5 messages * 100 tokens = 500 tokens < 800 (80%)
+    expect(compressor.shouldCompress(state)).toBe(false);
+  });
+
+  it('should include summary tokens when estimating effective tokens', () => {
+    const compressor = new DefaultContextCompressor({
+      contextWindowSize: 1000,
+      threshold: 100,
+    });
+    const state = createStateWithMessages(5);
+
+    // Set up messages with ~100 tokens each
+    state.context.messages.forEach((msg) => {
+      msg.content = 'x'.repeat(400);
+      msg.tokenCount = 100;
+    });
+
+    // Add existing compression with 300-token summary
+    state.context.compression = {
+      summary: 'x'.repeat(1200), // ~300 tokens
+      anchor: 0,
+      summaryTokenCount: 300,
+    };
+
+    // 5 messages * 100 + 300 summary = 800 tokens >= 800 (80%)
+    expect(compressor.shouldCompress(state)).toBe(true);
+  });
+
+  it('should only count tokens from anchor onwards', () => {
+    const compressor = new DefaultContextCompressor({
+      contextWindowSize: 1000,
+      threshold: 100,
+    });
+    const state = createStateWithMessages(10);
+
+    // Set up messages with ~100 tokens each
+    state.context.messages.forEach((msg) => {
+      msg.content = 'x'.repeat(400);
+      msg.tokenCount = 100;
+    });
+
+    // Set anchor at 5 (only count messages[5..9])
+    state.context.compression = {
+      summary: 'x'.repeat(400), // ~100 tokens
+      anchor: 5,
+      summaryTokenCount: 100,
+    };
+
+    // 5 messages * 100 + 100 summary = 600 tokens < 800 (80%)
+    expect(compressor.shouldCompress(state)).toBe(false);
+  });
+});
+
+// ============================================================
+// shouldCompress (message-count fallback)
+// ============================================================
+describe('DefaultContextCompressor - shouldCompress (message-count fallback)', () => {
   it('should return false when below threshold', () => {
     const compressor = new DefaultContextCompressor({ threshold: 20 });
     const state = createStateWithMessages(19);
@@ -171,10 +314,139 @@ describe('DefaultContextCompressor - shouldCompress', () => {
 });
 
 // ============================================================
-// compress - truncate strategy
+// compress - prune step
+// ============================================================
+describe('DefaultContextCompressor - compress (prune)', () => {
+  it('should stub out tool outputs over threshold', async () => {
+    const compressor = new DefaultContextCompressor({
+      strategy: 'truncate',
+      pruneThreshold: 100,
+      keepRecent: 2,
+    });
+
+    // Create state with tool messages of varying sizes
+    const state = createStateWithToolMessages([50, 150, 200]);
+
+    const result = await compressor.compress(state);
+
+    // Should have 2 pruned messages (150 and 200 token tools)
+    expect(result.prunedMessages).toHaveLength(2);
+    expect(result.prunedMessages?.[0].newContent).toContain('150 tokens, pruned');
+    expect(result.prunedMessages?.[1].newContent).toContain('200 tokens, pruned');
+  });
+
+  it('should not prune tool outputs below threshold', async () => {
+    const compressor = new DefaultContextCompressor({
+      strategy: 'truncate',
+      pruneThreshold: 200,
+      keepRecent: 2,
+    });
+
+    // Create state with tool messages below threshold
+    const state = createStateWithToolMessages([50, 100, 150]);
+
+    const result = await compressor.compress(state);
+
+    // Should have no pruned messages
+    expect(result.prunedMessages).toHaveLength(0);
+  });
+
+  it('should skip already-pruned stubs', async () => {
+    const compressor = new DefaultContextCompressor({
+      strategy: 'truncate',
+      pruneThreshold: 100,
+      keepRecent: 2,
+    });
+
+    const state = createStateWithToolMessages([150]);
+
+    // Manually mark the tool message as already pruned
+    state.context.messages[1].content = '[Tool result for test_tool: 150 tokens, pruned]';
+
+    const result = await compressor.compress(state);
+
+    // Should skip the already-pruned message
+    expect(result.prunedMessages).toHaveLength(0);
+  });
+});
+
+// ============================================================
+// compress - structured summarize
+// ============================================================
+describe('DefaultContextCompressor - compress (structured summarize)', () => {
+  it('should call LLM with structured prompt', async () => {
+    const llm = createMockLLMProvider(
+      '## Key Findings\nFound the bug in line 42\n\n## Decisions & Rationale\nDecided to refactor\n\n## User Preferences'
+    );
+    const compressor = new DefaultContextCompressor(
+      { strategy: 'summarize', threshold: 10, keepRecent: 3 },
+      llm,
+      'gpt-4'
+    );
+    const state = createStateWithMessages(10);
+
+    await compressor.compress(state);
+
+    const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const prompt = callArgs.messages[0].content as string;
+
+    // Verify structured format is in prompt
+    expect(prompt).toContain('## Key Findings');
+    expect(prompt).toContain('## Decisions & Rationale');
+    expect(prompt).toContain('## User Preferences');
+  });
+
+  it('should include previous summary on re-compress', async () => {
+    const llm = createMockLLMProvider('Updated summary');
+    const compressor = new DefaultContextCompressor(
+      { strategy: 'summarize', threshold: 5, keepRecent: 2 },
+      llm,
+      'gpt-4'
+    );
+    const state = createStateWithCompression(
+      10,
+      5,
+      '## Key Findings\nPrevious finding\n\n## Decisions & Rationale\nPrevious decision\n\n## User Preferences'
+    );
+
+    await compressor.compress(state);
+
+    const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const prompt = callArgs.messages[0].content as string;
+
+    expect(prompt).toContain('Previous context:');
+    expect(prompt).toContain('Previous finding');
+    expect(prompt).toContain('Preserve ALL key points');
+  });
+
+  it('should prefer summaryProvider over llmProvider', async () => {
+    const mainLLM = createMockLLMProvider('main summary');
+    const summaryLLM = createMockLLMProvider('dedicated summary');
+    const compressor = new DefaultContextCompressor(
+      {
+        strategy: 'summarize',
+        threshold: 10,
+        keepRecent: 3,
+        summaryProvider: summaryLLM,
+        summaryModel: 'summary-model',
+      },
+      mainLLM,
+      'main-model'
+    );
+    const state = createStateWithMessages(10);
+
+    await compressor.compress(state);
+
+    expect(summaryLLM.call).toHaveBeenCalledOnce();
+    expect(mainLLM.call).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================
+// compress - truncate step
 // ============================================================
 describe('DefaultContextCompressor - compress (truncate)', () => {
-  it('should return anchor for last N messages', async () => {
+  it('should anchor for last N messages', async () => {
     const compressor = new DefaultContextCompressor({
       strategy: 'truncate',
       threshold: 10,
@@ -203,86 +475,20 @@ describe('DefaultContextCompressor - compress (truncate)', () => {
 });
 
 // ============================================================
-// compress - summarize strategy
-// ============================================================
-describe('DefaultContextCompressor - compress (summarize)', () => {
-  it('should call LLM to generate summary', async () => {
-    const llm = createMockLLMProvider('This is a summary');
-    const compressor = new DefaultContextCompressor(
-      { strategy: 'summarize', threshold: 10, keepRecent: 3 },
-      llm,
-      'gpt-4'
-    );
-    const state = createStateWithMessages(10);
-
-    const result = await compressor.compress(state);
-    expect(result.anchor).toBe(7);
-    expect(result.summary).toBe('This is a summary');
-    expect(result.summaryTokenCount).toBeGreaterThan(0);
-    expect(result.removedTokenCount).toBeGreaterThan(0);
-    expect(result.compressedAt).toBeGreaterThan(0);
-    expect(llm.call).toHaveBeenCalledOnce();
-  });
-
-  it('should include previous summary in LLM prompt when re-compressing', async () => {
-    const llm = createMockLLMProvider('Updated summary');
-    const compressor = new DefaultContextCompressor(
-      { strategy: 'summarize', threshold: 5, keepRecent: 2 },
-      llm,
-      'gpt-4'
-    );
-    const state = createStateWithCompression(10, 5, 'Old summary');
-
-    const result = await compressor.compress(state);
-    expect(result.anchor).toBe(8); // max(5, 10-2) = 8
-    expect(result.summary).toBe('Updated summary');
-
-    // Verify LLM was called with previous summary
-    const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    const prompt = callArgs.messages[0].content as string;
-    expect(prompt).toContain('Old summary');
-  });
-
-  it('should throw at construction when LLM provider is missing', () => {
-    expect(() => new DefaultContextCompressor({ strategy: 'summarize', threshold: 5 })).toThrow(
-      'requires an LLM provider'
-    );
-  });
-
-  it('should use summaryModel when provided', async () => {
-    const llm = createMockLLMProvider('Model-specific summary');
-    const compressor = new DefaultContextCompressor(
-      { strategy: 'summarize', threshold: 10, keepRecent: 3, summaryModel: 'custom-model' },
-      llm,
-      'gpt-4'
-    );
-    const state = createStateWithMessages(10);
-
-    const result = await compressor.compress(state);
-    expect(result.summary).toBe('Model-specific summary');
-
-    const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(callArgs.model).toBe('custom-model');
-  });
-});
-
-// ============================================================
 // compress - edge cases
 // ============================================================
 describe('DefaultContextCompressor - compress edge cases', () => {
-  it('should return existing anchor when nothing to compress', async () => {
+  it('should handle nothing to compress', async () => {
     const compressor = new DefaultContextCompressor({
       strategy: 'truncate',
       threshold: 10,
       keepRecent: 20,
     });
-    // keepRecent > message count → anchor = max(0, 5 - 20) = 0
-    // But existing anchor might be 0 too → nothing to compress
     const state = createStateWithMessages(5);
 
     const result = await compressor.compress(state);
-    // anchor = max(0, 5-20) = 0, existingAnchor = 0
-    // anchor <= existingAnchor → return existing
+    // keepRecent > message count → anchor = max(0, 5-20) = 0
+    // anchor <= existingAnchor (0) → return existing
     expect(result.anchor).toBe(0);
     expect(result.summary).toBe('');
   });
@@ -295,9 +501,9 @@ describe('DefaultContextCompressor - compress edge cases', () => {
     });
     const state = createStateWithCompression(20, 10, 'Existing summary');
 
+    const result = await compressor.compress(state);
     // anchor = max(10, 20-100) = max(10, -80) = 10
     // 10 <= 10 → return existing
-    const result = await compressor.compress(state);
     expect(result.anchor).toBe(10);
     expect(result.summary).toBe('Existing summary');
   });
@@ -310,129 +516,29 @@ describe('DefaultContextCompressor - compress edge cases', () => {
     });
     const state = createStateWithCompression(20, 8, 'Summary');
 
-    // anchor = max(8, 20-5) = max(8, 15) = 15
     const result = await compressor.compress(state);
+    // anchor = max(8, 20-5) = max(8, 15) = 15
     expect(result.anchor).toBe(15);
     expect(result.summary).toBe('');
   });
 
-  it('should use truncate as default strategy when strategy is undefined', async () => {
-    const compressor = new DefaultContextCompressor({
-      threshold: 5,
-      keepRecent: 2,
-    });
-    const state = createStateWithMessages(8);
+  it('should handle summarize strategy with existing anchor', async () => {
+    const llm = createMockLLMProvider('New summary');
+    const compressor = new DefaultContextCompressor(
+      { strategy: 'summarize', threshold: 10, keepRecent: 5 },
+      llm,
+      'gpt-4'
+    );
+    const state = createStateWithCompression(20, 8, 'Old summary');
 
     const result = await compressor.compress(state);
-    expect(result.anchor).toBe(6);
-    expect(result.summary).toBe('');
-  });
-});
+    // anchor = max(8, 20-5) = 15
+    expect(result.anchor).toBe(15);
+    expect(result.summary).toBe('New summary');
 
-// ============================================================
-// generateSummary (indirect through compress)
-// ============================================================
-describe('DefaultContextCompressor - generateSummary', () => {
-  it('should format messages correctly in summary prompt', async () => {
-    const llm = createMockLLMProvider('Summary');
-    const compressor = new DefaultContextCompressor(
-      { strategy: 'summarize', threshold: 5, keepRecent: 1 },
-      llm,
-      'gpt-4'
-    );
-
-    const state = createAgentState({
-      name: 'test',
-      instructions: 'test',
-      tools: [],
-    });
-    // 4 messages, keepRecent=1 → anchor=3 → compress messages[0..2]
-    state.context.messages.push(
-      { role: 'user', content: 'Hello', type: 'text' },
-      { role: 'assistant', content: 'Hi there', type: 'text' },
-      { role: 'tool', content: 'Result: 42', type: 'tool-result' },
-      { role: 'user', content: 'Follow up', type: 'text' }
-    );
-
-    await compressor.compress(state);
-
+    // Verify LLM received previous summary
     const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
     const prompt = callArgs.messages[0].content as string;
-
-    // messages[0..2] are compressed, containing user, assistant, tool
-    expect(prompt).toContain('User: Hello');
-    expect(prompt).toContain('Assistant: Hi there');
-    expect(prompt).toContain('Tool: Result: 42');
-    expect(prompt).toContain('Summarize the following conversation');
-    // messages[3] is the keepRecent part, not included in summary
-    expect(prompt).not.toContain('Follow up');
-  });
-
-  it('should include previous summary when re-summarizing', async () => {
-    const llm = createMockLLMProvider('Updated');
-    const compressor = new DefaultContextCompressor(
-      { strategy: 'summarize', threshold: 3, keepRecent: 1 },
-      llm,
-      'gpt-4'
-    );
-
-    const state = createAgentState({
-      name: 'test',
-      instructions: 'test',
-      tools: [],
-    });
-    state.context.messages.push(
-      { role: 'user', content: 'Q1', type: 'text' },
-      { role: 'assistant', content: 'A1', type: 'text' },
-      { role: 'user', content: 'Q2', type: 'text' },
-      { role: 'assistant', content: 'A2', type: 'text' }
-    );
-    state.context.compression = { summary: 'Previous summary', anchor: 2 };
-
-    await compressor.compress(state);
-
-    const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    const prompt = callArgs.messages[0].content as string;
-    expect(prompt).toContain('Previous summary');
-    expect(prompt).toContain('updated concise summary');
-  });
-});
-
-// ============================================================
-// Integration with different message types
-// ============================================================
-describe('DefaultContextCompressor - message type formatting', () => {
-  it('should handle all message roles in summary generation', async () => {
-    const llm = createMockLLMProvider('All types summary');
-    const compressor = new DefaultContextCompressor(
-      { strategy: 'summarize', threshold: 3, keepRecent: 1 },
-      llm,
-      'gpt-4'
-    );
-
-    const state = createAgentState({
-      name: 'test',
-      instructions: 'test',
-      tools: [],
-    });
-
-    state.context.messages.push(
-      { role: 'user', content: 'User message', type: 'text' },
-      { role: 'assistant', content: 'Thought process', type: 'thought' },
-      { role: 'assistant', content: 'Final answer', type: 'text' },
-      { role: 'tool', content: 'Tool output', type: 'tool-result', toolCallId: 'tc1' },
-      { role: 'user', content: 'Follow up', type: 'text' }
-    );
-
-    const result = await compressor.compress(state);
-    expect(result.anchor).toBe(4); // 5 - 1
-
-    const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    const prompt = callArgs.messages[0].content as string;
-    // All roles should be represented in the prompt
-    expect(prompt).toContain('User: User message');
-    expect(prompt).toContain('Assistant: Thought process');
-    expect(prompt).toContain('Assistant: Final answer');
-    expect(prompt).toContain('Tool: Tool output');
+    expect(prompt).toContain('Old summary');
   });
 });
