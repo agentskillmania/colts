@@ -21,6 +21,14 @@ export async function compressState(
 ): Promise<AgentState> {
   const result = await compressor.compress(state);
   return produce(state, (draft) => {
+    // Apply pruned message content and updated token counts
+    if (result.prunedMessages) {
+      for (const { index, newContent, newTokenCount } of result.prunedMessages) {
+        draft.context.messages[index].content = newContent;
+        draft.context.messages[index].tokenCount = newTokenCount;
+      }
+    }
+    // Update compression metadata
     draft.context.compression = {
       summary: result.summary,
       anchor: result.anchor,
