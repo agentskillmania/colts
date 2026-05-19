@@ -297,6 +297,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     this.options = {
       ...options,
       maxSteps: options.maxSteps ?? 500,
+      requestTimeout: options.requestTimeout ?? 1800000,
     };
 
     // Initialize message assembler (default implementation)

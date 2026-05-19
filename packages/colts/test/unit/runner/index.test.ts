@@ -114,7 +114,7 @@ describe('AgentRunner', () => {
           expect.objectContaining({ role: 'user', content: 'Hi there!' }),
         ]),
         priority: 0,
-        requestTimeout: undefined,
+        requestTimeout: 1800000,
       });
 
       // Verify instructions are in first user message
