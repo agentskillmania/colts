@@ -542,3 +542,104 @@ describe('DefaultContextCompressor - compress edge cases', () => {
     expect(prompt).toContain('Old summary');
   });
 });
+
+// ============================================================
+// compressState - batch state update
+// ============================================================
+describe('compressState - batch state update', () => {
+  it('should apply prunedMessages and compression metadata in one update', async () => {
+    const { compressState } = await import('../../../src/runner/compression.js');
+    const compressor = new DefaultContextCompressor({
+      strategy: 'truncate',
+      threshold: 5,
+      keepRecent: 2,
+      pruneThreshold: 50,
+    });
+
+    // Create state with tool messages (using the createStateWithToolMessages helper if it exists, or create inline)
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'test',
+      tools: [],
+    });
+    // user, tool(200 tokens), user, tool(30 tokens), user = 5 messages
+    state.context.messages.push(
+      { role: 'user', content: 'Q1', type: 'text', timestamp: Date.now() },
+      {
+        role: 'tool',
+        content: 'x '.repeat(200).trim(),
+        type: 'tool-result',
+        toolName: 'big_tool',
+        toolCallId: 'tc1',
+        timestamp: Date.now(),
+      },
+      { role: 'user', content: 'Q2', type: 'text', timestamp: Date.now() },
+      {
+        role: 'tool',
+        content: 'small result',
+        type: 'tool-result',
+        toolName: 'small_tool',
+        toolCallId: 'tc2',
+        timestamp: Date.now(),
+      },
+      { role: 'user', content: 'Final', type: 'text', timestamp: Date.now() }
+    );
+    const originalContent = state.context.messages[1].content;
+
+    const newState = await compressState(compressor, state);
+
+    // Pruned message should have new content
+    expect(newState.context.messages[1].content).not.toBe(originalContent);
+    expect(newState.context.messages[1].content).toContain('pruned');
+    expect(newState.context.messages[1].tokenCount).toBeDefined();
+    expect(newState.context.messages[1].tokenCount!).toBeLessThan(200);
+
+    // Compression metadata should be set
+    expect(newState.context.compression).toBeDefined();
+    expect(newState.context.compression!.anchor).toBeGreaterThan(0);
+  });
+
+  it('should not modify original state', async () => {
+    const { compressState } = await import('../../../src/runner/compression.js');
+    const compressor = new DefaultContextCompressor({
+      strategy: 'truncate',
+      threshold: 5,
+      keepRecent: 2,
+      pruneThreshold: 50,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'test',
+      tools: [],
+    });
+    state.context.messages.push(
+      { role: 'user', content: 'Q1', type: 'text', timestamp: Date.now() },
+      {
+        role: 'tool',
+        content: 'x '.repeat(200).trim(),
+        type: 'tool-result',
+        toolName: 'tool1',
+        toolCallId: 'tc1',
+        timestamp: Date.now(),
+      },
+      { role: 'user', content: 'Q2', type: 'text', timestamp: Date.now() },
+      {
+        role: 'tool',
+        content: 'small',
+        type: 'tool-result',
+        toolName: 'tool2',
+        toolCallId: 'tc2',
+        timestamp: Date.now(),
+      },
+      { role: 'user', content: 'Final', type: 'text', timestamp: Date.now() }
+    );
+    const originalContent = state.context.messages[1].content;
+
+    await compressState(compressor, state);
+
+    // Original state should be unchanged (Immer immutability)
+    expect(state.context.messages[1].content).toBe(originalContent);
+    expect(state.context.compression).toBeUndefined();
+  });
+});
