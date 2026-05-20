@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from 'ink-testing-library';
 import { App } from '../../src/app.js';
 import type { AppConfig } from '../../src/config.js';
-import type { AgentRunner, AgentState } from '@agentskillmania/colts';
+import type { AgentRunner, AgentState, RunStreamEvent, RunResult } from '@agentskillmania/colts';
 import { createAgentState } from '@agentskillmania/colts';
 
 // ── mock runner-setup（createRunnerFromConfig / createInitialStateFromConfig）──
@@ -47,6 +47,14 @@ vi.mock('../../src/runner-setup.js', async (importOriginal) => {
 });
 
 // ── mock setup ──
+
+// Mock TraceWriter to avoid filesystem I/O during tests
+vi.mock('../../src/trace-writer.js', () => ({
+  TraceWriter: vi.fn().mockImplementation(() => ({
+    consume: vi.fn(),
+    flush: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 // Mock @inkjs/ui TextInput, capture onSubmit
 let capturedOnSubmit: ((value: string) => void) | null = null;
@@ -92,6 +100,28 @@ function createMockRunner(overrides?: Partial<AgentRunner>): AgentRunner {
     chatStream: vi.fn().mockReturnValue(emptyStream()),
     skillProvider: undefined,
     ...overrides,
+  } as unknown as AgentRunner;
+}
+
+/** Create a mock runner that yields real events and returns a final result */
+function createMockRunnerWithEvents(
+  events: RunStreamEvent[],
+  finalResult: { state: AgentState; result: RunResult }
+): AgentRunner {
+  const streamImpl = async function* () {
+    for (const event of events) {
+      yield event;
+    }
+    return finalResult;
+  };
+
+  return {
+    runStream: vi.fn().mockImplementation(streamImpl),
+    stepStream: vi.fn().mockImplementation(streamImpl),
+    advanceStream: vi.fn().mockImplementation(streamImpl),
+    chatStream: vi.fn().mockReturnValue(emptyStream()),
+    skillProvider: undefined,
+    registerTool: vi.fn(),
   } as unknown as AgentRunner;
 }
 
@@ -242,6 +272,112 @@ describe('App', () => {
       await vi.waitFor(() => {
         expect(runner.runStream).toHaveBeenCalled();
       });
+    });
+
+    it('normal message displays assistant response in Timeline', async () => {
+      const initialState = createAgentState({
+        name: 'test-agent',
+        instructions: 'Test',
+        tools: [],
+      });
+      const events: RunStreamEvent[] = [
+        { type: 'token', token: 'Hello', timestamp: Date.now() },
+        { type: 'token', token: ' back!', timestamp: Date.now() },
+      ];
+      const finalState = {
+        ...initialState,
+        context: { ...initialState.context, stepCount: 1 },
+      };
+      const finalResult: RunResult = {
+        type: 'success',
+        answer: 'Hello back!',
+        totalSteps: 1,
+        tokens: { input: 5, output: 3 },
+      };
+
+      const runner = createMockRunnerWithEvents(events, {
+        state: finalState,
+        result: finalResult,
+      });
+
+      const { lastFrame } = render(
+        <App
+          config={validConfig}
+          runner={runner}
+          initialState={initialState}
+          sessionBaseDir="/tmp/colts-test-sessions"
+        />
+      );
+
+      capturedOnSubmit!('hello');
+
+      // Wait for async completion + throttle flush
+      await new Promise((r) => setTimeout(r, 200));
+      expect(lastFrame()).toContain('Hello back!');
+    });
+
+    it('/step switches mode and calls stepStream on next message', async () => {
+      const initialState = createAgentState({
+        name: 'test-agent',
+        instructions: 'Test',
+        tools: [],
+      });
+      const runner = createMockRunnerWithEvents([], {
+        state: initialState,
+        result: { type: 'success', answer: '', totalSteps: 0, tokens: { input: 0, output: 0 } },
+      });
+
+      const { lastFrame } = render(
+        <App
+          config={validConfig}
+          runner={runner}
+          initialState={initialState}
+          sessionBaseDir="/tmp/colts-test-sessions"
+        />
+      );
+
+      // Switch to step mode
+      capturedOnSubmit!('/step');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(lastFrame()).toContain('STEP');
+
+      // Send a message — should call stepStream, not runStream
+      capturedOnSubmit!('hello');
+      await new Promise((r) => setTimeout(r, 100));
+      expect(runner.stepStream).toHaveBeenCalled();
+      expect(runner.runStream).not.toHaveBeenCalled();
+    });
+
+    it('/advance switches mode and calls advanceStream on next message', async () => {
+      const initialState = createAgentState({
+        name: 'test-agent',
+        instructions: 'Test',
+        tools: [],
+      });
+      const runner = createMockRunnerWithEvents([], {
+        state: initialState,
+        result: { type: 'success', answer: '', totalSteps: 0, tokens: { input: 0, output: 0 } },
+      });
+
+      const { lastFrame } = render(
+        <App
+          config={validConfig}
+          runner={runner}
+          initialState={initialState}
+          sessionBaseDir="/tmp/colts-test-sessions"
+        />
+      );
+
+      // Switch to advance mode
+      capturedOnSubmit!('/advance');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(lastFrame()).toContain('ADV');
+
+      // Send a message — should call advanceStream, not runStream
+      capturedOnSubmit!('hello');
+      await new Promise((r) => setTimeout(r, 100));
+      expect(runner.advanceStream).toHaveBeenCalled();
+      expect(runner.runStream).not.toHaveBeenCalled();
     });
 
     it('empty message does not trigger sendMessage', async () => {
