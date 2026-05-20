@@ -509,7 +509,7 @@ type SetState = React.Dispatch<React.SetStateAction<AgentState | null>>;
  * @param setState - Setter for AgentState
  * @param signal - AbortSignal for cancellation
  */
-async function executeRun(
+export async function executeRun(
   runner: AgentRunner,
   currentState: AgentState,
   userInput: string,
