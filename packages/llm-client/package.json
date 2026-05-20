@@ -44,7 +44,6 @@
   "dependencies": {
     "@mariozechner/pi-ai": "^0.73.1",
     "eventemitter3": "^5.0.4",
-    "p-limit": "^6.0.0",
     "p-queue": "^8.0.0",
     "p-retry": "^6.0.0",
     "p-timeout": "^6.0.0"
