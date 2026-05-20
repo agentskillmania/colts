@@ -35,7 +35,7 @@ describe('AgentRunner', () => {
         llmClient: client,
       });
 
-      expect(runner).toBeDefined();
+      expect(runner).toBeInstanceOf(AgentRunner);
     });
 
     it('should create AgentRunner with optional options', () => {
@@ -47,7 +47,7 @@ describe('AgentRunner', () => {
         requestTimeout: 30000,
       });
 
-      expect(runner).toBeDefined();
+      expect(runner).toBeInstanceOf(AgentRunner);
     });
 
     it('should throw ConfigurationError when both llmClient and llm are provided', () => {
@@ -113,7 +113,10 @@ describe('AgentRunner', () => {
       const state = createAgentState(defaultConfig);
       await runner.chat(state, 'Hi there!');
 
-      expect(customAssembler.build).toHaveBeenCalled();
+      expect(customAssembler.build).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ systemPrompt: undefined })
+      );
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       expect(callArg.messages[0].content).toBe('custom-system');
     });
@@ -151,8 +154,7 @@ describe('AgentRunner', () => {
       // Verify instructions are in first user message
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
-      expect(firstUserMsg?.content).toContain('[System Instructions]');
-      expect(firstUserMsg?.content).toContain('You are a helpful assistant');
+      expect(firstUserMsg?.content).toMatch(/\[System Instructions\][\s\S]*You are a helpful assistant/);
 
       // Verify result
       expect(result.response).toBe('Hello! How can I help you?');
@@ -185,7 +187,7 @@ describe('AgentRunner', () => {
 
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const userMessages = callArg.messages.filter((m: { role: string }) => m.role === 'user');
-      expect(userMessages[0].content).toContain('Custom system instruction');
+      expect(userMessages[0].content).toMatch(/Custom system instruction/);
     });
 
     it('should preserve conversation history', async () => {
@@ -432,7 +434,7 @@ describe('AgentRunner', () => {
       expect(chunks.length).toBeGreaterThanOrEqual(1);
       const lastChunk = chunks[chunks.length - 1];
       expect(lastChunk.type).toBe('error');
-      expect(lastChunk.error).toContain('Network error');
+      expect(lastChunk.error).toBe('Network error');
     });
 
     it('should not modify original state during streaming', async () => {
@@ -551,10 +553,13 @@ describe('AgentRunner', () => {
       );
 
       // Should include user messages
-      expect(userMsgs.some((m: { content: string }) => m.content === 'Hello')).toBe(true);
+      expect(userMsgs).toContainEqual(expect.objectContaining({ content: 'Hello' }));
       // Should include ALL assistant messages (both thought and final)
-      expect(assistantContents).toContain('Thinking about it');
-      expect(assistantContents).toContain('Final response');
+      expect(assistantContents).toEqual([
+        'Understood. I will follow these instructions.',
+        'Thinking about it',
+        'Final response',
+      ]);
     });
 
     it('should include tool results in context', async () => {
@@ -671,10 +676,10 @@ describe('AgentRunner', () => {
       const { state: finalState } = await runner.step(state);
 
       // shouldCompress should be called after step completes
-      expect(mockCompressor.shouldCompress).toHaveBeenCalled();
+      expect(mockCompressor.shouldCompress).toHaveBeenCalledWith(expect.any(Object));
       // If compression is needed, compress should also be called
       if (mockCompressor.shouldCompress({ ...state, context: { ...state.context } })) {
-        expect(mockCompressor.compress).toHaveBeenCalled();
+        expect(mockCompressor.compress).toHaveBeenCalledWith(expect.any(Object));
       }
     });
 
@@ -700,8 +705,8 @@ describe('AgentRunner', () => {
       const state = createAgentState(defaultConfig);
       const { state: finalState } = await runner.step(state);
 
-      expect(mockCompressor.shouldCompress).toHaveBeenCalled();
-      expect(mockCompressor.compress).not.toHaveBeenCalled();
+      expect(mockCompressor.shouldCompress).toHaveBeenCalledWith(expect.any(Object));
+      expect(mockCompressor.compress).not.toHaveBeenCalledWith(expect.any(Object));
       expect(finalState.context.compression).toBeUndefined();
     });
 
@@ -766,7 +771,7 @@ describe('AgentRunner', () => {
         },
       });
 
-      expect(runner).toBeDefined();
+      expect(runner).toBeInstanceOf(AgentRunner);
     });
   });
 
@@ -833,7 +838,7 @@ describe('AgentRunner', () => {
         skillProvider,
       });
 
-      expect(runner).toBeDefined();
+      expect(runner).toBeInstanceOf(AgentRunner);
       // load_skill tool should be auto-registered
       const tools = runner.getToolRegistry().toToolSchemas();
       const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
@@ -849,7 +854,7 @@ describe('AgentRunner', () => {
         skillDirs: ['/nonexistent/skills'],
       });
 
-      expect(runner).toBeDefined();
+      expect(runner).toBeInstanceOf(AgentRunner);
       // load_skill tool should be registered even if directory doesn't exist (provider exists but has no skills)
       const tools = runner.getToolRegistry().toToolSchemas();
       const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
@@ -869,7 +874,7 @@ describe('AgentRunner', () => {
         skillDirs: ['/nonexistent/skills'],
       });
 
-      expect(runner).toBeDefined();
+      expect(runner).toBeInstanceOf(AgentRunner);
       // Should use injected provider, skillDirs is ignored
       const tools = runner.getToolRegistry().toToolSchemas();
       const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
@@ -900,7 +905,9 @@ describe('AgentRunner', () => {
 
       // Verify load_skill tool is in registry
       const tools = runner.getToolRegistry().toToolSchemas();
-      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
+      expect(tools).toContainEqual(
+        expect.objectContaining({ function: expect.objectContaining({ name: 'load_skill' }) })
+      );
 
       // Execute load_skill tool
       const result = await runner.getToolRegistry().execute('load_skill', { name: 'code-review' });
@@ -1046,7 +1053,9 @@ describe('AgentRunner', () => {
       const tools = runner.getToolRegistry().toToolSchemas();
       const delegateTool = tools.find((t) => t.function.name === 'delegate');
       expect(delegateTool).toBeDefined();
-      expect(delegateTool!.function.description).toBeTruthy();
+      expect(delegateTool!.function.description).toBe(
+        'Delegate a task to a specialized sub-agent. Use when a task requires specific expertise or tools that a sub-agent possesses.'
+      );
     });
 
     it('should not register delegate tool when subAgents are not provided', () => {
