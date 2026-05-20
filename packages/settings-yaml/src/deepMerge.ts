@@ -4,6 +4,14 @@
  * Provides functions for recursively merging configuration objects with nested object and array support.
  */
 
+/** Error thrown when deepMerge encounters invalid input. */
+export class SettingsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SettingsError';
+  }
+}
+
 /**
  * Recursively merge two arrays element by element.
  *
@@ -17,7 +25,11 @@
  * @param defaultArr - The default array (lower priority).
  * @returns {unknown[]} A new array containing the deeply merged elements.
  */
-function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[] {
+function deepMergeArrays(
+  targetArr: unknown[],
+  defaultArr: unknown[],
+  visited: WeakSet<object>
+): unknown[] {
   const maxLen = Math.max(targetArr.length, defaultArr.length);
   const result: unknown[] = new Array(maxLen);
 
@@ -36,13 +48,17 @@ function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[]
       typeof d === 'object' &&
       !Array.isArray(d)
     ) {
-      result[i] = deepMerge(t as Record<string, unknown>, d as Record<string, unknown>);
+      result[i] = deepMergeInternal(
+        t as Record<string, unknown>,
+        d as Record<string, unknown>,
+        visited
+      );
       continue;
     }
 
     // Both arrays → merge recursively
     if (Array.isArray(t) && Array.isArray(d)) {
-      result[i] = deepMergeArrays(t, d);
+      result[i] = deepMergeArrays(t, d, visited);
       continue;
     }
 
@@ -52,9 +68,9 @@ function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[]
     // rather than producing undefined (objects use `key in target` to distinguish; arrays cannot).
     const value = t !== undefined ? t : d;
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      result[i] = deepMerge(value as Record<string, unknown>, {});
+      result[i] = deepMergeInternal(value as Record<string, unknown>, {}, visited);
     } else if (Array.isArray(value)) {
-      result[i] = deepMergeArrays(value, []);
+      result[i] = deepMergeArrays(value, [], visited);
     } else {
       result[i] = value;
     }
@@ -87,10 +103,16 @@ function deepMergeArrays(targetArr: unknown[], defaultArr: unknown[]): unknown[]
  * // result = { server: { port: 8080, host: 'localhost' }, debug: false }
  * ```
  */
-export function deepMerge<T extends Record<string, unknown>>(
+function deepMergeInternal<T extends Record<string, unknown>>(
   target: Record<string, unknown>,
-  defaultValue: T
+  defaultValue: T,
+  visited: WeakSet<object>
 ): T {
+  if (visited.has(target)) {
+    throw new SettingsError('Circular reference detected in target object');
+  }
+  visited.add(target);
+
   const result: Record<string, unknown> = {};
 
   // Deep copy default values for keys not present in target
@@ -98,9 +120,13 @@ export function deepMerge<T extends Record<string, unknown>>(
     if (!(key in target)) {
       const d = defaultValue[key as keyof T];
       if (d !== null && typeof d === 'object' && !Array.isArray(d)) {
-        result[key] = deepMerge({} as Record<string, unknown>, d as Record<string, unknown>);
+        result[key] = deepMergeInternal(
+          {} as Record<string, unknown>,
+          d as Record<string, unknown>,
+          visited
+        );
       } else if (Array.isArray(d)) {
-        result[key] = deepMergeArrays([], d);
+        result[key] = deepMergeArrays([], d, visited);
       } else {
         result[key] = d;
       }
@@ -119,21 +145,22 @@ export function deepMerge<T extends Record<string, unknown>>(
         !Array.isArray(defaultValueFieldValue)
       ) {
         // Both are plain objects → recursively merge
-        result[key] = deepMerge(
+        result[key] = deepMergeInternal(
           targetValue as Record<string, unknown>,
-          defaultValueFieldValue as Record<string, unknown>
+          defaultValueFieldValue as Record<string, unknown>,
+          visited
         );
       } else {
         // Only target has an object → deep copy it
-        result[key] = deepMerge(targetValue as Record<string, unknown>, {});
+        result[key] = deepMergeInternal(targetValue as Record<string, unknown>, {}, visited);
       }
     } else if (Array.isArray(targetValue)) {
       if (Array.isArray(defaultValueFieldValue)) {
         // Both are arrays → merge element by element
-        result[key] = deepMergeArrays(targetValue, defaultValueFieldValue);
+        result[key] = deepMergeArrays(targetValue, defaultValueFieldValue, visited);
       } else {
         // Only target has an array → deep copy it
-        result[key] = deepMergeArrays(targetValue, []);
+        result[key] = deepMergeArrays(targetValue, [], visited);
       }
     } else {
       // Primitives, null → direct assignment (immutable)
@@ -142,4 +169,11 @@ export function deepMerge<T extends Record<string, unknown>>(
   }
 
   return result as T;
+}
+
+export function deepMerge<T extends Record<string, unknown>>(
+  target: Record<string, unknown>,
+  defaultValue: T
+): T {
+  return deepMergeInternal(target, defaultValue, new WeakSet<object>());
 }
