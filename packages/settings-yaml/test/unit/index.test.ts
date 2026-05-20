@@ -7,6 +7,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Settings } from '../../src/index';
+import { SettingsError } from '../../src/deepMerge';
 
 describe('Settings', () => {
   let tempDir: string;
@@ -115,6 +116,28 @@ server:
       const settings = new Settings(configPath);
 
       await expect(settings.initialize()).rejects.toThrow('Config file not found');
+    });
+
+    it('should throw SettingsError when YAML contains a scalar instead of object', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      await fs.writeFile(configPath, 'just-a-string', 'utf-8');
+
+      const settings = new Settings(configPath);
+      await expect(settings.initialize()).rejects.toThrow(SettingsError);
+      await expect(settings.initialize()).rejects.toThrow(
+        'YAML file must contain a top-level object, got string'
+      );
+    });
+
+    it('should throw SettingsError when YAML contains an array instead of object', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      await fs.writeFile(configPath, '- item1\n- item2', 'utf-8');
+
+      const settings = new Settings(configPath);
+      await expect(settings.initialize()).rejects.toThrow(SettingsError);
+      await expect(settings.initialize()).rejects.toThrow(
+        'YAML file must contain a top-level object, got object'
+      );
     });
 
     it('should recursively create intermediate directories', async () => {

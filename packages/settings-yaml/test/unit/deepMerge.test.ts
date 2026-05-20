@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deepMerge } from '../../src/deepMerge';
+import { deepMerge, SettingsError } from '../../src/deepMerge';
 
 describe('deepMerge', () => {
   describe('basic merge', () => {
@@ -345,6 +345,26 @@ describe('deepMerge', () => {
       // Object keys present in target (even if undefined) should be preserved
       expect(result).toHaveProperty('key');
       expect(result.key).toBeUndefined();
+    });
+  });
+
+  describe('error handling', () => {
+    it('should throw SettingsError on circular reference in target', () => {
+      const target: Record<string, unknown> = { name: 'test' };
+      target.self = target; // circular reference
+
+      expect(() => deepMerge(target, { name: 'default' })).toThrow(SettingsError);
+      expect(() => deepMerge(target, { name: 'default' })).toThrow(
+        'Circular reference detected in target object'
+      );
+    });
+
+    it('should throw SettingsError on nested circular reference', () => {
+      const child: Record<string, unknown> = { value: 1 };
+      const target = { parent: { child } };
+      child.back = target; // nested circular reference
+
+      expect(() => deepMerge(target, { parent: { other: true } })).toThrow(SettingsError);
     });
   });
 });

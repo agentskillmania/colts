@@ -9,7 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as yaml from 'js-yaml';
-import { deepMerge } from './deepMerge.js';
+import { deepMerge, SettingsError } from './deepMerge.js';
 
 /**
  * Initialization options for the {@link Settings} class.
@@ -119,7 +119,17 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
     } else {
       // Read existing config
       const content = await fs.readFile(this.configPath, 'utf-8');
-      const userConfig = yaml.load(content) as Record<string, unknown>;
+      const parsed = yaml.load(content);
+      if (
+        parsed !== undefined &&
+        parsed !== null &&
+        (typeof parsed !== 'object' || Array.isArray(parsed))
+      ) {
+        throw new SettingsError(
+          `YAML file must contain a top-level object, got ${typeof parsed}`
+        );
+      }
+      const userConfig = parsed as Record<string, unknown>;
 
       // Deep merge: defaults + user config + override
       let result = deepMerge(userConfig || {}, defaultValue);
