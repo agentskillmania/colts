@@ -279,10 +279,13 @@ export class PiAiAdapter {
       maxTimeout: retryOptions.maxTimeout,
       factor: retryOptions.factor,
       shouldRetry: (error) => isRetryableError(error),
-      onFailedAttempt: ({ attemptNumber }) => {
-        const error = new Error(`Attempt ${attemptNumber} failed`);
+      onFailedAttempt: (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        const wrappedError = new Error(
+          `Attempt ${error.attemptNumber} failed: ${message}`
+        );
         if (onRetry) {
-          onRetry(attemptNumber, error);
+          onRetry(error.attemptNumber, wrappedError);
         }
       },
     });

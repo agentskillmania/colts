@@ -214,6 +214,36 @@ describe('Scheduler error handling', () => {
       })
     ).rejects.toThrow('Executor failed');
   });
+
+  it('should emit failed event on executor error', async () => {
+    const scheduler = new RequestScheduler();
+    scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    scheduler.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    const events: Array<{ type: string; error?: string; model?: string }> = [];
+    scheduler.on('state', (event) => {
+      if (event.type === 'failed') {
+        events.push(event as { type: string; error?: string; model?: string });
+      }
+    });
+
+    await expect(
+      scheduler.execute('gpt-4', 0, async () => {
+        throw new Error('Executor failed');
+      })
+    ).rejects.toThrow('Executor failed');
+
+    // CR-3: verify failed event is emitted with correct payload
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('failed');
+    expect(events[0].error).toBe('Executor failed');
+    expect(events[0].model).toBe('gpt-4');
+  });
 });
 
 describe('Scheduler default concurrency', () => {

@@ -508,6 +508,15 @@ export class RequestScheduler extends EventEmitter {
                 selectedKey.failCount++;
                 selectedKey.lastError = error instanceof Error ? error.message : String(error);
 
+                // Emit failed event
+                this.emit('state', {
+                  type: 'failed',
+                  requestId: finalRequestId,
+                  error: error instanceof Error ? error.message : String(error),
+                  key: selectedKey.key.slice(0, 8) + '...',
+                  model: modelId,
+                } as SchedulerEvent);
+
                 throw error;
               } finally {
                 // Release semaphores in reverse order

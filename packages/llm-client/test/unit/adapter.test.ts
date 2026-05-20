@@ -91,6 +91,10 @@ describe('PiAiAdapter', () => {
 
       expect(piComplete).toHaveBeenCalledTimes(2);
       expect(onRetry).toHaveBeenCalledTimes(1);
+      // CR-2: verify retry error contains original error message
+      expect(onRetry).toHaveBeenCalledWith(1, expect.any(Error));
+      const [, retryError] = onRetry.mock.calls[0];
+      expect((retryError as Error).message).toContain('Rate limit');
       expect(result.content).toBe('Success');
     });
 
