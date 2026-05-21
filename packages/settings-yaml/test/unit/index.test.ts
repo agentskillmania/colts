@@ -24,7 +24,6 @@ describe('Settings', () => {
     it('should create Settings instance', () => {
       const configPath = path.join(tempDir, 'config.yaml');
       const settings = new Settings(configPath);
-      expect(settings).toBeDefined();
       expect(settings).toBeInstanceOf(Settings);
     });
 

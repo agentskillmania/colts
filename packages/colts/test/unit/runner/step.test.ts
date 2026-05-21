@@ -404,8 +404,8 @@ describe('step()', () => {
         events.push(event as { type: string });
       }
 
-      expect(events.some((e) => e.type === 'tool:start')).toBe(true);
-      expect(events.some((e) => e.type === 'tool:end')).toBe(true);
+      expect(events.map((e) => e.type)).toContain('tool:start');
+      expect(events.map((e) => e.type)).toContain('tool:end');
     });
 
     it('should return final result', async () => {
@@ -540,7 +540,7 @@ describe('step()', () => {
         events.push(value as { type: string });
       }
 
-      expect(events.some((e) => e.type === 'error')).toBe(true);
+      expect(events.map((e) => e.type)).toContain('error');
       expect(returnValue!.result.type).toBe('error');
     });
 
@@ -792,8 +792,8 @@ describe('step()', () => {
       // Should not have subagent events
       expect(events.every((e) => !e.type.startsWith('subagent:'))).toBe(true);
       // Should have normal tool:start and tool:end
-      expect(events.some((e) => e.type === 'tool:start')).toBe(true);
-      expect(events.some((e) => e.type === 'tool:end')).toBe(true);
+      expect(events.map((e) => e.type)).toContain('tool:start');
+      expect(events.map((e) => e.type)).toContain('tool:end');
     });
 
     it('should not produce subagent events when no sub-agents are configured', async () => {

@@ -843,7 +843,7 @@ describe('AgentRunner', () => {
       expect(runner).toBeInstanceOf(AgentRunner);
       // load_skill tool should be auto-registered
       const tools = runner.getToolRegistry().toToolSchemas();
-      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
+      expect(tools.map((t) => t.function.name)).toContain('load_skill');
     });
 
     it('should create FilesystemSkillProvider from skillDirs', () => {
@@ -858,7 +858,7 @@ describe('AgentRunner', () => {
       expect(runner).toBeInstanceOf(AgentRunner);
       // load_skill tool should be registered even if directory doesn't exist (provider exists but has no skills)
       const tools = runner.getToolRegistry().toToolSchemas();
-      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
+      expect(tools.map((t) => t.function.name)).toContain('load_skill');
     });
 
     it('should prefer skillProvider over skillDirs when both are provided', () => {
@@ -877,7 +877,7 @@ describe('AgentRunner', () => {
       expect(runner).toBeInstanceOf(AgentRunner);
       // Should use injected provider, skillDirs is ignored
       const tools = runner.getToolRegistry().toToolSchemas();
-      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
+      expect(tools.map((t) => t.function.name)).toContain('load_skill');
     });
 
     it('should auto-register load_skill tool when skillProvider exists', async () => {
