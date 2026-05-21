@@ -282,6 +282,17 @@ export class PiAiAdapter {
       onFailedAttempt: (error) => {
         const message = error instanceof Error ? error.message : String(error);
         const wrappedError = new Error(`Attempt ${error.attemptNumber} failed: ${message}`);
+        // Preserve original error properties (status, code, cause, stack)
+        if (error instanceof Error) {
+          wrappedError.stack = error.stack;
+          for (const key of ['status', 'code', 'cause']) {
+            if (key in error) {
+              (wrappedError as unknown as Record<string, unknown>)[key] = (
+                error as unknown as Record<string, unknown>
+              )[key];
+            }
+          }
+        }
         if (onRetry) {
           onRetry(error.attemptNumber, wrappedError);
         }
@@ -495,7 +506,10 @@ export class PiAiAdapter {
       case 'error':
         return {
           type: 'error',
-          error: event.error.errorMessage || 'Unknown error',
+          error:
+            typeof event.error === 'object' && event.error !== null
+              ? (event.error as { errorMessage?: string }).errorMessage || 'Unknown error'
+              : String(event.error),
         };
 
       case 'start':

@@ -91,10 +91,11 @@ describe('PiAiAdapter', () => {
 
       expect(piComplete).toHaveBeenCalledTimes(2);
       expect(onRetry).toHaveBeenCalledTimes(1);
-      // CR-2: verify retry error contains original error message
+      // CR-2: verify retry error contains original error message and status
       expect(onRetry).toHaveBeenCalledWith(1, expect.any(Error));
       const [, retryError] = onRetry.mock.calls[0];
       expect((retryError as Error).message).toBe('Attempt 1 failed: Rate limit');
+      expect((retryError as Error & { status?: number }).status).toBe(429);
       expect(result.content).toBe('Success');
     });
 
@@ -332,6 +333,28 @@ describe('PiAiAdapter', () => {
       // start, text_start (delta=''), toolcall_start, toolcall_delta are null/skipped
       // Only text_delta, toolcall_end, done are yielded
       expect(events.map((e) => e.type)).toEqual(['text', 'text', 'tool_call', 'done']);
+    });
+
+    it('MJ-6: should handle error event with non-object error gracefully', async () => {
+      const mockEvents = [
+        { type: 'text_delta', delta: 'Hello' },
+        { type: 'error', error: 'Plain string error' },
+      ];
+
+      vi.mocked(piStream).mockImplementation(mockAsyncStream(mockEvents));
+      vi.mocked(getModel).mockReturnValue(null);
+
+      const events: Array<{ type: string; error?: string }> = [];
+      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })) {
+        events.push(event);
+      }
+
+      const errorEvent = events.find((e) => e.type === 'error');
+      expect(errorEvent).toBeDefined();
+      expect(errorEvent?.error).toBe('Plain string error');
     });
   });
 
