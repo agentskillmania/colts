@@ -137,6 +137,39 @@ describe('LLMClient with default config', () => {
       })
     ).rejects.toThrow('timeout');
   });
+
+  it('MJ-2: should apply total timeout to stream consumption, not just queue wait', async () => {
+    const client = new LLMClient();
+    // Return a stream that yields one event then hangs forever
+    const hungStream = async function* () {
+      yield { type: 'text', delta: 'Hello' };
+      await new Promise(() => {}); // never resolves
+    };
+    mockExecute.mockResolvedValue(hungStream());
+
+    client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    client.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    const events: Array<{ type: string }> = [];
+    await expect(async () => {
+      for await (const event of client.stream({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hi' }],
+        totalTimeout: 100,
+      })) {
+        events.push(event);
+      }
+    }).rejects.toThrow('Total timeout exceeded');
+
+    // Should receive the first event before timeout
+    expect(events.length).toBe(1);
+    expect(events[0].type).toBe('text');
+  });
 });
 
 describe('LLMClient priority and retry', () => {

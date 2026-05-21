@@ -295,33 +295,61 @@ export class LLMClient extends EventEmitter {
   async *stream(options: CallOptions): AsyncIterable<StreamEvent> {
     const { model, priority = 0, totalTimeout, requestId, signal } = options;
 
-    // Create a promise that resolves to the stream
-    const streamPromise = this.scheduler.execute(
-      model,
-      priority,
-      async (key: { key: string }): Promise<AsyncIterable<StreamEvent>> => {
-        const onRetry = (attempt: number, error: Error) => {
-          this.scheduler.emitRetry(requestId ?? 'unknown', attempt, error);
-        };
+    // Merge timeout and caller signal into a single abort controller
+    // so that totalTimeout covers both queue wait and stream consumption.
+    const abortController = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-        // Return the async iterable directly
-        return this.adapter.streamWithRetry(model, key.key, options, onRetry);
-      },
-      requestId,
-      signal
-    );
+    if (totalTimeout) {
+      timeoutId = setTimeout(() => {
+        abortController.abort(new Error(`Total timeout exceeded ${totalTimeout}ms`));
+      }, totalTimeout);
+    }
 
-    // Apply total timeout
-    const iterable = totalTimeout
-      ? await pTimeout(streamPromise, {
-          milliseconds: totalTimeout,
-          message: `Total timeout (including queue wait) exceeded ${totalTimeout}ms`,
-        })
-      : await streamPromise;
+    if (signal) {
+      signal.addEventListener('abort', () => abortController.abort(signal.reason), { once: true });
+    }
 
-    // Yield from the returned iterable
-    for await (const event of iterable) {
-      yield event;
+    try {
+      // Create a promise that resolves to the stream
+      const streamPromise = this.scheduler.execute(
+        model,
+        priority,
+        async (key: { key: string }): Promise<AsyncIterable<StreamEvent>> => {
+          const onRetry = (attempt: number, error: Error) => {
+            this.scheduler.emitRetry(requestId ?? 'unknown', attempt, error);
+          };
+
+          // Return the async iterable directly, wired to the merged signal
+          return this.adapter.streamWithRetry(model, key.key, { ...options, signal: abortController.signal }, onRetry);
+        },
+        requestId,
+        abortController.signal
+      );
+
+      const iterable = await streamPromise;
+
+      // Yield from the returned iterable, respecting abort signal
+      const iterator = iterable[Symbol.asyncIterator]();
+
+      try {
+        while (true) {
+          const result = await Promise.race([
+            iterator.next(),
+            new Promise<never>((_, reject) => {
+              abortController.signal.addEventListener('abort', () => {
+                reject(abortController.signal.reason);
+              }, { once: true });
+            }),
+          ]);
+          if (result.done) break;
+          yield result.value;
+        }
+      } finally {
+        iterator.return?.();
+      }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }
 
