@@ -171,7 +171,6 @@ describe('Step 0: AgentState', () => {
     it('should generate a UUID id', () => {
       const state = createAgentState(baseConfig);
       const newState = addAssistantMessage(state, 'Hi there');
-      expect(newState.context.messages[0].id).toBeDefined();
       expect(newState.context.messages[0].id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
       );
@@ -194,7 +193,6 @@ describe('Step 0: AgentState', () => {
     it('should generate a UUID id', () => {
       const state = createAgentState(baseConfig);
       const newState = addToolMessage(state, '{"result": 42}');
-      expect(newState.context.messages[0].id).toBeDefined();
       expect(newState.context.messages[0].id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
       );

@@ -320,7 +320,7 @@ describe('stepStream() streaming path - basic scenarios', () => {
     if (finalResult!.type === 'error') {
       expect(finalResult!.error.message).toContain('LLM connection failed');
     }
-    expect(events.some((e) => e.type === 'error')).toBe(true);
+    expect(events.map((e) => e.type)).toContain('error');
   });
 
   it('should return continue result for a plain tool call via stream', async () => {

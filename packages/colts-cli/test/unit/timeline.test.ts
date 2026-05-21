@@ -215,10 +215,10 @@ describe('VISIBILITY_MAP completeness', () => {
     ];
 
     for (const t of expectedTypes) {
-      expect(VISIBILITY_MAP[t]).toBeDefined();
-      expect(VISIBILITY_MAP[t].compact).toBeDefined();
-      expect(VISIBILITY_MAP[t].detail).toBeDefined();
-      expect(VISIBILITY_MAP[t].verbose).toBeDefined();
+      expect(VISIBILITY_MAP[t]).toBeTruthy();
+      expect(typeof VISIBILITY_MAP[t].compact).toBe('boolean');
+      expect(typeof VISIBILITY_MAP[t].detail).toBe('boolean');
+      expect(typeof VISIBILITY_MAP[t].verbose).toBe('boolean');
     }
   });
 });
