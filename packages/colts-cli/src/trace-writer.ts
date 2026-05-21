@@ -156,14 +156,11 @@ export class TraceWriter {
   private toolsStartTime: number | null = null;
 
   /**
+   * @param stream - Writable stream for JSONL output
    * @param sessionId - Session ID, used as filename
-   * @param traceDir - Optional custom output directory (for test isolation)
    */
-  constructor(sessionId: string, traceDir?: string) {
-    const dir = traceDir ?? DEFAULT_TRACE_DIR;
-    fs.mkdirSync(dir, { recursive: true });
-    this.stream = fs.createWriteStream(path.join(dir, `${sessionId}.jsonl`), { flags: 'a' });
-
+  constructor(stream: fs.WriteStream, sessionId: string) {
+    this.stream = stream;
     this.startTime = Date.now();
 
     // Write trace.start marker
@@ -174,6 +171,19 @@ export class TraceWriter {
       sessionId,
     };
     this.write(record);
+  }
+
+  /**
+   * Async factory: creates directory and stream without blocking the event loop.
+   *
+   * @param sessionId - Session ID, used as filename
+   * @param traceDir - Optional custom output directory (defaults to ~/.agentskillmania/colts/traces)
+   */
+  static async create(sessionId: string, traceDir?: string): Promise<TraceWriter> {
+    const dir = traceDir ?? DEFAULT_TRACE_DIR;
+    await fs.promises.mkdir(dir, { recursive: true });
+    const stream = fs.createWriteStream(path.join(dir, `${sessionId}.jsonl`), { flags: 'a' });
+    return new TraceWriter(stream, sessionId);
   }
 
   /**
@@ -450,4 +460,21 @@ export class TraceWriter {
   private write(data: TraceRecord): void {
     this.stream.write(JSON.stringify(data) + '\n');
   }
+}
+
+/**
+ * Async factory for TraceWriter.
+ *
+ * Creates the output directory and write stream asynchronously,
+ * avoiding blocking the event loop in async contexts.
+ *
+ * @param sessionId - Session ID, used as filename
+ * @param traceDir - Optional custom output directory
+ * @returns Promise resolving to a new TraceWriter instance
+ */
+export async function createTraceWriter(
+  sessionId: string,
+  traceDir?: string
+): Promise<TraceWriter> {
+  return TraceWriter.create(sessionId, traceDir);
 }

@@ -16,6 +16,10 @@ vi.mock('../../src/trace-writer.js', () => ({
     consume: vi.fn(),
     flush: vi.fn().mockResolvedValue(undefined),
   })),
+  createTraceWriter: vi.fn().mockResolvedValue({
+    consume: vi.fn(),
+    flush: vi.fn().mockResolvedValue(undefined),
+  }),
 }));
 
 /** Create a minimal mock AgentRunner for run mode */
