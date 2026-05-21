@@ -199,11 +199,13 @@ describe('blocking/streaming path equivalence', () => {
 
     // Final state equivalence (ignore timestamps which differ by runtime)
     expect(streaming.state.context.stepCount).toBe(blocking.state.context.stepCount);
-    expect(streaming.state.context.messages.map((m: Record<string, unknown>) => {
-      const copy = { ...m };
-      delete copy.timestamp;
-      return copy;
-    })).toEqual(
+    expect(
+      streaming.state.context.messages.map((m: Record<string, unknown>) => {
+        const copy = { ...m };
+        delete copy.timestamp;
+        return copy;
+      })
+    ).toEqual(
       blocking.state.context.messages.map((m: Record<string, unknown>) => {
         const copy = { ...m };
         delete copy.timestamp;
@@ -248,11 +250,13 @@ describe('blocking/streaming path equivalence', () => {
     const streaming = await runStreaming(responses, registry);
 
     expect(streaming.state.context.stepCount).toBe(blocking.state.context.stepCount);
-    expect(streaming.state.context.messages.map((m: Record<string, unknown>) => {
-      const copy = { ...m };
-      delete copy.timestamp;
-      return copy;
-    })).toEqual(
+    expect(
+      streaming.state.context.messages.map((m: Record<string, unknown>) => {
+        const copy = { ...m };
+        delete copy.timestamp;
+        return copy;
+      })
+    ).toEqual(
       blocking.state.context.messages.map((m: Record<string, unknown>) => {
         const copy = { ...m };
         delete copy.timestamp;

@@ -161,8 +161,9 @@ describe('createDelegateTool', () => {
         llmProvider: client,
       });
 
-      expect(tool.description).toBeTruthy();
-      expect(typeof tool.description).toBe('string');
+      expect(tool.description).toBe(
+        'Delegate a task to a specialized sub-agent. Use when a task requires specific expertise or tools that a sub-agent possesses.'
+      );
     });
 
     it('should have a valid Zod parameter schema', () => {
@@ -173,8 +174,7 @@ describe('createDelegateTool', () => {
         llmProvider: client,
       });
 
-      expect(tool.parameters).toBeDefined();
-      expect(tool.parameters._def).toBeDefined();
+      expect(tool.parameters).toBeInstanceOf(z.ZodType);
     });
 
     it('should be registerable to ToolRegistry', () => {
@@ -268,8 +268,7 @@ describe('createDelegateTool', () => {
         task: 'Search for something',
       })) as DelegateResult;
 
-      expect(result.answer).toContain('Error:');
-      expect(result.answer).toContain('API rate limit exceeded');
+      expect(result.answer).toBe('Error: API rate limit exceeded');
       expect(result.totalSteps).toBe(1);
       expect(result.finalState).not.toBeNull();
     });
@@ -348,7 +347,7 @@ describe('createDelegateTool', () => {
       })) as DelegateResult;
 
       // Verify instructions contain appended content when LLM is called
-      expect(client.call).toHaveBeenCalled();
+      expect(client.call).toHaveBeenCalledTimes(1);
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const messages = callArg.messages;
       // instructions appear in the first user message (via buildMessages)
@@ -414,9 +413,9 @@ describe('createDelegateTool', () => {
         task: 'Do something',
       })) as DelegateResult;
 
-      expect(result.answer).toContain("Error: Unknown sub-agent 'nonexistent'");
-      expect(result.answer).toContain('researcher');
-      expect(result.answer).toContain('writer');
+      expect(result.answer).toBe(
+        "Error: Unknown sub-agent 'nonexistent'. Available: researcher, writer"
+      );
       expect(result.totalSteps).toBe(0);
       expect(result.finalState).toBeNull();
     });
@@ -435,7 +434,7 @@ describe('createDelegateTool', () => {
         task: 'Do something',
       })) as DelegateResult;
 
-      expect(result.answer).toContain('Available: ');
+      expect(result.answer).toBe("Error: Unknown sub-agent 'anything'. Available: ");
       expect(result.totalSteps).toBe(0);
       expect(result.finalState).toBeNull();
     });
@@ -508,7 +507,7 @@ describe('createDelegateTool', () => {
       expect(result.answer).toBe('Done with tool-a');
       expect(result.totalSteps).toBe(2);
       // Verify tools passed to LLM contain tool-a (passed via toToolSchemas)
-      expect(client.call).toHaveBeenCalled();
+      expect(client.call).toHaveBeenCalledTimes(2);
     });
 
     it('different sub-agents should have different tool sets', async () => {
@@ -571,10 +570,8 @@ describe('createDelegateTool', () => {
 
       // Verify first LLM call passed search tool (pi-ai Tool format: { name, description, parameters })
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
-      expect(firstCall.tools).toBeDefined();
-      const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
-      expect(toolNames).toContain('search');
-      expect(toolNames).not.toContain('calculate');
+      expect(firstCall.tools).toHaveLength(1);
+      expect(firstCall.tools[0].name).toBe('search');
     });
   });
 
@@ -665,7 +662,7 @@ describe('createDelegateTool', () => {
       const schema = schemas[0];
       expect(schema.type).toBe('function');
       expect(schema.function.name).toBe('delegate');
-      expect(schema.function.description).toBeTruthy();
+      expect(typeof schema.function.description).toBe('string');
 
       const params = schema.function.parameters as Record<string, unknown>;
       expect(params).toBeDefined();
@@ -1012,10 +1009,8 @@ describe('createDelegateTool', () => {
 
       // Verify tools passed to LLM do not contain delegate
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
-      expect(firstCall.tools).toBeDefined();
-      const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
-      expect(toolNames).toContain('search'); // has search
-      expect(toolNames).not.toContain('delegate'); // but no delegate
+      expect(firstCall.tools).toHaveLength(1);
+      expect(firstCall.tools[0].name).toBe('search');
     });
 
     it('sub-agent can have delegate tool when allowDelegation=true', async () => {
@@ -1063,9 +1058,8 @@ describe('createDelegateTool', () => {
 
       // Verify tools passed to LLM contain delegate
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
-      expect(firstCall.tools).toBeDefined();
-      const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
-      expect(toolNames).toContain('delegate'); // has delegate
+      expect(firstCall.tools).toHaveLength(1);
+      expect(firstCall.tools[0].name).toBe('delegate');
     });
 
     it('should disallow delegation by default when allowDelegation is not set', async () => {
@@ -1112,9 +1106,7 @@ describe('createDelegateTool', () => {
 
       // Verify tools passed to LLM do not contain delegate
       const firstCall = vi.mocked(client.call).mock.calls[0][0];
-      expect(firstCall.tools).toBeDefined();
-      const toolNames = (firstCall.tools as Array<{ name: string }>).map((t) => t.name);
-      expect(toolNames).not.toContain('delegate'); // disallowed by default
+      expect(firstCall.tools).toHaveLength(0);
     });
   });
 

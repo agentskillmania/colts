@@ -109,7 +109,6 @@ describe('IdleHandler', () => {
     expect(result.phase.type).toBe('preparing');
     expect(result.done).toBe(false);
     expect(result.state).toBe(state);
-    expect(result.execState.preparedMessages).toBeDefined();
     expect(result.execState.preparedMessages!.length).toBeGreaterThan(0);
   });
 
@@ -208,9 +207,11 @@ describe('CallingLLMHandler', () => {
     const result = await handler.execute(ctx, state, execState);
 
     expect(result.phase.type).toBe('llm-response');
-    expect(result.execState.action).toBeDefined();
-    expect(result.execState.action!.tool).toBe('calculator');
-    expect(result.execState.action!.arguments).toEqual({ expression: '2+2' });
+    expect(result.execState.action).toEqual({
+      id: 'call-1',
+      tool: 'calculator',
+      arguments: { expression: '2+2' },
+    });
     expect(result.execState.allActions).toHaveLength(1);
   });
 
@@ -221,7 +222,7 @@ describe('CallingLLMHandler', () => {
 
     await handler.execute(ctx, state, execState);
 
-    expect(ctx.llmProvider.call).toHaveBeenCalled();
+    expect(ctx.llmProvider.call).toHaveBeenCalledTimes(1);
   });
 
   it('should build messages from assembler if preparedMessages missing', async () => {
@@ -235,7 +236,7 @@ describe('CallingLLMHandler', () => {
 
     await handler.execute(ctx, state, execState);
 
-    expect(build).toHaveBeenCalled();
+    expect(build).toHaveBeenCalledTimes(2);
   });
 
   it('should clear stale action when LLM response has no tool calls', async () => {
@@ -302,7 +303,11 @@ describe('ParsingHandler', () => {
     expect(result.phase.type).toBe('parsed');
     if (result.phase.type === 'parsed') {
       expect(result.phase.thought).toBe('I need to calculate something');
-      expect(result.phase.action).toBeDefined();
+      expect(result.phase.action).toEqual({
+        id: 'call-1',
+        tool: 'testTool',
+        arguments: { key: 'value' },
+      });
     }
     expect(result.execState.thought).toBe('I need to calculate something');
     expect(result.execState.cleanedContent).toBe('');
@@ -437,7 +442,6 @@ describe('ParsedHandler', () => {
 
     const msg = result.state.context.messages[0];
     expect(msg.role).toBe('assistant');
-    expect(msg.toolCalls).toBeDefined();
     expect(msg.toolCalls).toHaveLength(2);
   });
 });
@@ -507,7 +511,7 @@ describe('ExecutingToolHandler', () => {
     expect(result.phase.type).toBe('tool-result');
     // Error should be captured as tool result content
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain('Error: Tool crashed');
+    expect(toolMsg?.content).toBe('Error: Tool crashed');
   });
 
   it('should handle non-Error thrown value from tool', async () => {
@@ -521,7 +525,7 @@ describe('ExecutingToolHandler', () => {
     const result = await handler.execute(ctx, state, execState, registry);
 
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain('Error: string error');
+    expect(toolMsg?.content).toBe('Error: string error');
   });
 
   it('should format SWITCH_SKILL signal as LLM-friendly text', async () => {
@@ -540,7 +544,7 @@ describe('ExecutingToolHandler', () => {
     const result = await handler.execute(ctx, state, execState, registry);
 
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain("Skill 'my-skill' loaded");
+    expect(toolMsg?.content).toBe("Skill 'my-skill' loaded. Follow its instructions.");
     // Should also inject task user message
     const taskMsg = result.state.context.messages[result.state.context.messages.length - 1];
     expect(taskMsg.role).toBe('user');
@@ -569,7 +573,7 @@ describe('ExecutingToolHandler', () => {
 
     // Handler formats SWITCH_SKILL generically; same-skill detection is in processToolResult
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain("Skill 'my-skill' loaded");
+    expect(toolMsg?.content).toBe("Skill 'my-skill' loaded. Follow its instructions.");
   });
 
   it('should handle SWITCH_SKILL to skill already in stack', async () => {
@@ -593,7 +597,7 @@ describe('ExecutingToolHandler', () => {
 
     // Handler formats SWITCH_SKILL generically; cyclic detection is in processToolResult
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain("Skill 'my-skill' loaded");
+    expect(toolMsg?.content).toBe("Skill 'my-skill' loaded. Follow its instructions.");
   });
 
   it('should format RETURN_SKILL signal', async () => {
@@ -647,8 +651,7 @@ describe('ExecutingToolHandler', () => {
     const result = await handler.execute(ctx, state, execState, registry);
 
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain("Skill 'missing-skill' not found");
-    expect(toolMsg?.content).toContain('skill-a, skill-b');
+    expect(toolMsg?.content).toBe("Skill 'missing-skill' not found. Available: skill-a, skill-b");
   });
 
   it('should format non-signal result as JSON when not a string', async () => {
@@ -722,7 +725,7 @@ describe('ExecutingToolHandler', () => {
     const result = await handler.execute(ctx, state, execState, registry);
 
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toContain('UNKNOWN_SIGNAL');
+    expect(toolMsg?.content).toBe('{"type":"UNKNOWN_SIGNAL","data":123}');
   });
 
   // =========================================================================
@@ -839,7 +842,6 @@ describe('ToolResultHandler', () => {
 
     expect(result.phase.type).toBe('tool-result');
     expect(result.done).toBe(false);
-    expect(result.effects).toBeDefined();
     expect(result.effects!.map((e) => e.type)).toEqual(['tool:end']);
   });
 
@@ -1053,7 +1055,7 @@ describe('Execution Policy integration', () => {
         await expect(handler.execute(ctx, state, execState)).rejects.toThrow(
           'Unrecoverable parse failure'
         );
-        expect(onParseError).toHaveBeenCalled();
+        expect(onParseError).toHaveBeenCalledTimes(1);
       } finally {
         vi.restoreAllMocks();
       }
@@ -1106,7 +1108,7 @@ describe('Execution Policy integration', () => {
         const result = await handler.execute(ctx, state, execState);
 
         // onParseError should be called
-        expect(onParseError).toHaveBeenCalled();
+        expect(onParseError).toHaveBeenCalledTimes(1);
         // llmResponse should be set to fallbackText (core assertion of P0-3 fix)
         expect(result.execState.llmResponse).toBe('Fallback text from policy');
         // action and allActions should be cleared

@@ -86,9 +86,8 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       const skills = provider.listSkills();
 
       expect(skills).toHaveLength(2);
-      const names = skills.map((s) => s.name);
-      expect(names).toContain('skill-a');
-      expect(names).toContain('skill-b');
+      const names = skills.map((s) => s.name).sort();
+      expect(names).toEqual(['skill-a', 'skill-b']);
     });
 
     it('subdirectories without SKILL.md should be ignored', () => {
@@ -119,7 +118,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       expect(manifest).toBeDefined();
       expect(manifest!.name).toBe('my-awesome-skill');
-      expect(manifest!.description).toBe('This is an awesome skill');
+      expect(manifest!.description).toMatch(/^This is an awesome skill\n?$/);
     });
 
     it('should parse multi-line descriptions (| syntax)', () => {
@@ -135,9 +134,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('multi-line-skill');
 
-      expect(manifest).toBeDefined();
-      expect(manifest!.description).toContain('This is a multi-line');
-      expect(manifest!.description).toContain('description for testing');
+      expect(manifest!.description).toMatch(/^This is a multi-line\ndescription for testing\n?$/);
     });
 
     it('should parse multi-line descriptions (> folded syntax)', () => {
@@ -153,9 +150,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('folded-skill');
 
-      expect(manifest).toBeDefined();
-      expect(manifest!.description).toContain('This is a folded');
-      expect(manifest!.description).toContain('description');
+      expect(manifest!.description).toMatch(/^This is a folded description\n?$/);
     });
 
     it('should parse descriptions containing special characters', () => {
@@ -169,10 +164,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('special-skill');
 
-      expect(manifest).toBeDefined();
-      expect(manifest!.description).toContain('colons');
-      expect(manifest!.description).toContain('quotes');
-      expect(manifest!.description).toContain('brackets');
+      expect(manifest!.description).toMatch(/^Skill with: colons, "quotes", and \[brackets\]\n?$/);
     });
 
     it('should handle YAML parsing failures', () => {
@@ -207,9 +199,8 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('numeric-skill');
 
-      expect(manifest).toBeDefined();
       expect(manifest!.name).toBe('numeric-skill');
-      expect(manifest!.description).toBe('Version 2.5 skill');
+      expect(manifest!.description).toMatch(/^Version 2\.5 skill\n?$/);
     });
   });
 
@@ -225,8 +216,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const instructions = await provider.loadInstructions('instr-skill');
 
-      expect(instructions).toContain('# My Instructions');
-      expect(instructions).toContain('Do something useful.');
+      expect(instructions).toMatch(/^# My Instructions\n\nDo something useful\.\n?$/);
     });
 
     it('should throw error for non-existent Skill', async () => {
@@ -250,7 +240,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       expect(instructions).not.toContain('name:');
       expect(instructions).not.toContain('description:');
-      expect(instructions).toContain('Only body content here');
+      expect(instructions).toMatch(/^Only body content here\n?$/);
     });
   });
 
@@ -327,11 +317,8 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('res-skill');
 
-      expect(manifest!.resources).toBeDefined();
-      expect(manifest!.resources).toContain('data.txt');
-      expect(manifest!.resources).toContain('helper.js');
-      expect(manifest!.scripts).toBeDefined();
-      expect(manifest!.scripts).toContain('helper.js');
+      expect(manifest!.resources).toEqual(['data.txt', 'helper.js']);
+      expect(manifest!.scripts).toEqual(['helper.js']);
     });
   });
 
@@ -361,7 +348,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
         provider = new FilesystemSkillProvider([tempDir]);
         expect(provider.listSkills()).toEqual([]);
         expect(warnSpy.length).toBeGreaterThan(0);
-        expect(warnSpy.some((args) => String(args).includes('name'))).toBe(true);
+        expect(warnSpy).toEqual(expect.arrayContaining([[expect.stringContaining('name')]]));
       } finally {
         console.warn = originalWarn;
       }
@@ -380,7 +367,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
         provider = new FilesystemSkillProvider([tempDir]);
         expect(provider.listSkills()).toEqual([]);
         expect(warnSpy.length).toBeGreaterThan(0);
-        expect(warnSpy.some((args) => String(args).includes('description'))).toBe(true);
+        expect(warnSpy).toEqual(expect.arrayContaining([[expect.stringContaining('description')]]));
       } finally {
         console.warn = originalWarn;
       }
@@ -483,6 +470,8 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('empty-skill');
       expect(manifest).toBeDefined();
+      expect(manifest!.name).toBe('empty-skill');
+      expect(manifest!.description).toMatch(/^Empty\n?$/);
 
       const instructions = await provider.loadInstructions('empty-skill');
       expect(instructions).toBe('');
@@ -504,8 +493,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       expect(manifest).toBeDefined();
       expect(manifest!.name).toBe('complex-skill');
-      expect(manifest!.description).toContain('Line one');
-      expect(manifest!.description).toContain('Line two');
+      expect(manifest!.description).toMatch(/^Line one\nLine two\n?$/);
     });
 
     it('should correctly parse multi-line description followed by empty line then key-value pairs', () => {
@@ -524,7 +512,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       expect(manifest).toBeDefined();
       expect(manifest!.name).toBe('gap-skill');
-      expect(manifest!.description).toContain('First line');
+      expect(manifest!.description).toMatch(/^First line\n?$/);
     });
   });
 

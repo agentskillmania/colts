@@ -100,6 +100,38 @@ describe('DefaultExecutionPolicy', () => {
       );
       expect(decision).toEqual({ decision: 'continue' });
     });
+
+    it('should stop with abort when step result is abort', () => {
+      const decision = policy.shouldStop(
+        dummyState,
+        { type: 'abort', tokens: { input: 0, output: 0 } },
+        {
+          stepCount: 3,
+          maxSteps: 10,
+        }
+      );
+      expect(decision).toEqual({
+        decision: 'stop',
+        reason: 'Aborted',
+        runResultType: 'abort',
+      });
+    });
+
+    it('should stop with stopped when step result is stopped', () => {
+      const decision = policy.shouldStop(
+        dummyState,
+        { type: 'stopped', data: 'halted', tokens: { input: 0, output: 0 } },
+        {
+          stepCount: 3,
+          maxSteps: 10,
+        }
+      );
+      expect(decision).toEqual({
+        decision: 'stop',
+        reason: 'Stopped by middleware',
+        runResultType: 'stopped',
+      });
+    });
   });
 
   // ── onToolError ──

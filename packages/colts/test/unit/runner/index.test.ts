@@ -154,7 +154,9 @@ describe('AgentRunner', () => {
       // Verify instructions are in first user message
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
-      expect(firstUserMsg?.content).toMatch(/\[System Instructions\][\s\S]*You are a helpful assistant/);
+      expect(firstUserMsg?.content).toMatch(
+        /\[System Instructions\][\s\S]*You are a helpful assistant/
+      );
 
       // Verify result
       expect(result.response).toBe('Hello! How can I help you?');

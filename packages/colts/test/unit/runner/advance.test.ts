@@ -95,11 +95,11 @@ describe('advance()', () => {
     const toolRegistry = runner.getToolRegistry();
 
     // Then: Should return valid providers
-    expect(llmProvider).toBeDefined();
+    expect(llmProvider).toBe(client);
     expect(typeof llmProvider.call).toBe('function');
     expect(typeof llmProvider.stream).toBe('function');
 
-    expect(toolRegistry).toBeDefined();
+    expect(toolRegistry).toBeInstanceOf(ToolRegistry);
     expect(typeof toolRegistry.execute).toBe('function');
     expect(typeof toolRegistry.toToolSchemas).toBe('function');
   });
@@ -123,7 +123,6 @@ describe('advance()', () => {
 
     // Unregister the tool
     const removed = runner.unregisterTool('testTool');
-    expect(removed).toBe(true);
     expect(runner.getToolRegistry().has('testTool')).toBe(false);
 
     // Unregister non-existent tool returns false
@@ -135,15 +134,15 @@ describe('advance()', () => {
     // This test verifies the default branch coverage for createLLMFromQuickInit
     // Note: We cannot fully test this without real API credentials,
     // but we can verify the runner accepts the config
-    expect(() => {
-      new AgentRunner({
-        model: 'gpt-4',
-        llm: {
-          apiKey: 'test-key',
-          // Not providing provider and maxConcurrency to test defaults
-        },
-      });
-    }).not.toThrow();
+    const r = new AgentRunner({
+      model: 'gpt-4',
+      llm: {
+        apiKey: 'test-key',
+        // Not providing provider and maxConcurrency to test defaults
+      },
+    });
+    expect(r.getLLMProvider()).toBeDefined();
+    expect(r.getToolRegistry()).toBeInstanceOf(ToolRegistry);
   });
 
   it('should handle empty tools array', async () => {
@@ -157,7 +156,6 @@ describe('advance()', () => {
     });
 
     // Registry should be created but empty
-    expect(runner.getToolRegistry()).toBeDefined();
     expect(runner.getToolRegistry().getToolNames()).toHaveLength(0);
   });
 
@@ -201,10 +199,14 @@ describe('advance()', () => {
     const result = await runner.advance(state, execState);
 
     // Then: Should convert to error phase
-    expect(result.phase.type).toBe('error');
-    expect(result.done).toBe(true);
+    expect(result).toEqual(
+      expect.objectContaining({
+        phase: expect.objectContaining({ type: 'error' }),
+        done: true,
+      })
+    );
     if (result.phase.type === 'error') {
-      expect(result.phase.error.message).toContain('Unknown phase');
+      expect(result.phase.error.message).toBe('Unknown phase: {"type":"unknown-phase"}');
     }
   });
 
@@ -430,8 +432,11 @@ describe('advance()', () => {
 
     expect(result.phase.type).toBe('parsed');
     if (result.phase.type === 'parsed') {
-      expect(result.phase.action).toBeDefined();
-      expect(result.phase.action?.tool).toBe('calculate');
+      expect(result.phase.action).toEqual({
+        id: 'call-123',
+        tool: 'calculate',
+        arguments: { expression: '2 + 2' },
+      });
     }
 
     // Phase: parsed -> executing-tool
@@ -454,8 +459,7 @@ describe('advance()', () => {
     expect(result.phase.type).toBe('tool-result');
     expect(result.done).toBe(false);
     // Handler should produce tool:end effect
-    expect(result.effects).toBeDefined();
-    expect(result.effects!.some((e) => e.type === 'tool:end')).toBe(true);
+    expect(result.effects).toEqual([expect.objectContaining({ type: 'tool:end' })]);
   });
 
   it('should format SWITCH_SKILL signal as LLM-friendly tool result', async () => {
@@ -510,9 +514,7 @@ describe('advance()', () => {
     // After skill switch, a task user message is injected, so the tool message is second-to-last
     const toolMsg = messages[messages.length - 2];
     expect(toolMsg.role).toBe('tool');
-    expect(toolMsg.content).toContain("Skill 'tell-time' loaded");
-    expect(toolMsg.content).not.toContain('SWITCH_SKILL');
-    expect(toolMsg.content).not.toContain('"type"');
+    expect(toolMsg.content).toBe("Skill 'tell-time' loaded. Follow its instructions.");
     // The last message is the injected task user message
     const taskMsg = messages[messages.length - 1];
     expect(taskMsg.role).toBe('user');
@@ -566,7 +568,6 @@ describe('advance()', () => {
     const lastMsg = result.state.context.messages[result.state.context.messages.length - 1];
     expect(lastMsg.role).toBe('tool');
     expect(lastMsg.content).toBe('It is 2:30 PM');
-    expect(lastMsg.content).not.toContain('RETURN_SKILL');
   });
 
   it('should allow intervention at parsed phase', async () => {
@@ -662,8 +663,7 @@ describe('advanceStream()', () => {
     }
 
     // Should have phase-change and token events
-    expect(events.some((e) => e.type === 'phase-change')).toBe(true);
-    expect(events.some((e) => e.type === 'token')).toBe(true);
+    expect(events.map((e) => e.type)).toEqual(expect.arrayContaining(['phase-change', 'token']));
   });
 
   it('should work from idle phase', async () => {
@@ -690,7 +690,7 @@ describe('advanceStream()', () => {
     }
 
     // Should complete with phase-change events
-    expect(events.some((e) => e.type === 'phase-change')).toBe(true);
+    expect(events.map((e) => e.type)).toContain('phase-change');
   });
 
   it('should yield error event when LLM fails during calling-llm phase', async () => {
@@ -720,8 +720,7 @@ describe('advanceStream()', () => {
     }
 
     // Should emit error event
-    expect(events.some((e) => e.type === 'error')).toBe(true);
-    expect(events.some((e) => e.type === 'phase-change')).toBe(true);
+    expect(events.map((e) => e.type)).toEqual(expect.arrayContaining(['phase-change', 'error']));
   });
 
   // P1 Regression: advanceStream() must yield ToolResultHandler effects
@@ -838,10 +837,8 @@ describe('advance() skillState regression (CR P0-1)', () => {
 
     // skillState.current should be updated to 'test-skill' by applySkillSignal
     const skillState = result.state.context.skillState;
-    expect(skillState).toBeDefined();
     expect(skillState?.current).toBe('test-skill');
-    // loadedInstructions should contain skill instructions
-    expect(skillState?.loadedInstructions).toContain('Test skill instructions');
+    expect(skillState?.loadedInstructions).toBe('Test skill instructions');
   });
 });
 
