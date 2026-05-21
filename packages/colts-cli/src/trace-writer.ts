@@ -298,11 +298,8 @@ export class TraceWriter {
           : this.getFirstToolStartInfo();
         if (event.callId && info) {
           this.toolStartInfos.delete(event.callId);
-        } else if (!event.callId && info) {
-          // FIFO match: remove from map
-          const firstKey = this.toolStartInfos.keys().next().value;
-          if (firstKey !== undefined) this.toolStartInfos.delete(firstKey);
         }
+        // Note: FIFO match is handled by getFirstToolStartInfo() which already deletes the entry
         const durationMs = info !== null && info !== undefined ? Date.now() - info.startTime : null;
         return {
           event: 'tool.end',

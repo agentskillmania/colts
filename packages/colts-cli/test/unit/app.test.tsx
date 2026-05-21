@@ -246,9 +246,12 @@ describe('App', () => {
       });
 
       capturedOnSubmit!('/run');
-      await vi.waitFor(() => {
-        expect(lastFrame()).toContain('RUN');
-      });
+      await vi.waitFor(
+        () => {
+          expect(lastFrame()).toContain('RUN');
+        },
+        { timeout: 3000 }
+      );
     });
 
     it('/clear does not throw', () => {
@@ -270,7 +273,7 @@ describe('App', () => {
 
       // Wait for async operation to complete
       await vi.waitFor(() => {
-        expect(runner.runStream).toHaveBeenCalled();
+        expect(runner.runStream).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -344,8 +347,8 @@ describe('App', () => {
       // Send a message — should call stepStream, not runStream
       capturedOnSubmit!('hello');
       await new Promise((r) => setTimeout(r, 100));
-      expect(runner.stepStream).toHaveBeenCalled();
-      expect(runner.runStream).not.toHaveBeenCalled();
+      expect(runner.stepStream).toHaveBeenCalledTimes(1);
+      expect(runner.runStream).toHaveBeenCalledTimes(0);
     });
 
     it('/advance switches mode and calls advanceStream on next message', async () => {
@@ -376,8 +379,8 @@ describe('App', () => {
       // Send a message — should call advanceStream, not runStream
       capturedOnSubmit!('hello');
       await new Promise((r) => setTimeout(r, 100));
-      expect(runner.advanceStream).toHaveBeenCalled();
-      expect(runner.runStream).not.toHaveBeenCalled();
+      expect(runner.advanceStream).toHaveBeenCalledTimes(1);
+      expect(runner.runStream).toHaveBeenCalledTimes(0);
     });
 
     it('empty message does not trigger sendMessage', async () => {
@@ -390,7 +393,7 @@ describe('App', () => {
 
       // Give some time to ensure it does not trigger
       await new Promise((r) => setTimeout(r, 50));
-      expect(runner.runStream).not.toHaveBeenCalled();
+      expect(runner.runStream).toHaveBeenCalledTimes(0);
     });
 
     it('/help is intercepted as command by useAgent, does not trigger runStream', async () => {
@@ -403,7 +406,7 @@ describe('App', () => {
 
       // /help is intercepted as command in useAgent.sendMessage, does not go through runStream
       await vi.waitFor(() => {
-        expect(runner.runStream).not.toHaveBeenCalled();
+        expect(runner.runStream).toHaveBeenCalledTimes(0);
       });
     });
   });

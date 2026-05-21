@@ -58,6 +58,28 @@ describe('TraceWriter', () => {
       expect(isISO8601((lines[0] as { ts: string }).ts)).toBe(true);
     });
 
+    it('should use default trace directory when traceDir is omitted', async () => {
+      const tracer = new TraceWriter('test-default-dir');
+      tracer.consume({ type: 'compressing' });
+      await tracer.flush();
+
+      // File should exist in the default location (~/.agentskillmania/colts/traces)
+      const expectedPath = path.join(
+        os.homedir(),
+        '.agentskillmania',
+        'colts',
+        'traces',
+        'test-default-dir.jsonl'
+      );
+      expect(fs.existsSync(expectedPath)).toBe(true);
+
+      // Cleanup
+      fs.rmSync(path.join(os.homedir(), '.agentskillmania', 'colts', 'traces'), {
+        recursive: true,
+        force: true,
+      });
+    });
+
     it('should write trace.end as last record on flush', async () => {
       const tracer = new TraceWriter('test-end', tempDir);
       tracer.consume({ type: 'phase-change', from: { type: 'idle' }, to: { type: 'preparing' } });
@@ -276,6 +298,7 @@ describe('TraceWriter', () => {
       tracer.consume({
         type: 'tool:end',
         result: 925,
+        callId: 'call-1',
       });
 
       await tracer.flush();
@@ -307,6 +330,30 @@ describe('TraceWriter', () => {
       expect(end.durationMs).toBeGreaterThanOrEqual(0);
     });
 
+    it('should pair tool:start and tool:end via FIFO when callId is omitted', async () => {
+      const tracer = new TraceWriter('test-tool-fifo', tempDir);
+
+      tracer.consume({
+        type: 'tool:start',
+        action: { id: 'fifo-1', tool: 'reader', arguments: { path: '/tmp' } },
+      });
+
+      tracer.consume({
+        type: 'tool:end',
+        result: 'file contents',
+      });
+
+      await tracer.flush();
+
+      const lines = readTraceLines(tempDir, 'test-tool-fifo');
+      const endRecord = lines.find((l) => (l as { event: string }).event === 'tool.end') as
+        | { tool: string; durationMs: number }
+        | undefined;
+      expect(endRecord).toBeDefined();
+      expect(endRecord!.tool).toBe('reader');
+      expect(endRecord!.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
     it('should handle tool:end without preceding tool:start', async () => {
       const tracer = new TraceWriter('test-tool-orphan', tempDir);
       tracer.consume({ type: 'tool:end', result: 'orphan result' });
@@ -325,6 +372,28 @@ describe('TraceWriter', () => {
       });
     });
 
+    it('should handle tool:end with callId but no matching tool:start', async () => {
+      const tracer = new TraceWriter('test-tool-missing-start', tempDir);
+      tracer.consume({
+        type: 'tool:end',
+        result: 'no matching start',
+        callId: 'missing-call-id',
+      });
+      await tracer.flush();
+
+      const lines = readTraceLines(tempDir, 'test-tool-missing-start');
+      const record = lines.find((l) => (l as { event: string }).event === 'tool.end');
+      expect(record).toEqual({
+        event: 'tool.end',
+        ts: expect.any(String),
+        elapsed: expect.any(Number),
+        tool: '',
+        result: 'no matching start',
+        durationMs: null,
+        callId: 'missing-call-id',
+      });
+    });
+
     it('should truncate tool:end result when too long', async () => {
       const tracer = new TraceWriter('test-tool-trunc', tempDir);
       tracer.consume({
@@ -340,6 +409,22 @@ describe('TraceWriter', () => {
         | undefined;
       expect(endRecord!.result.length).toBeLessThanOrEqual(203);
       expect(endRecord!.result).toContain('...');
+    });
+
+    it('should handle empty string tool result', async () => {
+      const tracer = new TraceWriter('test-tool-empty', tempDir);
+      tracer.consume({
+        type: 'tool:start',
+        action: { id: 'c1', tool: 'reader', arguments: {} },
+      });
+      tracer.consume({ type: 'tool:end', result: '' });
+      await tracer.flush();
+
+      const lines = readTraceLines(tempDir, 'test-tool-empty');
+      const endRecord = lines.find((l) => (l as { event: string }).event === 'tool.end') as
+        | { result: string }
+        | undefined;
+      expect(endRecord!.result).toBe('');
     });
   });
 
@@ -392,6 +477,22 @@ describe('TraceWriter', () => {
         results: { c1: 'sunny', c2: 'rainy' },
         durationMs: expect.any(Number),
       });
+    });
+
+    it('should handle tools:end without preceding tools:start', async () => {
+      const tracer = new TraceWriter('test-tools-orphan', tempDir);
+      tracer.consume({
+        type: 'tools:end',
+        results: { c1: 'orphan' },
+      });
+      await tracer.flush();
+
+      const lines = readTraceLines(tempDir, 'test-tools-orphan');
+      const record = lines.find((l) => (l as { event: string }).event === 'tools.end') as
+        | { durationMs: unknown }
+        | undefined;
+      expect(record).toBeDefined();
+      expect(record!.durationMs).toBeNull();
     });
   });
 
@@ -615,6 +716,21 @@ describe('TraceWriter', () => {
       // Only trace.start and trace.end, no token records
       const tokenRecords = lines.filter((l) => (l as { event: string }).event === 'token');
       expect(tokenRecords).toHaveLength(0);
+    });
+  });
+
+  describe('unknown event types', () => {
+    it('should ignore events with unknown types', async () => {
+      const tracer = new TraceWriter('test-unknown', tempDir);
+      // Cast to inject an unknown event type that hits the default case
+      tracer.consume({ type: 'unknown-event' as never });
+      await tracer.flush();
+
+      const lines = readTraceLines(tempDir, 'test-unknown');
+      // Only trace.start and trace.end should be present
+      expect(lines).toHaveLength(2);
+      expect((lines[0] as { event: string }).event).toBe('trace.start');
+      expect((lines[1] as { event: string }).event).toBe('trace.end');
     });
   });
 
