@@ -49,7 +49,7 @@ import type { IMessageAssembler } from '../message-assembler/types.js';
 import { compressState, maybeCompress } from './compression.js';
 import { executeAdvance, createRouter } from './advance.js';
 import type { RunnerContext } from './advance.js';
-import { streamCallingLLM, executeAdvanceStream, executeStepStream } from './stream.js';
+import { executeAdvanceStream, executeStepStream } from './stream.js';
 import type { ISkillProvider } from '../skills/types.js';
 import { FilesystemSkillProvider } from '../skills/filesystem-provider.js';
 import { createLoadSkillTool, createReturnSkillTool } from '../skills/index.js';
@@ -819,28 +819,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       this.emit('error', { error: err, context: { step: stepNum }, timestamp: Date.now() });
       throw error;
     }
-  }
-
-  /**
-   * Stream LLM response during calling-llm phase.
-   *
-   * Shared between advanceStream() and stepStream() to avoid duplicate logic.
-   * Yields token events in real-time and stores the complete response in execState.
-   *
-   * @param state - Current agent state
-   * @param execState - Execution state
-   * @param registry - Tool registry
-   * @yields StreamEvent token events
-   *
-   * @private
-   */
-  private async *streamCallingLLM(
-    state: AgentState,
-    execState: ExecutionState,
-    registry?: IToolRegistry,
-    signal?: AbortSignal
-  ): AsyncGenerator<StreamEvent> {
-    yield* streamCallingLLM(this.ctx, state, execState, registry, signal);
   }
 
   /**

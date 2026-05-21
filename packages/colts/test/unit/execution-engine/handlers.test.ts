@@ -236,7 +236,7 @@ describe('CallingLLMHandler', () => {
 
     await handler.execute(ctx, state, execState);
 
-    expect(build).toHaveBeenCalledTimes(2);
+    expect(build).toHaveBeenCalledTimes(1);
   });
 
   it('should clear stale action when LLM response has no tool calls', async () => {

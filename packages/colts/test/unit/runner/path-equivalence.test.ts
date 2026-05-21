@@ -86,21 +86,49 @@ const defaultConfig: AgentConfig = {
 const mockTokens = { input: 10, output: 5 };
 
 /**
+ * Recursively delete all `timestamp` fields from an object.
+ */
+function stripTimestamps(obj: unknown): unknown {
+  if (Array.isArray(obj)) {
+    return obj.map(stripTimestamps);
+  }
+  if (obj !== null && typeof obj === 'object') {
+    const copy: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === 'timestamp') continue;
+      copy[key] = stripTimestamps(value);
+    }
+    return copy;
+  }
+  return obj;
+}
+
+/**
  * Strip fields/events that are expected to differ between blocking and streaming:
- * - `timestamp` (always different)
+ * - `timestamp` (always different, recursively removed)
  * - `token` events (streaming-only)
  * - `thinking` events (streaming-only)
+ * - `llm:request` / `llm:response` events (streaming-only)
  * - `complete` event (streaming-only final marker)
+ * - `run:start` / `run:end` (EventEmitter-only, not yielded in streaming)
  * - `state` field in step:start (streaming carries state snapshot)
  */
 function normalizeEvents(events: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   return events
-    .filter((e) => e.type !== 'token' && e.type !== 'thinking' && e.type !== 'complete')
+    .filter(
+      (e) =>
+        e.type !== 'token' &&
+        e.type !== 'thinking' &&
+        e.type !== 'llm:request' &&
+        e.type !== 'llm:response' &&
+        e.type !== 'complete' &&
+        e.type !== 'run:start' &&
+        e.type !== 'run:end'
+    )
     .map((e) => {
       const copy = { ...e };
-      delete copy.timestamp;
       delete copy.state;
-      return copy;
+      return stripTimestamps(copy) as Record<string, unknown>;
     });
 }
 
@@ -213,13 +241,10 @@ describe('blocking/streaming path equivalence', () => {
       })
     );
 
-    // Event sequence equivalence — TODO(MJ-1): currently differs because
-    // streaming bypasses PhaseRouter for calling-llm phase, yielding
-    // llm:request/llm:response instead of phase-change events.
-    // After MJ-1 refactor (streamExecute in CallingLLMHandler), enable:
-    // const blockingNorm = normalizeEvents(blocking.events);
-    // const streamingNorm = normalizeEvents(streaming.events);
-    // expect(streamingNorm).toEqual(blockingNorm);
+    // Event sequence equivalence
+    const blockingNorm = normalizeEvents(blocking.events);
+    const streamingNorm = normalizeEvents(streaming.events);
+    expect(streamingNorm).toEqual(blockingNorm);
   });
 
   it('Scenario B: single tool call', async () => {
@@ -264,13 +289,10 @@ describe('blocking/streaming path equivalence', () => {
       })
     );
 
-    // Event sequence equivalence — TODO(MJ-1): currently differs because
-    // streaming bypasses PhaseRouter for calling-llm phase, yielding
-    // llm:request/llm:response instead of phase-change events.
-    // After MJ-1 refactor (streamExecute in CallingLLMHandler), enable:
-    // const blockingNorm = normalizeEvents(blocking.events);
-    // const streamingNorm = normalizeEvents(streaming.events);
-    // expect(streamingNorm).toEqual(blockingNorm);
+    // Event sequence equivalence
+    const blockingNorm = normalizeEvents(blocking.events);
+    const streamingNorm = normalizeEvents(streaming.events);
+    expect(streamingNorm).toEqual(blockingNorm);
   });
 
   it('Scenario E: error path (LLM throws)', async () => {
