@@ -117,4 +117,61 @@ describe('executeStepStream error phase branch', () => {
 
     expect(finalResult?.result.type).toBe('error');
   });
+
+  it('should throw when advance returns terminal phase without done flag', async () => {
+    // Defensive: if PhaseRouter returns completed/error but done=false,
+    // the while loop exits (isTerminalPhase=true) but no return path matches.
+    const fakeHandler: IPhaseHandler = {
+      canHandle: (type: string) => type === 'idle',
+      execute: vi.fn().mockResolvedValue({
+        state: createAgentState(defaultConfig),
+        execState: {
+          phase: { type: 'completed', answer: 'done' },
+          stepCount: 0,
+          action: null,
+          allActions: [],
+          toolResult: null,
+        },
+        phase: { type: 'completed', answer: 'done' },
+        done: false, // terminal phase but done=false → triggers defensive throw
+      } as AdvanceResult),
+      executeStream: async function* () {
+        return {
+          state: createAgentState(defaultConfig),
+          execState: {
+            phase: { type: 'completed', answer: 'done' },
+            stepCount: 0,
+            action: null,
+            allActions: [],
+            toolResult: null,
+          },
+          phase: { type: 'completed', answer: 'done' },
+          done: false,
+        } as AdvanceResult;
+      },
+    };
+
+    const router = new PhaseRouter([fakeHandler]);
+    const state = createAgentState(defaultConfig);
+
+    const ctx = {
+      llmProvider: { call: vi.fn(), stream: vi.fn() },
+      toolRegistry: new ToolRegistry(),
+      messageAssembler: { build: vi.fn().mockReturnValue([]) },
+      phaseRouter: router,
+      toolSchemaFormatter: { format: vi.fn() },
+      executionPolicy: { shouldStop: vi.fn().mockReturnValue({ decision: 'continue' }) },
+      options: { model: 'gpt-4' },
+    } as unknown as RunnerContext;
+
+    const iterator = executeStepStream(ctx, undefined, state);
+    // First next() consumes the phase-change event yielded inside executeStepStream
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect((first.value as { type: string }).type).toBe('phase-change');
+    // Second next() triggers the defensive throw after loop exit
+    await expect(iterator.next()).rejects.toThrow(
+      'Unexpected: stepStream loop exited without reaching terminal phase'
+    );
+  });
 });
