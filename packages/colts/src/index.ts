@@ -172,3 +172,15 @@ export type {
   AfterRunContext,
 } from './middleware/index.js';
 export { MiddlewareExecutor } from './middleware/index.js';
+
+// HITL V2 (Non-blocking Human-in-the-Loop)
+export type {
+  HumanRequest,
+  HumanResponse as HitlHumanResponse,
+  HumanQuestion,
+  HumanAnswer,
+  HitlConfig,
+} from './hitl/index.js';
+export { HitlMiddleware } from './hitl/index.js';
+export type { HitlMiddlewareOptions } from './hitl/index.js';
+export { respond } from './hitl/index.js';

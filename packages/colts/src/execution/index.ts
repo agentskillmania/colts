@@ -8,6 +8,7 @@ import type { AgentState, Message } from '../types.js';
 import type { ToolCall } from '../parser/index.js';
 import type { DelegateResult } from '../subagent/types.js';
 import type { TokenStats } from '@agentskillmania/llm-client';
+import type { HumanRequest } from '../hitl/types.js';
 import { produce, type Draft } from 'immer';
 
 // ---------------------------------------------------------------------------
@@ -61,7 +62,8 @@ export type Phase =
   | { type: 'executing-tool'; actions: Action[] }
   | { type: 'tool-result'; results: Record<string, unknown> }
   | { type: 'completed'; answer: string }
-  | { type: 'error'; error: Error };
+  | { type: 'error'; error: Error }
+  | { type: 'waiting-human'; request: HumanRequest };
 
 /**
  * Result of a single step (one ReAct cycle)
@@ -71,7 +73,8 @@ export type StepResult =
   | { type: 'done'; answer: string; tokens: TokenStats }
   | { type: 'error'; error: Error; tokens: TokenStats }
   | { type: 'abort'; tokens: TokenStats }
-  | { type: 'stopped'; data?: unknown; tokens: TokenStats };
+  | { type: 'stopped'; data?: unknown; tokens: TokenStats }
+  | { type: 'waiting-human'; request: HumanRequest; tokens: TokenStats };
 
 /**
  * Events emitted during step/advance stream
@@ -105,7 +108,8 @@ export type StreamEvent =
       toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
       timestamp: number;
     }
-  | { type: 'thinking'; content: string; timestamp: number };
+  | { type: 'thinking'; content: string; timestamp: number }
+  | { type: 'waiting-human'; request: HumanRequest; timestamp: number };
 
 /**
  * Options for advance execution
@@ -214,7 +218,7 @@ export function toolCallToAction(toolCall: ToolCall): Action {
  * @returns true if the phase represents a terminal state
  */
 export function isTerminalPhase(phase: Phase): boolean {
-  return phase.type === 'completed' || phase.type === 'error';
+  return phase.type === 'completed' || phase.type === 'error' || phase.type === 'waiting-human';
 }
 
 /**
@@ -225,7 +229,8 @@ export type RunResult =
   | { type: 'max_steps'; totalSteps: number; tokens: TokenStats }
   | { type: 'error'; error: Error; totalSteps: number; tokens: TokenStats }
   | { type: 'abort'; totalSteps: number; tokens: TokenStats }
-  | { type: 'stopped'; data?: string; totalSteps: number; tokens: TokenStats };
+  | { type: 'stopped'; data?: string; totalSteps: number; tokens: TokenStats }
+  | { type: 'waiting-human'; request: HumanRequest; totalSteps: number; tokens: TokenStats };
 
 /**
  * Events emitted during runStream()

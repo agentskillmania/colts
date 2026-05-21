@@ -112,6 +112,17 @@ export async function* executeStepStream(
         runnerOptions: runnerOptions!,
       });
       if (chain.stopResult) {
+        // HITL V2: waiting-human phase from middleware
+        if (chain.stopResult.done && chain.stopResult.phase.type === 'waiting-human') {
+          return {
+            state: currentState,
+            result: {
+              type: 'waiting-human',
+              request: chain.stopResult.phase.request,
+              tokens: stepTokens,
+            },
+          };
+        }
         return {
           state: currentState,
           result: { type: 'error', error: new Error('Stopped by middleware'), tokens: stepTokens },
@@ -173,6 +184,17 @@ export async function* executeStepStream(
         runnerOptions: runnerOptions!,
       });
       if (chain.stopResult) {
+        // HITL V2: waiting-human phase from middleware
+        if (chain.stopResult.done && chain.stopResult.phase.type === 'waiting-human') {
+          return {
+            state: result.state,
+            result: {
+              type: 'waiting-human',
+              request: chain.stopResult.phase.request,
+              tokens: stepTokens,
+            },
+          };
+        }
         return {
           state: result.state,
           result: { type: 'error', error: new Error('Stopped by middleware'), tokens: stepTokens },
@@ -204,6 +226,17 @@ export async function* executeStepStream(
     yield { type: 'phase-change', from: fromPhase, to: result.phase, timestamp: Date.now() };
 
     // Control flow is determined by phase + done
+    if (result.done && result.phase.type === 'waiting-human') {
+      return {
+        state: currentState,
+        result: {
+          type: 'waiting-human',
+          request: result.phase.request,
+          tokens: stepTokens,
+        },
+      };
+    }
+
     if (result.done && result.phase.type === 'completed') {
       return {
         state: currentState,
