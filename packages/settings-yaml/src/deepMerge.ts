@@ -174,6 +174,6 @@ function deepMergeInternal<T extends Record<string, unknown>>(
 export function deepMerge<T extends Record<string, unknown>>(
   target: Record<string, unknown>,
   defaultValue: T
-): T {
+): T & Record<string, unknown> {
   return deepMergeInternal(target, defaultValue, new WeakSet<object>());
 }
