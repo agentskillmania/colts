@@ -62,6 +62,7 @@ import { DefaultExecutionPolicy } from '../policy/default-policy.js';
 import type { AgentMiddleware } from '../middleware/types.js';
 import type { RunnerOptions } from './options.js';
 import { MiddlewareExecutor } from '../middleware/executor.js';
+import type { HumanRequest } from '../hitl/types.js';
 
 /**
  * Runner event map — fully aligned with AsyncGenerator StreamEvent / RunStreamEvent.
@@ -1017,6 +1018,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
                 },
               };
             }
+            // HITL V2: waiting-human phase from middleware
+            if (chain.stopResult.done && chain.stopResult.phase.type === 'waiting-human') {
+              return {
+                state: chain.state ?? chain.stopResult.state ?? currentState,
+                result: {
+                  type: 'waiting-human',
+                  request: chain.stopResult.phase.request,
+                  tokens: stepTokens,
+                },
+              };
+            }
             // Otherwise fall back to error (backward compatible)
             return {
               state: chain.state ?? currentState,
@@ -1057,6 +1069,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
                 result: {
                   type: 'stopped',
                   data: chain.stopResult.phase.answer,
+                  tokens: stepTokens,
+                },
+              };
+            }
+            // HITL V2: waiting-human phase from middleware
+            if (chain.stopResult.done && chain.stopResult.phase.type === 'waiting-human') {
+              return {
+                state: chain.state ?? chain.stopResult.state ?? currentState,
+                result: {
+                  type: 'waiting-human',
+                  request: chain.stopResult.phase.request,
                   tokens: stepTokens,
                 },
               };
@@ -1135,6 +1158,16 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           const stepResult: StepResult = {
             type: 'error',
             error: effectiveResult.phase.error,
+            tokens: stepTokens,
+          };
+          return finalizeStep(currentState, stepResult);
+        }
+
+        // HITL V2: waiting-human phase (non-blocking human input)
+        if (effectiveResult.done && effectiveResult.phase.type === 'waiting-human') {
+          const stepResult: StepResult = {
+            type: 'waiting-human',
+            request: effectiveResult.phase.request,
             tokens: stepTokens,
           };
           return finalizeStep(currentState, stepResult);
@@ -1425,6 +1458,18 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               totalSteps,
               tokens: runTokens,
             };
+          } else if (decision.runResultType === 'waiting-human') {
+            runResult = {
+              type: 'waiting-human',
+              request: (
+                result as {
+                  type: 'waiting-human';
+                  request: import('../hitl/types.js').HumanRequest;
+                }
+              ).request,
+              totalSteps,
+              tokens: runTokens,
+            };
           } else {
             runResult = { type: 'max_steps', totalSteps, tokens: runTokens };
           }
@@ -1592,7 +1637,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           registry,
           options,
           mw,
-          totalSteps
+          totalSteps,
+          this.options
         );
         let stepResult: { state: AgentState; result: StepResult };
 
@@ -1614,6 +1660,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         if (stepResult.result.type === 'abort') {
           const runResult: RunResult = {
             type: 'abort',
+            totalSteps: totalSteps + 1,
+            tokens: runTokens,
+          };
+          return yield* finalizeRunStream(stepResult.state, runResult);
+        }
+
+        // HITL V2: step returned waiting-human → short-circuit to run result
+        if (stepResult.result.type === 'waiting-human') {
+          const runResult: RunResult = {
+            type: 'waiting-human',
+            request: stepResult.result.request,
             totalSteps: totalSteps + 1,
             tokens: runTokens,
           };
@@ -1742,6 +1799,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             runResult = {
               type: 'stopped',
               data: (stepResult.result as { type: 'stopped'; data?: string }).data,
+              totalSteps,
+              tokens: runTokens,
+            };
+          } else if (decision.runResultType === 'waiting-human') {
+            runResult = {
+              type: 'waiting-human',
+              request: (stepResult.result as { type: 'waiting-human'; request: HumanRequest })
+                .request,
               totalSteps,
               tokens: runTokens,
             };

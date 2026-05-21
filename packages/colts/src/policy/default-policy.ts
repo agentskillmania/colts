@@ -49,6 +49,13 @@ export class DefaultExecutionPolicy implements IExecutionPolicy {
         runResultType: 'stopped',
       };
     }
+    if (stepResult.type === 'waiting-human') {
+      return {
+        decision: 'stop',
+        reason: 'Waiting for human input',
+        runResultType: 'waiting-human',
+      };
+    }
     if (meta.stepCount >= meta.maxSteps) {
       return {
         decision: 'stop',

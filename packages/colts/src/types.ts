@@ -136,6 +136,8 @@ export interface AgentContext {
   totalTokens?: TokenStats;
   /** Estimated total token count of full LLM context (via js-tiktoken) */
   estimatedContextSize?: number;
+  /** V2 HITL: tool call IDs approved by human (consumed after use by HitlMiddleware) */
+  hitlApprovals?: string[];
 }
 
 /**

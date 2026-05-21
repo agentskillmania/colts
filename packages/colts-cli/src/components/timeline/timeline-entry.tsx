@@ -242,6 +242,9 @@ function RunCompleteEntry({ entry }: { entry: Extract<TimelineEntry, { type: 'ru
   if (r.type === 'stopped') {
     return <Alert variant="info">Stopped ({r.totalSteps} steps)</Alert>;
   }
+  if (r.type === 'waiting-human') {
+    return <Alert variant="warning">Waiting for human input ({r.totalSteps} steps)</Alert>;
+  }
   return <Alert variant="error">Run error: {r.error.message}</Alert>;
 }
 
