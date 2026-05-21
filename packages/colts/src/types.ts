@@ -23,6 +23,8 @@ export type MessageType = 'text' | 'thought' | 'action' | 'tool-result';
 export interface Message {
   /** Message role */
   role: MessageRole;
+  /** Unique message identifier (UUID v4) */
+  id: string;
   /** Message content */
   content: string;
   /** Message type */
