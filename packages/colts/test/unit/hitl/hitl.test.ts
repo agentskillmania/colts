@@ -188,8 +188,11 @@ describe('HITL V2: respond()', () => {
     expect(toolMsg).toBeDefined();
     expect(toolMsg!.toolName).toBe('ask_human');
     expect(toolMsg!.type).toBe('tool-result');
+    expect(toolMsg!.role).toBe('tool');
+    expect(toolMsg!.toolCallId).toBe('call_abc');
+    // Verify the content is valid JSON containing the answers
     const parsed = JSON.parse(toolMsg!.content);
-    expect(parsed.name.value).toBe('Alice');
+    expect(parsed).toEqual({ name: { type: 'direct', value: 'Alice' } });
   });
 
   it('should add approval marker for tool-confirm approved', async () => {
@@ -295,6 +298,27 @@ describe('HITL V2: HitlMiddleware approval passthrough', () => {
   });
 });
 
+describe('HITL V2: respond() edge cases', () => {
+  it('should return unchanged state for unknown response type', async () => {
+    const { respond } = await import('../../../src/hitl/respond.js');
+
+    const state = makeState();
+    const request: HumanRequest = {
+      type: 'question',
+      questions: [{ id: 'q1', question: 'Name?', type: 'text' }],
+      toolCallId: 'c1',
+    };
+    // Cast to any to simulate an unknown response type
+    const response = { type: 'unknown-type' } as unknown as HumanResponse;
+
+    const newState = respond(state, request, response);
+
+    // State should be unchanged — no new messages, no approvals
+    expect(newState.context.messages).toEqual(state.context.messages);
+    expect(newState.context.hitlApprovals).toBeUndefined();
+  });
+});
+
 describe('HITL V2: Integration with runner', () => {
   it('should return waiting-human when LLM calls a confirmed tool', async () => {
     const { AgentRunner } = await import('../../../src/runner/index.js');
@@ -318,12 +342,14 @@ describe('HITL V2: Integration with runner', () => {
       middleware: [new HitlMiddleware({ confirmTools: ['delete_file'] })],
     });
 
+    const executeFn = vi.fn().mockResolvedValue({ success: true });
+
     // Register the delete_file tool
     runner.registerTool({
       name: 'delete_file',
       description: 'Delete a file',
       parameters: z.object({ path: z.string() }),
-      execute: vi.fn().mockResolvedValue({ success: true }),
+      execute: executeFn,
     });
 
     const state = createAgentState({
@@ -344,9 +370,7 @@ describe('HITL V2: Integration with runner', () => {
     }
 
     // The delete_file tool should NOT have been executed
-    const tool = runner.getToolRegistry().get('delete_file');
-    // Tool was registered but not executed (middleware intercepted)
-    expect(tool).toBeDefined();
+    expect(executeFn).not.toHaveBeenCalled();
   });
 
   it('should return waiting-human via runStream()', async () => {
@@ -458,6 +482,13 @@ describe('HITL V2: Integration with runner', () => {
 
     // Second run: tool should execute normally
     const { result: secondResult } = await runner.run(approvedState);
-    expect(executeFn).toHaveBeenCalled();
+    expect(executeFn).toHaveBeenCalledTimes(1);
+    // Tool receives (args, options?) — verify args contain the expected path
+    const callArgs = executeFn.mock.calls[0][0] as Record<string, unknown>;
+    expect(callArgs).toEqual(expect.objectContaining({ path: '/tmp/x' }));
+    // Run should complete successfully after tool execution + LLM final answer
+    if (secondResult.type === 'error') {
+      throw new Error(`Unexpected error: ${secondResult.error.message}`);
+    }
   });
 });
