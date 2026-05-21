@@ -211,9 +211,9 @@ describe('Step 0: AgentState', () => {
       const state = createAgentState(baseConfig);
       const snapshot = createSnapshot(state);
 
-      expect(snapshot).toHaveProperty('version', '1.0.0');
       expect(snapshot).toHaveProperty('timestamp');
       expect(snapshot).toHaveProperty('state');
+      expect(snapshot).not.toHaveProperty('version');
       expect(snapshot).not.toHaveProperty('checksum');
       expect(snapshot.state).toEqual(state);
     });
