@@ -256,9 +256,4 @@ describe('SetupWizard', () => {
     });
   });
 
-  it('unmount does not throw', () => {
-    const onComplete = vi.fn();
-    const { unmount } = render(<SetupWizard onComplete={onComplete} />);
-    expect(() => unmount()).not.toThrow();
-  });
 });

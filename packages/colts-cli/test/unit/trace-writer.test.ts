@@ -761,7 +761,8 @@ describe('TraceWriter', () => {
 
       // Every line should be valid JSON
       for (const line of lines) {
-        expect(() => JSON.parse(line)).not.toThrow();
+        const parsed = JSON.parse(line);
+        expect(typeof parsed).toBe('object');
       }
     });
 

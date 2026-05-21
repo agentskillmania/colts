@@ -328,7 +328,8 @@ describe('StreamEventConsumer', () => {
     it('does not crash when tool:end has no matching tool entry', () => {
       const consumer = new StreamEventConsumer(entries.setter, state.setter);
 
-      expect(() => consumer.consume(toolEndEvent('orphan'))).not.toThrow();
+      consumer.consume(toolEndEvent('orphan'));
+      expect(entries.lastEntries).toHaveLength(0);
     });
   });
 
@@ -791,8 +792,9 @@ describe('StreamEventConsumer', () => {
 
       // resetAssistant and flush are public APIs, not restricted by disposed
       // Caller needs to manage lifecycle themselves
-      expect(() => consumer.resetAssistant()).not.toThrow();
-      expect(() => consumer.flush()).not.toThrow();
+      consumer.resetAssistant();
+      consumer.flush();
+      expect(entries.lastEntries).toHaveLength(1); // finalized assistant remains
     });
   });
 

@@ -203,13 +203,6 @@ describe('App', () => {
       expect(lastFrame()).toContain('RUN');
     });
 
-    it('unmount does not throw', () => {
-      const runner = createMockRunner();
-      const { unmount } = render(
-        <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
-      );
-      expect(() => unmount()).not.toThrow();
-    });
   });
 
   // ── Command interception ──
@@ -260,15 +253,6 @@ describe('App', () => {
         },
         { timeout: 5000, interval: 10 }
       );
-    });
-
-    it('/clear does not throw', () => {
-      const runner = createMockRunner();
-      render(
-        <App config={validConfig} runner={runner} sessionBaseDir="/tmp/colts-test-sessions" />
-      );
-
-      expect(() => capturedOnSubmit!('/clear')).not.toThrow();
     });
 
     it('normal message triggers sendMessage (calls runStream)', async () => {

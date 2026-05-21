@@ -1195,7 +1195,7 @@ describe('createDelegateTool', () => {
 
       // Wait for the mock client's call to have been invoked
       // (it will resolve the promise and abort the controller)
-      await vi.waitFor(() => expect(client.call).toHaveBeenCalled(), {
+      await vi.waitFor(() => expect(client.call).toHaveBeenCalledTimes(1), {
         timeout: 2000,
       });
 
