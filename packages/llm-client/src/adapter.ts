@@ -518,7 +518,10 @@ export class PiAiAdapter {
         return null;
 
       default:
-        // Skip unknown event types gracefully
+        // Skip unknown event types gracefully, but warn in development
+        console.warn(
+          `[PiAiAdapter] Unknown stream event type: ${String((event as unknown as { type?: unknown }).type)}`
+        );
         return null;
     }
   }
