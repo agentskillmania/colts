@@ -8,6 +8,7 @@ import type { AppConfig } from '../../src/config.js';
 
 // Capture the options passed to AgentRunner constructor
 let capturedOptions: unknown = null;
+let capturedConfirmableOptions: Array<{ confirm: (...args: unknown[]) => unknown }> = [];
 
 vi.mock('@agentskillmania/colts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agentskillmania/colts')>();
@@ -17,6 +18,18 @@ vi.mock('@agentskillmania/colts', async (importOriginal) => {
       capturedOptions = options;
       return {
         registerTool: vi.fn(),
+      };
+    }),
+    ConfirmableRegistry: vi.fn().mockImplementation((inner, options) => {
+      capturedConfirmableOptions.push(options);
+      return {
+        execute: vi.fn(),
+        register: vi.fn(),
+        getTool: vi.fn(),
+        listTools: vi.fn(),
+        getToolSchema: vi.fn(),
+        getToolSchemaFormatter: vi.fn(),
+        setToolSchemaFormatter: vi.fn(),
       };
     }),
   };
@@ -124,6 +137,31 @@ describe('runner-setup', () => {
       createRunnerFromConfig(validConfig);
       expect((capturedOptions as Record<string, unknown>).maxSteps).toBe(50);
       expect((capturedOptions as Record<string, unknown>).requestTimeout).toBe(60000);
+    });
+
+    it('should pass custom confirm callback to ConfirmableRegistry', async () => {
+      const callbacks = { askHuman: vi.fn(), confirm: vi.fn().mockResolvedValue(true) };
+      createRunnerFromConfig(validConfig, callbacks);
+
+      const registryOpts = capturedConfirmableOptions[capturedConfirmableOptions.length - 1];
+      await registryOpts.confirm('dangerous_tool', { x: 1 });
+      expect(callbacks.confirm).toHaveBeenCalledWith('dangerous_tool', { x: 1 });
+    });
+
+    it('should isolate callbacks between instances', async () => {
+      capturedConfirmableOptions = [];
+      const callbacksA = { askHuman: vi.fn(), confirm: vi.fn().mockResolvedValue(true) };
+      const callbacksB = { askHuman: vi.fn(), confirm: vi.fn().mockResolvedValue(false) };
+
+      createRunnerFromConfig(validConfig, callbacksA);
+      createRunnerFromConfig(validConfig, callbacksB);
+
+      expect(capturedConfirmableOptions).toHaveLength(2);
+      await capturedConfirmableOptions[0].confirm('tool', {});
+      await capturedConfirmableOptions[1].confirm('tool', {});
+
+      expect(callbacksA.confirm).toHaveBeenCalledTimes(1);
+      expect(callbacksB.confirm).toHaveBeenCalledTimes(1);
     });
 
     it('should handle undefined optional fields gracefully', () => {

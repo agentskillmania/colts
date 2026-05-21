@@ -11,14 +11,16 @@ import { render } from 'ink';
 import { App } from './app.js';
 import { loadConfig } from './config.js';
 import { createRunnerFromConfig, createInitialStateFromConfig } from './runner-setup.js';
+import type { InteractionCallbacks } from './runner-setup.js';
 
 async function main() {
   const config = await loadConfig();
 
-  const runner = createRunnerFromConfig(config);
+  const callbacks: InteractionCallbacks = { askHuman: null, confirm: null };
+  const runner = createRunnerFromConfig(config, callbacks);
   const initialState = createInitialStateFromConfig(config);
 
-  render(React.createElement(App, { config, runner, initialState }));
+  render(React.createElement(App, { config, runner, initialState, callbacks }));
 }
 
 main().catch((err) => {

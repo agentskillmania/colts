@@ -20,15 +20,23 @@ import type {
 } from '@agentskillmania/colts';
 import type { AppConfig } from './config.js';
 
+/** Interaction callback interface for runner instance binding */
+export interface InteractionCallbacks {
+  askHuman: AskHumanHandler | null;
+  confirm: ConfirmHandler | null;
+}
+
 /**
- * Mutable reference for interaction callbacks
+ * Mutable reference for interaction callbacks (legacy global fallback)
  *
  * runner-setup.ts injects lazy handler when creating runner,
  * app.tsx fills in the real implementation via useEffect after mount (closure holds setInteraction).
+ *
+ * @deprecated Use per-instance callbacks passed to createRunnerFromConfig instead.
  */
-export const interactionCallbacks = {
-  askHuman: null as AskHumanHandler | null,
-  confirm: null as ConfirmHandler | null,
+export const interactionCallbacks: InteractionCallbacks = {
+  askHuman: null,
+  confirm: null,
 };
 
 /**
@@ -37,7 +45,10 @@ export const interactionCallbacks = {
  * @param config - Validated app config
  * @returns AgentRunner instance, or null if config is invalid
  */
-export function createRunnerFromConfig(config: AppConfig): AgentRunner | null {
+export function createRunnerFromConfig(
+  config: AppConfig,
+  callbacks: InteractionCallbacks = interactionCallbacks
+): AgentRunner | null {
   if (!config.hasValidConfig || !config.llm) return null;
 
   // Create internal registry
@@ -48,8 +59,8 @@ export function createRunnerFromConfig(config: AppConfig): AgentRunner | null {
   const registry = new ConfirmableRegistry(innerRegistry, {
     confirmTools,
     confirm: async (toolName, args) => {
-      if (!interactionCallbacks.confirm) return false;
-      return interactionCallbacks.confirm(toolName, args);
+      if (!callbacks.confirm) return false;
+      return callbacks.confirm(toolName, args);
     },
   });
 
@@ -74,7 +85,7 @@ export function createRunnerFromConfig(config: AppConfig): AgentRunner | null {
 
   // Register ask_human tool; handler bound lazily
   const askHumanTool = createAskHumanTool(async (params) => {
-    if (!interactionCallbacks.askHuman) {
+    if (!callbacks.askHuman) {
       // Fallback: return empty response when no handler is available
       const fallback: Record<string, { type: 'free-text'; value: string }> = {};
       for (const q of params.questions) {
@@ -82,7 +93,7 @@ export function createRunnerFromConfig(config: AppConfig): AgentRunner | null {
       }
       return fallback;
     }
-    return interactionCallbacks.askHuman(params);
+    return callbacks.askHuman(params);
   }) as unknown as Parameters<typeof runner.registerTool>[0];
   runner.registerTool(askHumanTool);
 
