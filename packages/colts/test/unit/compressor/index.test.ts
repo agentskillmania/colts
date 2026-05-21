@@ -128,26 +128,24 @@ describe('DefaultContextCompressor - Constructor', () => {
   });
 
   it('should not throw for truncate strategy without LLM provider', () => {
-    expect(() => new DefaultContextCompressor({ strategy: 'truncate' })).not.toThrow();
+    const c = new DefaultContextCompressor({ strategy: 'truncate' });
+    expect(c).toBeInstanceOf(DefaultContextCompressor);
   });
 
   it('should accept summarize strategy with LLM provider', () => {
     const llm = createMockLLMProvider('summary');
-    expect(
-      () => new DefaultContextCompressor({ strategy: 'summarize' }, llm, 'gpt-4')
-    ).not.toThrow();
+    const c = new DefaultContextCompressor({ strategy: 'summarize' }, llm, 'gpt-4');
+    expect(c).toBeInstanceOf(DefaultContextCompressor);
   });
 
   it('should accept summarize strategy with summaryProvider instead of llmProvider', () => {
     const summaryLLM = createMockLLMProvider('summary');
-    expect(
-      () =>
-        new DefaultContextCompressor(
-          { strategy: 'summarize', summaryProvider: summaryLLM, summaryModel: 'cheap-model' },
-          undefined,
-          undefined
-        )
-    ).not.toThrow();
+    const c = new DefaultContextCompressor(
+      { strategy: 'summarize', summaryProvider: summaryLLM, summaryModel: 'cheap-model' },
+      undefined,
+      undefined
+    );
+    expect(c).toBeInstanceOf(DefaultContextCompressor);
   });
 
   it('should prefer summaryProvider over llmProvider for summarization', async () => {

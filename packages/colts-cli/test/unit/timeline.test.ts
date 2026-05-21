@@ -115,8 +115,8 @@ describe('isVisible', () => {
     (entryType) => {
       const entry = makeEntry(entryType);
       for (const level of levels) {
-        // Should not throw
-        expect(() => isVisible(entry, level)).not.toThrow();
+        // Should return a boolean without throwing
+        expect(typeof isVisible(entry, level)).toBe('boolean');
       }
     }
   );

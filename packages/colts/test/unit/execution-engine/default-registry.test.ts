@@ -40,7 +40,8 @@ describe('createDefaultPhaseHandlers', () => {
 
   it('should register all handlers without error', () => {
     const handlers = createDefaultPhaseHandlers();
-    expect(() => new PhaseRouter(handlers)).not.toThrow();
+    const router = new PhaseRouter(handlers);
+    expect(router).toBeInstanceOf(PhaseRouter);
   });
 
   it('should have unique handler for each phase type', () => {

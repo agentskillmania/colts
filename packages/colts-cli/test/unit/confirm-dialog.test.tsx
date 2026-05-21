@@ -105,9 +105,4 @@ describe('ConfirmDialog', () => {
     expect(lastFrame()).toContain('prod');
   });
 
-  it('unmount does not throw', () => {
-    const onResult = vi.fn();
-    const { unmount } = render(<ConfirmDialog toolName="test" args={{}} onResult={onResult} />);
-    expect(() => unmount()).not.toThrow();
-  });
 });

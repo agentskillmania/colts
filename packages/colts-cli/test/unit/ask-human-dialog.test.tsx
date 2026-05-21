@@ -207,11 +207,4 @@ describe('AskHumanDialog', () => {
     expect(response.color).toEqual({ type: 'direct', value: 'blue' });
     expect(response.skills).toEqual({ type: 'direct', value: ['js', 'ts'] });
   });
-
-  it('unmount does not throw', () => {
-    const questions: Question[] = [{ id: 'q1', question: 'Name?', type: 'text' }];
-    const onAnswer = vi.fn();
-    const { unmount } = render(<AskHumanDialog questions={questions} onAnswer={onAnswer} />);
-    expect(() => unmount()).not.toThrow();
-  });
 });

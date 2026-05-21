@@ -85,7 +85,7 @@ describe('LLMClient with default config', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledTimes(1);
     expect(result).toBe(mockResponse);
   });
 
@@ -113,7 +113,7 @@ describe('LLMClient with default config', () => {
       events.push(event);
     }
 
-    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledTimes(1);
     expect(events.length).toBeGreaterThan(0);
   });
 
@@ -284,7 +284,7 @@ describe('LLMClient priority and retry', () => {
       priority: 5,
     });
 
-    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledTimes(1);
     const callArgs = mockExecute.mock.calls[0];
     expect(callArgs[1]).toBe(5); // priority
   });
@@ -310,7 +310,7 @@ describe('LLMClient priority and retry', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledTimes(1);
     const callArgs = mockExecute.mock.calls[0];
     expect(callArgs[1]).toBe(0); // default priority
   });
@@ -322,7 +322,7 @@ describe('LLMClient priority and retry', () => {
     client.on('state', eventHandler);
 
     // Verify that on method was called during construction
-    expect(mockOn).toHaveBeenCalled();
+    expect(mockOn).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -354,7 +354,7 @@ describe('LLMClient requestId', () => {
       requestId: customRequestId,
     });
 
-    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledTimes(1);
     const callArgs = mockExecute.mock.calls[0];
     expect(callArgs[3]).toBe(customRequestId);
   });
@@ -380,7 +380,7 @@ describe('LLMClient requestId', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledTimes(1);
     const callArgs = mockExecute.mock.calls[0];
     expect(callArgs[3]).toBeUndefined();
   });
@@ -411,7 +411,7 @@ describe('LLMClient requestId', () => {
       events.push(event);
     }
 
-    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledTimes(1);
     const callArgs = mockExecute.mock.calls[0];
     expect(callArgs[3]).toBe(customRequestId);
   });
