@@ -218,6 +218,22 @@ describe('AbortSignal (Step 16)', () => {
   // stepStream abort
   // ============================================================
   describe('stepStream abort', () => {
+    it('should return abort when signal is pre-aborted', async () => {
+      const client = createMockClient();
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+
+      const controller = new AbortController();
+      controller.abort();
+
+      const gen = runner.stepStream(state, undefined, { signal: controller.signal });
+
+      // Generator returns immediately with abort result
+      const { done, value } = await gen.next();
+      expect(done).toBe(true);
+      expect(value.result.type).toBe('abort');
+    });
+
     it('should stop yielding tokens when signal is aborted during stream', async () => {
       const client = createMockClient();
 

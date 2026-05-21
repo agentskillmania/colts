@@ -375,6 +375,47 @@ describe('deepMerge', () => {
     });
   });
 
+  describe('nested empty objects', () => {
+    it('should merge empty target object with default fields', () => {
+      const target = { a: {} };
+      const defaultValue = { a: { b: 1 } };
+
+      const result = deepMerge(target, defaultValue);
+
+      expect(result).toEqual({ a: { b: 1 } });
+    });
+
+    it('should merge deeply nested empty objects', () => {
+      const target = { a: { b: {} } };
+      const defaultValue = { a: { b: { c: 1 }, d: 2 } };
+
+      const result = deepMerge(target, defaultValue);
+
+      expect(result).toEqual({ a: { b: { c: 1 }, d: 2 } });
+    });
+
+    it('should deep copy empty object from default-only key', () => {
+      const target = { name: 'test' };
+      const defaultValue = { config: {} };
+
+      const result = deepMerge(target, defaultValue);
+
+      expect(result).toEqual({ name: 'test', config: {} });
+      // Verify no shared reference
+      (result as { config: Record<string, unknown> }).config.x = 1;
+      expect((defaultValue as { config: Record<string, unknown> }).config).toEqual({});
+    });
+
+    it('should produce empty object when both target and default are empty', () => {
+      const target = { a: {} };
+      const defaultValue = { a: {} };
+
+      const result = deepMerge(target, defaultValue);
+
+      expect(result).toEqual({ a: {} });
+    });
+  });
+
   describe('error handling', () => {
     it('should throw SettingsError on circular reference in target', () => {
       const target: Record<string, unknown> = { name: 'test' };
