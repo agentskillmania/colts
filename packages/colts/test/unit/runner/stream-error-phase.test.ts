@@ -118,6 +118,113 @@ describe('executeStepStream error phase branch', () => {
     expect(finalResult?.result.type).toBe('error');
   });
 
+  it('should return error when middleware beforeAdvance requests stop', async () => {
+    const mockExecutor = {
+      runBeforeAdvance: vi.fn().mockResolvedValue({
+        stopResult: true,
+        state: null,
+        execState: null,
+      }),
+      runAfterAdvance: vi.fn(),
+      isEmpty: false,
+    };
+
+    const idleHandler: IPhaseHandler = {
+      canHandle: (type: string) => type === 'idle',
+      execute: vi.fn().mockResolvedValue({
+        state: createAgentState(defaultConfig),
+        execState: {
+          phase: { type: 'completed', answer: 'done' },
+          stepCount: 0,
+          action: null,
+          allActions: [],
+          toolResult: null,
+        },
+        phase: { type: 'completed', answer: 'done' },
+        done: true,
+      }),
+      streamExecute: async function* () {
+        return {
+          state: createAgentState(defaultConfig),
+          execState: {
+            phase: { type: 'completed', answer: 'done' },
+            stepCount: 0,
+            action: null,
+            allActions: [],
+            toolResult: null,
+          },
+          phase: { type: 'completed', answer: 'done' },
+          done: true,
+        } as AdvanceResult;
+      },
+    };
+
+    const router = new PhaseRouter([idleHandler]);
+    const state = createAgentState(defaultConfig);
+
+    const ctx = {
+      llmProvider: { call: vi.fn(), stream: vi.fn() },
+      toolRegistry: new ToolRegistry(),
+      messageAssembler: { build: vi.fn().mockReturnValue([]) },
+      phaseRouter: router,
+      toolSchemaFormatter: { format: vi.fn() },
+      executionPolicy: { shouldStop: vi.fn().mockReturnValue({ decision: 'continue' }) },
+      options: { model: 'gpt-4' },
+    } as unknown as RunnerContext;
+
+    const iterator = executeStepStream(
+      ctx,
+      undefined,
+      state,
+      undefined,
+      undefined,
+      mockExecutor as never
+    );
+    const { done, value } = await iterator.next();
+    expect(done).toBe(true);
+    expect((value as { result: { type: string } }).result.type).toBe('error');
+  });
+
+  it('should catch error thrown by phaseRouter.executeStream', async () => {
+    const throwingStreamHandler: IPhaseHandler = {
+      canHandle: (type: string) => type === 'idle',
+      execute: vi.fn(),
+      streamExecute: async function* () {
+        throw new Error('Stream handler crashed');
+      },
+    };
+
+    const router = new PhaseRouter([throwingStreamHandler]);
+    const state = createAgentState(defaultConfig);
+
+    const ctx = {
+      llmProvider: { call: vi.fn(), stream: vi.fn() },
+      toolRegistry: new ToolRegistry(),
+      messageAssembler: { build: vi.fn().mockReturnValue([]) },
+      phaseRouter: router,
+      toolSchemaFormatter: { format: vi.fn() },
+      executionPolicy: { shouldStop: vi.fn().mockReturnValue({ decision: 'continue' }) },
+      options: { model: 'gpt-4' },
+    } as unknown as RunnerContext;
+
+    const events: { type: string }[] = [];
+    let finalResult: { result: { type: string; error?: Error } } | undefined;
+
+    const iterator = executeStepStream(ctx, undefined, state);
+    while (true) {
+      const { done, value } = await iterator.next();
+      if (done) {
+        finalResult = value as { result: { type: string; error?: Error } };
+        break;
+      }
+      events.push(value as { type: string });
+    }
+
+    expect(events.map((e) => e.type)).toEqual(['error']);
+    expect(finalResult?.result.type).toBe('error');
+    expect(finalResult?.result.error?.message).toBe('Stream handler crashed');
+  });
+
   it('should throw when advance returns terminal phase without done flag', async () => {
     // Defensive: if PhaseRouter returns completed/error but done=false,
     // the while loop exits (isTerminalPhase=true) but no return path matches.
