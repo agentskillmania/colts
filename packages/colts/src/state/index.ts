@@ -252,11 +252,14 @@ export function serializeState(state: AgentState): string {
 }
 
 /**
- * Deserialize state from JSON
+ * Deserialize state from JSON or pass through an already-parsed object
  *
- * @param json - JSON string
+ * @param input - JSON string or already-parsed AgentState
  * @returns Parsed AgentState
  */
-export function deserializeState(json: string): AgentState {
-  return JSON.parse(json) as AgentState;
+export function deserializeState(input: string | AgentState): AgentState {
+  if (typeof input === 'string') {
+    return JSON.parse(input) as AgentState;
+  }
+  return input;
 }

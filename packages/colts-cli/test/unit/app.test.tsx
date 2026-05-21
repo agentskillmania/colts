@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from 'ink-testing-library';
+import { render, cleanup } from 'ink-testing-library';
 import { App } from '../../src/app.js';
 import type { AppConfig } from '../../src/config.js';
 import type { AgentRunner, AgentState, RunStreamEvent, RunResult } from '@agentskillmania/colts';
@@ -143,6 +143,10 @@ describe('App', () => {
   beforeEach(() => {
     capturedOnSubmit = null;
     capturedSelectOnChange = null;
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   // ── Routing logic ──

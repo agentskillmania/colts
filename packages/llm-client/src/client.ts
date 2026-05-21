@@ -321,7 +321,12 @@ export class LLMClient extends EventEmitter {
           };
 
           // Return the async iterable directly, wired to the merged signal
-          return this.adapter.streamWithRetry(model, key.key, { ...options, signal: abortController.signal }, onRetry);
+          return this.adapter.streamWithRetry(
+            model,
+            key.key,
+            { ...options, signal: abortController.signal },
+            onRetry
+          );
         },
         requestId,
         abortController.signal
@@ -337,9 +342,13 @@ export class LLMClient extends EventEmitter {
           const result = await Promise.race([
             iterator.next(),
             new Promise<never>((_, reject) => {
-              abortController.signal.addEventListener('abort', () => {
-                reject(abortController.signal.reason);
-              }, { once: true });
+              abortController.signal.addEventListener(
+                'abort',
+                () => {
+                  reject(abortController.signal.reason);
+                },
+                { once: true }
+              );
             }),
           ]);
           if (result.done) break;
