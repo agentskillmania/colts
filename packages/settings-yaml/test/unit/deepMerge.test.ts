@@ -172,6 +172,33 @@ describe('deepMerge', () => {
       expect((result as { matrix: number[][] }).matrix[0]).toEqual([1, 2, 99]);
     });
 
+    it('should merge nested arrays when both target and default have them', () => {
+      const target = {
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
+      };
+      const defaultValue = {
+        matrix: [
+          [5, 6, 7],
+          [8, 9],
+          [10, 11],
+        ],
+      };
+
+      const result = deepMerge(target, defaultValue);
+
+      // Each nested array pair is merged index-by-index
+      expect((result as { matrix: number[][] }).matrix[0]).toEqual([1, 2, 7]);
+      expect((result as { matrix: number[][] }).matrix[1]).toEqual([3, 4]);
+      expect((result as { matrix: number[][] }).matrix[2]).toEqual([10, 11]);
+
+      // No shared references
+      (result as { matrix: number[][] }).matrix[0].push(99);
+      expect(target.matrix[0]).toEqual([1, 2]);
+    });
+
     it('should deep copy default arrays when target has no such key', () => {
       const target = { name: 'test' };
       const defaultValue = { items: ['x', 'y', 'z'] };
