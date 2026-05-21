@@ -170,6 +170,91 @@ describe('LLMClient with default config', () => {
     expect(events.length).toBe(1);
     expect(events[0].type).toBe('text');
   });
+
+  it('should immediately reject when caller signal is already aborted (pre-aborted)', async () => {
+    const client = new LLMClient();
+    const mockStream = async function* () {
+      yield { type: 'text', delta: 'Hello' };
+      yield { type: 'done', tokens: { input: 1, output: 1 } };
+    };
+    mockExecute.mockResolvedValue(mockStream());
+
+    client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    client.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    const abortController = new AbortController();
+    abortController.abort(new Error('Already cancelled'));
+
+    const events: Array<{ type: string }> = [];
+    await expect(async () => {
+      for await (const event of client.stream({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hi' }],
+        signal: abortController.signal,
+      })) {
+        events.push(event);
+      }
+    }).rejects.toThrow('Already cancelled');
+
+    expect(events.length).toBe(0);
+  });
+
+  it('should stop mid-stream when caller signal is aborted during consumption', async () => {
+    const client = new LLMClient();
+    const callerAbortController = new AbortController();
+
+    // Stream that yields events slowly
+    const slowStream = async function* () {
+      yield { type: 'text', delta: 'A' };
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      yield { type: 'text', delta: 'B' };
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      yield { type: 'text', delta: 'C' };
+      yield { type: 'done', tokens: { input: 1, output: 3 } };
+    };
+    mockExecute.mockResolvedValue(slowStream());
+
+    client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    client.registerApiKey({
+      key: 'sk-test',
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
+    });
+
+    const events: Array<{ type: string; delta?: string }> = [];
+    let caughtError: Error | undefined;
+
+    const consume = async () => {
+      try {
+        for await (const event of client.stream({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          signal: callerAbortController.signal,
+        })) {
+          events.push(event);
+          // Abort after receiving 'B'
+          if (event.type === 'text' && event.delta === 'B') {
+            callerAbortController.abort(new Error('User cancelled'));
+          }
+        }
+      } catch (err) {
+        caughtError = err as Error;
+      }
+    };
+
+    await consume();
+
+    // Should have received A and B, but not C or done
+    expect(events.map((e) => (e.type === 'text' ? e.delta : e.type))).toEqual(['A', 'B']);
+    expect(caughtError).toBeDefined();
+    expect(caughtError!.message).toBe('User cancelled');
+  });
 });
 
 describe('LLMClient priority and retry', () => {
