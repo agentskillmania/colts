@@ -440,6 +440,38 @@ describe('step()', () => {
       expect(result.result.type).toBe('done');
     });
 
+    it('should update totalTokens in returned state during stepStream', async () => {
+      const mockTokens: TokenStats = { input: 10, output: 5 };
+      const mockResponse: LLMResponse = {
+        content: 'The answer',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const state = createAgentState(defaultConfig);
+      const iterator = runner.stepStream(state);
+
+      let result;
+      while (true) {
+        const { done, value } = await iterator.next();
+        if (done) {
+          result = value;
+          break;
+        }
+      }
+
+      expect(result.state.context.totalTokens).toBeDefined();
+      expect(result.state.context.totalTokens!.input).toBe(mockTokens.input);
+      expect(result.state.context.totalTokens!.output).toBe(mockTokens.output);
+    });
+
     it('should return continue result when tool is called', async () => {
       const mockResponse: LLMResponse = {
         content: 'Calculating',
