@@ -15,7 +15,7 @@ import type {
 } from '../execution/index.js';
 import { createExecutionState, isTerminalPhase, updateExecState } from '../execution/index.js';
 import { addTokenStats } from '../utils/tokens.js';
-import { updateTotalTokens } from '../state/index.js';
+import { updateTotalTokens, updateState } from '../state/index.js';
 import type { RunnerContext } from './advance.js';
 import { maybeCompress } from './compression.js';
 import type { IContextCompressor } from '../types.js';
@@ -148,6 +148,15 @@ export async function* executeStepStream(
     if (result.tokens) {
       stepTokens = addTokenStats(stepTokens, result.tokens);
       result = { ...result, state: updateTotalTokens(result.state, result.tokens) };
+    }
+
+    if (result.estimatedContextSize !== undefined) {
+      result = {
+        ...result,
+        state: updateState(result.state, (draft) => {
+          draft.context.estimatedContextSize = result.estimatedContextSize;
+        }),
+      };
     }
 
     if (options?.signal?.aborted) {
