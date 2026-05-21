@@ -349,6 +349,61 @@ describe('executeStep', () => {
     expect(systemEntries.length).toBeGreaterThanOrEqual(1);
     expect(systemEntries[0].content).toContain('Press Enter to continue');
   });
+
+  it('should abort during pause in step mode', async () => {
+    const assistantState = addUserMessage(baseState, 'Hello');
+    const continueResult = {
+      type: 'continue' as const,
+      toolResult: {},
+      actions: [],
+      tokens: { input: 5, output: 3 },
+    };
+    const runner = {
+      stepStream: vi.fn().mockImplementation(async function* () {
+        yield { type: 'token', token: 'Continue', timestamp: Date.now() };
+        return { state: assistantState, result: continueResult };
+      }),
+    } as unknown as AgentRunner;
+
+    const entries: TimelineEntry[] = [];
+    const setEntries = vi.fn((updater) => {
+      const next = typeof updater === 'function' ? updater(entries) : updater;
+      entries.length = 0;
+      entries.push(...next);
+    });
+    const setState = vi.fn();
+
+    const abortController = new AbortController();
+
+    // Pause that aborts signal then hangs forever
+    const pauseFn = () => {
+      abortController.abort();
+      return new Promise<void>(() => {});
+    };
+
+    const promise = executeStep(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      abortController.signal,
+      pauseFn
+    );
+
+    // Before fix: pauseFn hangs forever → timeout
+    // After fix: Promise.race with signal aborts pauseFn → completes quickly
+    const result = await Promise.race([
+      promise.then(() => 'completed'),
+      new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+
+    expect(result).toBe('completed');
+
+    // Abort should not create an error entry
+    const errorEntries = entries.filter((e) => e.type === 'error');
+    expect(errorEntries.length).toBe(0);
+  });
 });
 
 describe('executeAdvance', () => {
@@ -484,5 +539,65 @@ describe('executeAdvance', () => {
     const assistantEntries = entries.filter((e) => e.type === 'assistant');
     expect(assistantEntries.length).toBeGreaterThanOrEqual(1);
     expect(assistantEntries[0].content).toContain('Error: Advance failed');
+  });
+
+  it('should abort during pause in advance mode', async () => {
+    const assistantState = addUserMessage(baseState, 'Hello');
+
+    const runner = {
+      advanceStream: vi.fn().mockImplementation(async function* () {
+        yield {
+          type: 'phase-change',
+          from: { type: 'idle' },
+          to: { type: 'preparing' },
+          timestamp: Date.now(),
+        } as RunStreamEvent;
+        return {
+          state: assistantState,
+          execState: { phase: { type: 'preparing' } },
+          phase: { type: 'preparing' },
+          done: false,
+        };
+      }),
+    } as unknown as AgentRunner;
+
+    const entries: TimelineEntry[] = [];
+    const setEntries = vi.fn((updater) => {
+      const next = typeof updater === 'function' ? updater(entries) : updater;
+      entries.length = 0;
+      entries.push(...next);
+    });
+    const setState = vi.fn();
+
+    const abortController = new AbortController();
+
+    // Pause that aborts signal then hangs forever
+    const pauseFn = () => {
+      abortController.abort();
+      return new Promise<void>(() => {});
+    };
+
+    const promise = executeAdvance(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      abortController.signal,
+      pauseFn
+    );
+
+    // Before fix: pauseFn hangs forever → timeout
+    // After fix: Promise.race with signal aborts pauseFn → completes quickly
+    const result = await Promise.race([
+      promise.then(() => 'completed'),
+      new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+
+    expect(result).toBe('completed');
+
+    // Abort should not create an error entry
+    const errorEntries = entries.filter((e) => e.type === 'error');
+    expect(errorEntries.length).toBe(0);
   });
 });
