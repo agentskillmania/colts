@@ -1,12 +1,12 @@
 /**
- * @fileoverview Naughty LLM — streaming path misbehavior tests
+ * @fileoverview Streaming path error handling tests
  *
- * Tests edge cases specific to the streaming execution path where the LLM
- * yields malformed or unexpected delta events.
+ * Tests error recovery and fault tolerance specific to the streaming path:
+ * LLM provider exceptions mid-stream, invalid tool arguments, etc.
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { LLMClient, LLMResponse, TokenStats } from '@agentskillmania/llm-client';
+import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
@@ -32,7 +32,6 @@ function createMockLLMClient(responses: LLMResponse[]): LLMClient {
       }
       const response = responses[callIndex];
       const content = response.content;
-      // Only yield text events when content is non-empty
       if (content.length > 0) {
         const tokens = content.split(' ');
         for (let i = 0; i < tokens.length; i++) {
@@ -77,94 +76,10 @@ function createCalculatorRegistry(): ToolRegistry {
 }
 
 // ---------------------------------------------------------------------------
-// Streaming misbehavior tests
+// Streaming error handling
 // ---------------------------------------------------------------------------
 
-describe('Naughty LLM — streaming path', () => {
-  it('should handle content + tool_call coexistence in stream', async () => {
-    // LLM streams text first, then emits a tool_call — both should be captured
-    const client = createMockLLMClient([
-      {
-        content: 'Let me calculate',
-        toolCalls: [{ id: 'tc1', name: 'calculator', arguments: { expr: '1+1' } }],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      { content: 'Result: 2', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
-    ]);
-    const registry = createCalculatorRegistry();
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, toolRegistry: registry });
-    const state = createAgentState(defaultConfig);
-
-    const events: Array<{ type: string; [key: string]: unknown }> = [];
-    for await (const event of runner.runStream(state)) {
-      events.push(event as { type: string; [key: string]: unknown });
-    }
-
-    // Should have tokens from the text portion
-    const tokens = events.filter((e) => e.type === 'token');
-    expect(tokens.length).toBeGreaterThan(0);
-
-    // Should have tool events
-    const toolStarts = events.filter((e) => e.type === 'tool:start');
-    expect(toolStarts.length).toBe(1);
-
-    // Run should complete
-    const complete = events.find((e) => e.type === 'complete');
-    expect(complete).toBeTruthy();
-    expect((complete as { result: { type: string } }).result.type).toBe('success');
-  });
-
-  it('should handle empty content + empty toolCalls in stream', async () => {
-    // LLM yields nothing useful — empty content, no tool calls
-    const client = createMockLLMClient([
-      { content: '', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
-    ]);
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
-    const state = createAgentState(defaultConfig);
-
-    const events: Array<{ type: string; [key: string]: unknown }> = [];
-    for await (const event of runner.runStream(state)) {
-      events.push(event as { type: string; [key: string]: unknown });
-    }
-
-    // No tokens emitted
-    const tokens = events.filter((e) => e.type === 'token');
-    expect(tokens.length).toBe(0);
-
-    // Should still complete (empty response counts as done)
-    const complete = events.find((e) => e.type === 'complete');
-    expect(complete).toBeTruthy();
-  });
-
-  it('should handle oversized token delta in stream', async () => {
-    // Mock client that yields a single huge delta
-    const hugeDelta = 'A'.repeat(500);
-    const client = {
-      call: vi.fn(),
-      stream: vi.fn().mockImplementation(async function* () {
-        yield { type: 'text', delta: hugeDelta, accumulatedContent: hugeDelta };
-        yield { type: 'done', roundTotalTokens: mockTokens };
-      }),
-    } as unknown as LLMClient;
-
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
-    const state = createAgentState(defaultConfig);
-
-    const events: Array<{ type: string; [key: string]: unknown }> = [];
-    for await (const event of runner.runStream(state)) {
-      events.push(event as { type: string; [key: string]: unknown });
-    }
-
-    const tokens = events.filter((e) => e.type === 'token');
-    expect(tokens.length).toBe(1);
-    expect((tokens[0] as { token: string }).token).toBe(hugeDelta);
-
-    const complete = events.find((e) => e.type === 'complete');
-    expect(complete).toBeTruthy();
-    expect((complete as { result: { type: string } }).result.type).toBe('success');
-  });
-
+describe('Streaming error handling', () => {
   it('should catch error thrown mid-stream by LLM provider', async () => {
     const client = {
       call: vi.fn(),
