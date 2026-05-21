@@ -141,7 +141,7 @@ describe('advance()', () => {
         // Not providing provider and maxConcurrency to test defaults
       },
     });
-    expect(r.getLLMProvider()).toBeDefined();
+    expect(r.getLLMProvider()).toBeTruthy();
     expect(r.getToolRegistry()).toBeInstanceOf(ToolRegistry);
   });
 
@@ -832,7 +832,7 @@ describe('advance() skillState regression (CR P0-1)', () => {
     // Phase becomes idle (indicating skill loaded, step loop should continue)
     expect(result.phase.type).toBe('idle');
     expect(result.done).toBe(false);
-    expect(result.effects).toBeDefined();
+    expect(Array.isArray(result.effects)).toBe(true);
     expect(result.effects!.map((e) => e.type)).toContain('skill:start');
 
     // skillState.current should be updated to 'test-skill' by applySkillSignal

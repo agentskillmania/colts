@@ -268,7 +268,7 @@ describe('Step 11: ask_human Tool', () => {
       const registry = new ToolRegistry();
       registry.register(tool);
 
-      expect(registry.get('ask_human')).toBeDefined();
+      expect(registry.has('ask_human')).toBe(true);
     });
 
     it('should generate valid tool schema for LLM', () => {
@@ -397,7 +397,7 @@ describe('Step 11: ask_human Tool', () => {
       );
 
       expect(handler).toHaveBeenCalledOnce();
-      expect(handler.mock.calls[0][0].signal).toBeDefined();
+      expect(handler.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal);
       expect(handler.mock.calls[0][0].signal.aborted).toBe(true);
       expect(result).toEqual({});
     });

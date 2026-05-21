@@ -88,15 +88,15 @@ const mockTokens = { input: 10, output: 5 };
 /**
  * Recursively delete all `timestamp` fields from an object.
  */
-function stripTimestamps(obj: unknown): unknown {
+function stripVolatile(obj: unknown): unknown {
   if (Array.isArray(obj)) {
-    return obj.map(stripTimestamps);
+    return obj.map(stripVolatile);
   }
   if (obj !== null && typeof obj === 'object') {
     const copy: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
-      if (key === 'timestamp') continue;
-      copy[key] = stripTimestamps(value);
+      if (key === 'timestamp' || key === 'id') continue;
+      copy[key] = stripVolatile(value);
     }
     return copy;
   }
@@ -128,7 +128,7 @@ function normalizeEvents(events: Array<Record<string, unknown>>): Array<Record<s
     .map((e) => {
       const copy = { ...e };
       delete copy.state;
-      return stripTimestamps(copy) as Record<string, unknown>;
+      return stripVolatile(copy) as Record<string, unknown>;
     });
 }
 
@@ -231,12 +231,14 @@ describe('blocking/streaming path equivalence', () => {
       streaming.state.context.messages.map((m: Record<string, unknown>) => {
         const copy = { ...m };
         delete copy.timestamp;
+        delete copy.id;
         return copy;
       })
     ).toEqual(
       blocking.state.context.messages.map((m: Record<string, unknown>) => {
         const copy = { ...m };
         delete copy.timestamp;
+        delete copy.id;
         return copy;
       })
     );
@@ -279,12 +281,14 @@ describe('blocking/streaming path equivalence', () => {
       streaming.state.context.messages.map((m: Record<string, unknown>) => {
         const copy = { ...m };
         delete copy.timestamp;
+        delete copy.id;
         return copy;
       })
     ).toEqual(
       blocking.state.context.messages.map((m: Record<string, unknown>) => {
         const copy = { ...m };
         delete copy.timestamp;
+        delete copy.id;
         return copy;
       })
     );

@@ -261,7 +261,7 @@ describe('TraceWriter', () => {
       const record = lines.find((l) => (l as { event: string }).event === 'llm.response') as
         | { text: string }
         | undefined;
-      expect(record).toBeDefined();
+      expect(record).toEqual(expect.objectContaining({ text: expect.stringContaining('...') }));
       expect(record!.text.length).toBeLessThanOrEqual(203); // 200 + "..."
       expect(record!.text).toContain('...');
     });
@@ -365,8 +365,7 @@ describe('TraceWriter', () => {
       const endRecord = lines.find((l) => (l as { event: string }).event === 'tool.end') as
         | { tool: string; durationMs: number }
         | undefined;
-      expect(endRecord).toBeDefined();
-      expect(endRecord!.tool).toBe('reader');
+      expect(endRecord).toEqual(expect.objectContaining({ tool: 'reader' }));
       expect(endRecord!.durationMs).toBeGreaterThanOrEqual(0);
     });
 
@@ -507,8 +506,7 @@ describe('TraceWriter', () => {
       const record = lines.find((l) => (l as { event: string }).event === 'tools.end') as
         | { durationMs: unknown }
         | undefined;
-      expect(record).toBeDefined();
-      expect(record!.durationMs).toBeNull();
+      expect(record).toEqual(expect.objectContaining({ durationMs: null }));
     });
   });
 

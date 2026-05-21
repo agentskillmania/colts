@@ -94,8 +94,7 @@ describe('FilesystemSkillProvider error branches', () => {
     const manifest = provider.getManifest('stat-fail');
 
     // Should still find the skill (SKILL.md read succeeds)
-    expect(manifest).toBeDefined();
-    expect(manifest?.name).toBe('stat-fail');
+    expect(manifest).toEqual(expect.objectContaining({ name: 'stat-fail' }));
     // Resource should be empty because stat failed on broken symlink
     expect(manifest?.resources).toBeUndefined();
   });

@@ -353,8 +353,7 @@ describe('PiAiAdapter', () => {
       }
 
       const errorEvent = events.find((e) => e.type === 'error');
-      expect(errorEvent).toBeDefined();
-      expect(errorEvent?.error).toBe('Plain string error');
+      expect(errorEvent).toEqual(expect.objectContaining({ error: 'Plain string error' }));
     });
   });
 

@@ -369,8 +369,7 @@ describe('session', () => {
 
       const sessions = await listSessions(testDir);
       const found = sessions.find((s) => s.id === 'bare-state');
-      expect(found).toBeDefined();
-      expect(found!.messageCount).toBe(0);
+      expect(found).toEqual(expect.objectContaining({ messageCount: 0 }));
       expect(found!.lastMessage).toBe('');
     });
   });

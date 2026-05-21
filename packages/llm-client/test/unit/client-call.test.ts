@@ -45,13 +45,13 @@ describe('LLMClient with default config', () => {
       defaultModelConcurrency: 5,
     });
 
-    expect(client).toBeDefined();
+    expect(client).toBeInstanceOf(LLMClient);
   });
 
   it('should use default values when config not provided', () => {
     const client = new LLMClient();
 
-    expect(client).toBeDefined();
+    expect(client).toBeInstanceOf(LLMClient);
   });
 
   it('should register provider with default concurrency', () => {
@@ -252,7 +252,7 @@ describe('LLMClient with default config', () => {
 
     // Should have received A and B, but not C or done
     expect(events.map((e) => (e.type === 'text' ? e.delta : e.type))).toEqual(['A', 'B']);
-    expect(caughtError).toBeDefined();
+    expect(caughtError).toBeInstanceOf(Error);
     expect(caughtError!.message).toBe('User cancelled');
   });
 });

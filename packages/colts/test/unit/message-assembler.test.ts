@@ -211,7 +211,7 @@ describe('DefaultMessageAssembler', () => {
 
       const messages = assembler.build(state, { model: 'gpt-4' });
       const toolResult = messages.find((m) => m.role === 'toolResult');
-      expect(toolResult).toBeDefined();
+      expect(toolResult).toEqual(expect.any(Object));
       expect(toolResult?.role).toBe('toolResult');
     });
 

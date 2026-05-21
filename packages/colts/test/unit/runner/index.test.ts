@@ -358,16 +358,16 @@ describe('AgentRunner', () => {
 
       // Verify final state has assistant message
       const finalChunk = chunks[2];
-      expect(finalChunk.state).toBeDefined();
-      if (
-        finalChunk.state &&
-        typeof finalChunk.state === 'object' &&
-        'context' in finalChunk.state
-      ) {
-        const finalState = finalChunk.state as { context: { messages: Array<{ role: string }> } };
-        expect(finalState.context.messages).toHaveLength(2);
-        expect(finalState.context.messages[1].role).toBe('assistant');
-      }
+      expect(finalChunk.state).toEqual(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            messages: [
+              expect.objectContaining({ role: 'user' }),
+              expect.objectContaining({ role: 'assistant' }),
+            ],
+          }),
+        })
+      );
     });
 
     it('should handle stream errors', async () => {
@@ -843,8 +843,7 @@ describe('AgentRunner', () => {
       expect(runner).toBeInstanceOf(AgentRunner);
       // load_skill tool should be auto-registered
       const tools = runner.getToolRegistry().toToolSchemas();
-      const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
-      expect(loadSkillTool).toBeDefined();
+      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
     });
 
     it('should create FilesystemSkillProvider from skillDirs', () => {
@@ -859,8 +858,7 @@ describe('AgentRunner', () => {
       expect(runner).toBeInstanceOf(AgentRunner);
       // load_skill tool should be registered even if directory doesn't exist (provider exists but has no skills)
       const tools = runner.getToolRegistry().toToolSchemas();
-      const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
-      expect(loadSkillTool).toBeDefined();
+      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
     });
 
     it('should prefer skillProvider over skillDirs when both are provided', () => {
@@ -879,8 +877,7 @@ describe('AgentRunner', () => {
       expect(runner).toBeInstanceOf(AgentRunner);
       // Should use injected provider, skillDirs is ignored
       const tools = runner.getToolRegistry().toToolSchemas();
-      const loadSkillTool = tools.find((t) => t.function.name === 'load_skill');
-      expect(loadSkillTool).toBeDefined();
+      expect(tools.some((t) => t.function.name === 'load_skill')).toBe(true);
     });
 
     it('should auto-register load_skill tool when skillProvider exists', async () => {
@@ -1054,9 +1051,13 @@ describe('AgentRunner', () => {
 
       const tools = runner.getToolRegistry().toToolSchemas();
       const delegateTool = tools.find((t) => t.function.name === 'delegate');
-      expect(delegateTool).toBeDefined();
-      expect(delegateTool!.function.description).toBe(
-        'Delegate a task to a specialized sub-agent. Use when a task requires specific expertise or tools that a sub-agent possesses.'
+      expect(delegateTool).toEqual(
+        expect.objectContaining({
+          function: expect.objectContaining({
+            description:
+              'Delegate a task to a specialized sub-agent. Use when a task requires specific expertise or tools that a sub-agent possesses.',
+          }),
+        })
       );
     });
 
@@ -1157,10 +1158,12 @@ describe('AgentRunner', () => {
         task: 'Research TypeScript',
       });
 
-      expect(result).toBeDefined();
-      const delegateResult = result as { answer: string; totalSteps: number };
-      expect(delegateResult.answer).toBe('Research complete: found 3 relevant papers.');
-      expect(delegateResult.totalSteps).toBe(1);
+      expect(result).toEqual(
+        expect.objectContaining({
+          answer: 'Research complete: found 3 relevant papers.',
+          totalSteps: 1,
+        })
+      );
     });
 
     it('delegate tool should handle unknown sub-agent', async () => {
@@ -1237,7 +1240,7 @@ describe('AgentRunner', () => {
       });
 
       const tools = runner.getToolRegistry().toToolSchemas();
-      expect(tools.some((t) => t.function.name === 'delegate')).toBe(true);
+      expect(tools.map((t) => t.function.name)).toContain('delegate');
     });
   });
 });

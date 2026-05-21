@@ -181,7 +181,7 @@ describe('DefaultContextCompressor - Constructor', () => {
       contextWindowSize: 128000,
       pruneThreshold: 200,
     });
-    expect(compressor).toBeDefined();
+    expect(compressor).toBeInstanceOf(DefaultContextCompressor);
   });
 });
 
@@ -591,11 +591,11 @@ describe('compressState - batch state update', () => {
     // Pruned message should have new content
     expect(newState.context.messages[1].content).not.toBe(originalContent);
     expect(newState.context.messages[1].content).toContain('pruned');
-    expect(newState.context.messages[1].tokenCount).toBeDefined();
+    expect(typeof newState.context.messages[1].tokenCount).toBe('number');
     expect(newState.context.messages[1].tokenCount!).toBeLessThan(200);
 
     // Compression metadata should be set
-    expect(newState.context.compression).toBeDefined();
+    expect(newState.context.compression).toEqual(expect.any(Object));
     expect(newState.context.compression!.anchor).toBeGreaterThan(0);
   });
 
