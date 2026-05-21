@@ -153,16 +153,6 @@ export interface AgentState {
   context: AgentContext;
 }
 
-/**
- * State snapshot
- */
-export interface Snapshot {
-  /** Creation timestamp */
-  timestamp: number;
-  /** State data */
-  state: AgentState;
-}
-
 // ========== Runner Configuration Interfaces ==========
 
 import type { ZodTypeAny } from 'zod';

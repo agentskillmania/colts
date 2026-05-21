@@ -17,8 +17,6 @@ import {
   incrementStepCount,
   setLastToolResult,
   loadSkill,
-  createSnapshot,
-  restoreSnapshot,
   serializeState,
   deserializeState,
   updateTotalTokens,
@@ -206,76 +204,7 @@ describe('Step 0: AgentState', () => {
     });
   });
 
-  describe('Snapshot (create/restore)', () => {
-    it('should create snapshot with correct structure', () => {
-      const state = createAgentState(baseConfig);
-      const snapshot = createSnapshot(state);
-
-      expect(snapshot).toHaveProperty('timestamp');
-      expect(snapshot).toHaveProperty('state');
-      expect(snapshot).not.toHaveProperty('version');
-      expect(snapshot).not.toHaveProperty('checksum');
-      expect(snapshot.state).toEqual(state);
-    });
-
-    it('should restore state from snapshot', () => {
-      let state = createAgentState(baseConfig);
-      state = addUserMessage(state, 'Test');
-
-      const snapshot = createSnapshot(state);
-      const restored = restoreSnapshot(snapshot);
-
-      expect(restored).toEqual(state);
-      expect(restored).not.toBe(state); // Different reference
-    });
-
-    it('should restore corrupted snapshot without throwing (checksum removed)', () => {
-      const state = createAgentState(baseConfig);
-      const snapshot = createSnapshot(state);
-
-      // Corrupt the snapshot
-      snapshot.state.config.name = 'corrupted';
-
-      // Without checksum, restore should not throw
-      const restored = restoreSnapshot(snapshot);
-      expect(restored.config.name).toBe('corrupted');
-    });
-
-    it('should create isolated deep copy', () => {
-      const state = createAgentState(baseConfig);
-      const snapshot = createSnapshot(state);
-
-      // Modify original after snapshot
-      state.config.name = 'modified';
-
-      expect(snapshot.state.config.name).toBe('test-agent');
-    });
-
-    it('should allow restored state to continue state operations', () => {
-      // Verify: restored Agent can continue execution (acceptance criterion #4)
-      let state = createAgentState(baseConfig);
-      state = addUserMessage(state, 'Before snapshot');
-
-      // Create snapshot
-      const snapshot = createSnapshot(state);
-
-      // Continue modifying original state
-      state = addUserMessage(state, 'After snapshot');
-      expect(state.context.messages).toHaveLength(2);
-
-      // Restore from snapshot, should only have 1 message
-      const restored = restoreSnapshot(snapshot);
-      expect(restored.context.messages).toHaveLength(1);
-      expect(restored.context.messages[0].content).toBe('Before snapshot');
-
-      // Restored state can continue state operations
-      const continued = addUserMessage(restored, 'After restore');
-      expect(continued.context.messages).toHaveLength(2);
-      expect(continued.context.messages[1].content).toBe('After restore');
-      // Restored state itself unchanged
-      expect(restored.context.messages).toHaveLength(1);
-    });
-
+  describe('Serialize / Deserialize', () => {
     it('should allow deserialized state to continue state operations', () => {
       let state = createAgentState(baseConfig);
       state = addUserMessage(state, 'Before serialize');
