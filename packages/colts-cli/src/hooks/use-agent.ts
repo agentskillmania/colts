@@ -20,7 +20,7 @@ import {
 } from '@agentskillmania/colts';
 import type { TimelineEntry, DetailLevel } from '../types/timeline.js';
 import { nextSeq } from '../types/timeline.js';
-import { TraceWriter } from '../trace-writer.js';
+import { createTraceWriter } from '../trace-writer.js';
 import { StreamEventConsumer } from './stream-event-consumer.js';
 
 /**
@@ -518,7 +518,7 @@ export async function executeRun(
   signal: AbortSignal
 ): Promise<void> {
   const stateWithMsg = addUserMessage(currentState, userInput);
-  const tracer = new TraceWriter(stateWithMsg.id);
+  const tracer = await createTraceWriter(stateWithMsg.id);
 
   // Create event consumer; run mode auto-creates new assistant entry after tool:end
   const consumer = new StreamEventConsumer(setEntries, setState, {
@@ -615,7 +615,7 @@ export async function executeStep(
     runningState = addUserMessage(runningState, userInput);
   }
 
-  const tracer = new TraceWriter(runningState.id);
+  const tracer = await createTraceWriter(runningState.id);
   // Step mode does not set onToolEnd: do not reset assistant within a step; handle holistically after step ends
   const consumer = new StreamEventConsumer(setEntries, setState);
 
@@ -729,7 +729,7 @@ export async function executeAdvance(
     effectiveState = addUserMessage(effectiveState, userInput);
   }
 
-  const tracer = new TraceWriter(effectiveState.id);
+  const tracer = await createTraceWriter(effectiveState.id);
 
   // Advance mode: consumer does not handle pause; pause is triggered after detecting phase-change events in loop
   const consumer = new StreamEventConsumer(setEntries, setState);

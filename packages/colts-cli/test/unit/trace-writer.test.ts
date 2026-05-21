@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { TraceWriter } from '../../src/trace-writer.js';
+import { TraceWriter, createTraceWriter } from '../../src/trace-writer.js';
 
 /** Create temp directory for test isolation */
 function createTempDir(): string {
@@ -43,9 +43,25 @@ describe('TraceWriter', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  describe('createTraceWriter async factory', () => {
+    it('should create TraceWriter without blocking the event loop', async () => {
+      const tracer = await createTraceWriter('test-async-factory', tempDir);
+      tracer.consume({ type: 'compressing' });
+      await tracer.flush();
+
+      const lines = readTraceLines(tempDir, 'test-async-factory');
+      expect(lines[0]).toEqual({
+        event: 'trace.start',
+        ts: expect.any(String),
+        elapsed: 0,
+        sessionId: 'test-async-factory',
+      });
+    });
+  });
+
   describe('trace.start and trace.end markers', () => {
     it('should write trace.start as first record on construction', async () => {
-      const tracer = new TraceWriter('test-start', tempDir);
+      const tracer = await createTraceWriter('test-start', tempDir);
       await tracer.flush();
 
       const lines = readTraceLines(tempDir, 'test-start');
@@ -59,7 +75,7 @@ describe('TraceWriter', () => {
     });
 
     it('should use default trace directory when traceDir is omitted', async () => {
-      const tracer = new TraceWriter('test-default-dir');
+      const tracer = await createTraceWriter('test-default-dir');
       tracer.consume({ type: 'compressing' });
       await tracer.flush();
 
@@ -81,7 +97,7 @@ describe('TraceWriter', () => {
     });
 
     it('should write trace.end as last record on flush', async () => {
-      const tracer = new TraceWriter('test-end', tempDir);
+      const tracer = await createTraceWriter('test-end', tempDir);
       tracer.consume({ type: 'phase-change', from: { type: 'idle' }, to: { type: 'preparing' } });
       await tracer.flush();
 
@@ -98,7 +114,7 @@ describe('TraceWriter', () => {
 
   describe('dual timestamps', () => {
     it('should have ts in ISO 8601 format on every record', async () => {
-      const tracer = new TraceWriter('test-ts', tempDir);
+      const tracer = await createTraceWriter('test-ts', tempDir);
       tracer.consume({ type: 'compressing' });
       tracer.consume({ type: 'compressed', summary: 'test', removedCount: 5 });
       await tracer.flush();
@@ -110,7 +126,7 @@ describe('TraceWriter', () => {
     });
 
     it('should have elapsed >= 0 and non-decreasing', async () => {
-      const tracer = new TraceWriter('test-elapsed', tempDir);
+      const tracer = await createTraceWriter('test-elapsed', tempDir);
       tracer.consume({ type: 'compressing' });
       tracer.consume({ type: 'compressed', summary: 'test', removedCount: 5 });
       await tracer.flush();
@@ -127,7 +143,7 @@ describe('TraceWriter', () => {
 
   describe('step events', () => {
     it('should record step:start', async () => {
-      const tracer = new TraceWriter('test-step-start', tempDir);
+      const tracer = await createTraceWriter('test-step-start', tempDir);
       tracer.consume({ type: 'step:start', step: 1, state: {} as never });
       await tracer.flush();
 
@@ -142,7 +158,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record step:end with done result', async () => {
-      const tracer = new TraceWriter('test-step-end', tempDir);
+      const tracer = await createTraceWriter('test-step-end', tempDir);
       tracer.consume({ type: 'step:end', step: 1, result: { type: 'done', answer: '42' } });
       await tracer.flush();
 
@@ -159,7 +175,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record step:end with continue result (no answer field)', async () => {
-      const tracer = new TraceWriter('test-step-cont', tempDir);
+      const tracer = await createTraceWriter('test-step-cont', tempDir);
       tracer.consume({
         type: 'step:end',
         step: 1,
@@ -187,7 +203,7 @@ describe('TraceWriter', () => {
 
   describe('phase-change', () => {
     it('should record from.type and to.type', async () => {
-      const tracer = new TraceWriter('test-phase', tempDir);
+      const tracer = await createTraceWriter('test-phase', tempDir);
       tracer.consume({ type: 'phase-change', from: { type: 'idle' }, to: { type: 'calling-llm' } });
       await tracer.flush();
 
@@ -205,7 +221,7 @@ describe('TraceWriter', () => {
 
   describe('llm events', () => {
     it('should record llm.request with message count instead of full messages', async () => {
-      const tracer = new TraceWriter('test-llm-req', tempDir);
+      const tracer = await createTraceWriter('test-llm-req', tempDir);
       tracer.consume({
         type: 'llm:request',
         messages: [
@@ -232,7 +248,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record llm.response with truncated text', async () => {
-      const tracer = new TraceWriter('test-llm-resp', tempDir);
+      const tracer = await createTraceWriter('test-llm-resp', tempDir);
       const longText = 'A'.repeat(500);
       tracer.consume({
         type: 'llm:response',
@@ -251,7 +267,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record llm.response without toolCalls', async () => {
-      const tracer = new TraceWriter('test-llm-no-tc', tempDir);
+      const tracer = await createTraceWriter('test-llm-no-tc', tempDir);
       tracer.consume({
         type: 'llm:response',
         text: 'Hello!',
@@ -271,7 +287,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record null skill in llm.request', async () => {
-      const tracer = new TraceWriter('test-skill-null', tempDir);
+      const tracer = await createTraceWriter('test-skill-null', tempDir);
       tracer.consume({
         type: 'llm:request',
         messages: [{ role: 'user', content: 'Hi' }],
@@ -288,7 +304,7 @@ describe('TraceWriter', () => {
 
   describe('tool events with duration pairing', () => {
     it('should pair tool:start and tool:end with durationMs', async () => {
-      const tracer = new TraceWriter('test-tool-pair', tempDir);
+      const tracer = await createTraceWriter('test-tool-pair', tempDir);
 
       tracer.consume({
         type: 'tool:start',
@@ -331,7 +347,7 @@ describe('TraceWriter', () => {
     });
 
     it('should pair tool:start and tool:end via FIFO when callId is omitted', async () => {
-      const tracer = new TraceWriter('test-tool-fifo', tempDir);
+      const tracer = await createTraceWriter('test-tool-fifo', tempDir);
 
       tracer.consume({
         type: 'tool:start',
@@ -355,7 +371,7 @@ describe('TraceWriter', () => {
     });
 
     it('should handle tool:end without preceding tool:start', async () => {
-      const tracer = new TraceWriter('test-tool-orphan', tempDir);
+      const tracer = await createTraceWriter('test-tool-orphan', tempDir);
       tracer.consume({ type: 'tool:end', result: 'orphan result' });
       await tracer.flush();
 
@@ -373,7 +389,7 @@ describe('TraceWriter', () => {
     });
 
     it('should handle tool:end with callId but no matching tool:start', async () => {
-      const tracer = new TraceWriter('test-tool-missing-start', tempDir);
+      const tracer = await createTraceWriter('test-tool-missing-start', tempDir);
       tracer.consume({
         type: 'tool:end',
         result: 'no matching start',
@@ -395,7 +411,7 @@ describe('TraceWriter', () => {
     });
 
     it('should truncate tool:end result when too long', async () => {
-      const tracer = new TraceWriter('test-tool-trunc', tempDir);
+      const tracer = await createTraceWriter('test-tool-trunc', tempDir);
       tracer.consume({
         type: 'tool:start',
         action: { id: 'c1', tool: 'reader', arguments: {} },
@@ -412,7 +428,7 @@ describe('TraceWriter', () => {
     });
 
     it('should handle empty string tool result', async () => {
-      const tracer = new TraceWriter('test-tool-empty', tempDir);
+      const tracer = await createTraceWriter('test-tool-empty', tempDir);
       tracer.consume({
         type: 'tool:start',
         action: { id: 'c1', tool: 'reader', arguments: {} },
@@ -430,7 +446,7 @@ describe('TraceWriter', () => {
 
   describe('tools:start and tools:end (parallel)', () => {
     it('should record tools:start with action summaries', async () => {
-      const tracer = new TraceWriter('test-tools-start', tempDir);
+      const tracer = await createTraceWriter('test-tools-start', tempDir);
       tracer.consume({
         type: 'tools:start',
         actions: [
@@ -454,7 +470,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record tools:end with durationMs', async () => {
-      const tracer = new TraceWriter('test-tools-end', tempDir);
+      const tracer = await createTraceWriter('test-tools-end', tempDir);
       tracer.consume({
         type: 'tools:start',
         actions: [
@@ -480,7 +496,7 @@ describe('TraceWriter', () => {
     });
 
     it('should handle tools:end without preceding tools:start', async () => {
-      const tracer = new TraceWriter('test-tools-orphan', tempDir);
+      const tracer = await createTraceWriter('test-tools-orphan', tempDir);
       tracer.consume({
         type: 'tools:end',
         results: { c1: 'orphan' },
@@ -498,7 +514,7 @@ describe('TraceWriter', () => {
 
   describe('error event', () => {
     it('should record error message and context', async () => {
-      const tracer = new TraceWriter('test-error', tempDir);
+      const tracer = await createTraceWriter('test-error', tempDir);
       tracer.consume({
         type: 'error',
         error: new Error('API rate limit exceeded'),
@@ -520,7 +536,7 @@ describe('TraceWriter', () => {
 
   describe('skill events', () => {
     it('should record skill:loading', async () => {
-      const tracer = new TraceWriter('test-skill-load', tempDir);
+      const tracer = await createTraceWriter('test-skill-load', tempDir);
       tracer.consume({ type: 'skill:loading', name: 'greeting' });
       await tracer.flush();
 
@@ -535,7 +551,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record skill:loaded with tokenCount', async () => {
-      const tracer = new TraceWriter('test-skill-loaded', tempDir);
+      const tracer = await createTraceWriter('test-skill-loaded', tempDir);
       tracer.consume({ type: 'skill:loaded', name: 'greeting', tokenCount: 42 });
       await tracer.flush();
 
@@ -551,7 +567,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record skill:start and skill:end', async () => {
-      const tracer = new TraceWriter('test-skill-se', tempDir);
+      const tracer = await createTraceWriter('test-skill-se', tempDir);
       tracer.consume({ type: 'skill:start', name: 'math', task: 'solve equation' });
       tracer.consume({ type: 'skill:end', name: 'math', result: 'x = 42' });
       await tracer.flush();
@@ -578,7 +594,7 @@ describe('TraceWriter', () => {
     });
 
     it('should truncate skill:end result when too long', async () => {
-      const tracer = new TraceWriter('test-skill-trunc', tempDir);
+      const tracer = await createTraceWriter('test-skill-trunc', tempDir);
       tracer.consume({ type: 'skill:end', name: 'test', result: 'R'.repeat(500) });
       await tracer.flush();
 
@@ -592,7 +608,7 @@ describe('TraceWriter', () => {
 
   describe('subagent events', () => {
     it('should record subagent:start and subagent:end', async () => {
-      const tracer = new TraceWriter('test-subagent', tempDir);
+      const tracer = await createTraceWriter('test-subagent', tempDir);
       tracer.consume({ type: 'subagent:start', name: 'researcher', task: 'find sources' });
       tracer.consume({
         type: 'subagent:end',
@@ -623,7 +639,7 @@ describe('TraceWriter', () => {
     });
 
     it('should truncate subagent:end result when too long', async () => {
-      const tracer = new TraceWriter('test-sub-trunc', tempDir);
+      const tracer = await createTraceWriter('test-sub-trunc', tempDir);
       tracer.consume({
         type: 'subagent:end',
         name: 'test',
@@ -641,7 +657,7 @@ describe('TraceWriter', () => {
 
   describe('compress events', () => {
     it('should record compress.start and compress.end', async () => {
-      const tracer = new TraceWriter('test-compress', tempDir);
+      const tracer = await createTraceWriter('test-compress', tempDir);
       tracer.consume({ type: 'compressing' });
       tracer.consume({ type: 'compressed', summary: 'Conversation about math', removedCount: 5 });
       await tracer.flush();
@@ -668,7 +684,7 @@ describe('TraceWriter', () => {
 
   describe('complete event', () => {
     it('should record run.end with success result', async () => {
-      const tracer = new TraceWriter('test-complete-ok', tempDir);
+      const tracer = await createTraceWriter('test-complete-ok', tempDir);
       tracer.consume({
         type: 'complete',
         result: { type: 'success', answer: '42', totalSteps: 3 },
@@ -688,7 +704,7 @@ describe('TraceWriter', () => {
     });
 
     it('should record run.end with max_steps result', async () => {
-      const tracer = new TraceWriter('test-complete-max', tempDir);
+      const tracer = await createTraceWriter('test-complete-max', tempDir);
       tracer.consume({ type: 'complete', result: { type: 'max_steps', totalSteps: 10 } });
       await tracer.flush();
 
@@ -707,7 +723,7 @@ describe('TraceWriter', () => {
 
   describe('token event', () => {
     it('should ignore token events', async () => {
-      const tracer = new TraceWriter('test-token', tempDir);
+      const tracer = await createTraceWriter('test-token', tempDir);
       tracer.consume({ type: 'token', token: 'Hello' });
       tracer.consume({ type: 'token', token: ' World' });
       await tracer.flush();
@@ -721,7 +737,7 @@ describe('TraceWriter', () => {
 
   describe('unknown event types', () => {
     it('should ignore events with unknown types', async () => {
-      const tracer = new TraceWriter('test-unknown', tempDir);
+      const tracer = await createTraceWriter('test-unknown', tempDir);
       // Cast to inject an unknown event type that hits the default case
       tracer.consume({ type: 'unknown-event' as never });
       await tracer.flush();
@@ -736,7 +752,7 @@ describe('TraceWriter', () => {
 
   describe('JSONL format', () => {
     it('should write one JSON object per line', async () => {
-      const tracer = new TraceWriter('test-jsonl', tempDir);
+      const tracer = await createTraceWriter('test-jsonl', tempDir);
       tracer.consume({ type: 'phase-change', from: { type: 'idle' }, to: { type: 'preparing' } });
       tracer.consume({ type: 'compressing' });
       await tracer.flush();
@@ -752,11 +768,11 @@ describe('TraceWriter', () => {
     });
 
     it('should support append mode (same session, multiple tracer instances)', async () => {
-      const tracer1 = new TraceWriter('test-append', tempDir);
+      const tracer1 = await createTraceWriter('test-append', tempDir);
       tracer1.consume({ type: 'compressing' });
       await tracer1.flush();
 
-      const tracer2 = new TraceWriter('test-append', tempDir);
+      const tracer2 = await createTraceWriter('test-append', tempDir);
       tracer2.consume({ type: 'compressed', summary: 'test', removedCount: 1 });
       await tracer2.flush();
 
@@ -770,7 +786,7 @@ describe('TraceWriter', () => {
   describe('auto-create directory', () => {
     it('should create nested directories automatically', async () => {
       const nestedDir = path.join(tempDir, 'a', 'b', 'c');
-      const tracer = new TraceWriter('test-nested', nestedDir);
+      const tracer = await createTraceWriter('test-nested', nestedDir);
       tracer.consume({ type: 'compressing' });
       await tracer.flush();
 
@@ -780,7 +796,7 @@ describe('TraceWriter', () => {
 
   describe('full flow simulation', () => {
     it('should record a complete execution lifecycle', async () => {
-      const tracer = new TraceWriter('test-flow', tempDir);
+      const tracer = await createTraceWriter('test-flow', tempDir);
 
       // step 1
       tracer.consume({ type: 'step:start', step: 1, state: {} as never });
