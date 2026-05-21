@@ -198,8 +198,8 @@ export async function loadSession(sessionId: string, baseDir?: string): Promise<
   const data = JSON.parse(content) as Record<string, unknown>;
 
   if (data.version === SESSION_VERSION && data.state) {
-    // v1 format: take state field
-    return data.state as AgentState;
+    // v1 format: deserialize state field uniformly
+    return deserializeState(data.state as AgentState);
   }
 
   // Old format (raw AgentState): return directly
