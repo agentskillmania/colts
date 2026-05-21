@@ -281,9 +281,7 @@ export class PiAiAdapter {
       shouldRetry: (error) => isRetryableError(error),
       onFailedAttempt: (error) => {
         const message = error instanceof Error ? error.message : String(error);
-        const wrappedError = new Error(
-          `Attempt ${error.attemptNumber} failed: ${message}`
-        );
+        const wrappedError = new Error(`Attempt ${error.attemptNumber} failed: ${message}`);
         if (onRetry) {
           onRetry(error.attemptNumber, wrappedError);
         }
