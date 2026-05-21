@@ -571,6 +571,9 @@ export async function executeRun(
       }
     }
   } catch (error) {
+    if (signal.aborted) {
+      return;
+    }
     const msg = error instanceof Error ? error.message : String(error);
     setEntries((prev) =>
       prev.map((e) =>
@@ -665,9 +668,23 @@ export async function executeStep(
           },
         ]);
 
-        await pauseFn();
+        await Promise.race([
+          pauseFn(),
+          new Promise<never>((_, reject) => {
+            const onAbort = () => reject(new Error('Aborted'));
+            if (signal.aborted) {
+              onAbort();
+            } else {
+              signal.addEventListener('abort', onAbort, { once: true });
+            }
+          }),
+        ]);
       }
     } catch (error) {
+      if (signal.aborted) {
+        continueLoop = false;
+        break;
+      }
       const msg = error instanceof Error ? error.message : String(error);
       setEntries((prev) =>
         prev.map((e) =>
@@ -736,7 +753,17 @@ export async function executeAdvance(
         // This makes await pauseFn() truly blocking, not fire-and-forget
         if (iterResult.value.type === 'phase-change') {
           const phaseEvent = iterResult.value as Extract<StreamEvent, { type: 'phase-change' }>;
-          await pauseFn();
+          await Promise.race([
+            pauseFn(),
+            new Promise<never>((_, reject) => {
+              const onAbort = () => reject(new Error('Aborted'));
+              if (signal.aborted) {
+                onAbort();
+              } else {
+                signal.addEventListener('abort', onAbort, { once: true });
+              }
+            }),
+          ]);
           if (phaseEvent.to.type === 'calling-llm') {
             consumer.resetAssistant();
           }
