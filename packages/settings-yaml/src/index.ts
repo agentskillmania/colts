@@ -125,9 +125,7 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
         parsed !== null &&
         (typeof parsed !== 'object' || Array.isArray(parsed))
       ) {
-        throw new SettingsError(
-          `YAML file must contain a top-level object, got ${typeof parsed}`
-        );
+        throw new SettingsError(`YAML file must contain a top-level object, got ${typeof parsed}`);
       }
       const userConfig = parsed as Record<string, unknown>;
 

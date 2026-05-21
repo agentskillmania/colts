@@ -587,6 +587,21 @@ server:
 
       expect(() => settings.has('key')).toThrow('Settings not initialized');
     });
+
+    it('should return false when path traverses a non-object value', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const settings = new Settings(configPath);
+      await settings.initialize({
+        defaultYaml: `
+name: test
+server: localhost
+`,
+      });
+
+      // 'server' is a string, so 'server.port' should return false
+      expect(settings.has('server.port')).toBe(false);
+      expect(settings.has('server.0')).toBe(false);
+    });
   });
 
   describe('set', () => {
