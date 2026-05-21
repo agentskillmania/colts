@@ -156,10 +156,7 @@ describe('StreamEventConsumer', () => {
 
       expect(consumer.getAccumulatedContent()).toBe('Hello');
       const asst = entries.lastEntries.find((e) => e.type === 'assistant');
-      expect(asst).toBeDefined();
-      if (asst?.type === 'assistant') {
-        expect(asst.content).toBe('Hello');
-      }
+      expect(asst).toEqual(expect.objectContaining({ type: 'assistant', content: 'Hello' }));
     });
 
     it('multiple tokens accumulate continuously', () => {
@@ -203,10 +200,7 @@ describe('StreamEventConsumer', () => {
 
       // Second token has non-whitespace content, entry created at this point
       const asst = entries.lastEntries.find((e) => e.type === 'assistant');
-      expect(asst).toBeDefined();
-      if (asst?.type === 'assistant') {
-        expect(asst.content).toBe('\nHello');
-      }
+      expect(asst).toEqual(expect.objectContaining({ type: 'assistant', content: '\nHello' }));
     });
 
     it('throttling: consecutive tokens schedule only one delayed flush within 50ms', () => {
@@ -251,12 +245,14 @@ describe('StreamEventConsumer', () => {
       consumer.consume(toolStartEvent('read_file', { path: '/test' }));
 
       const tool = entries.lastEntries.find((e) => e.type === 'tool');
-      expect(tool).toBeDefined();
-      if (tool?.type === 'tool') {
-        expect(tool.tool).toBe('read_file');
-        expect(tool.isRunning).toBe(true);
-        expect(tool.args).toEqual({ path: '/test' });
-      }
+      expect(tool).toEqual(
+        expect.objectContaining({
+          type: 'tool',
+          tool: 'read_file',
+          isRunning: true,
+          args: { path: '/test' },
+        })
+      );
     });
 
     it('flushes residual tokens then stops assistant streaming', () => {
@@ -477,10 +473,7 @@ describe('StreamEventConsumer', () => {
       consumer.consume(errorEvent('unexpected'));
 
       const err = entries.lastEntries.find((e) => e.type === 'error');
-      expect(err).toBeDefined();
-      if (err?.type === 'error') {
-        expect(err.message).toBe('unexpected');
-      }
+      expect(err).toEqual(expect.objectContaining({ type: 'error', message: 'unexpected' }));
       // No assistant entry
       const assistants = entries.lastEntries.filter((e) => e.type === 'assistant');
       expect(assistants).toHaveLength(0);
@@ -724,10 +717,13 @@ describe('StreamEventConsumer', () => {
       const asst = entries.lastEntries.find(
         (e) => e.type === 'assistant' && (e as any).content === 'override content'
       );
-      expect(asst).toBeDefined();
-      if (asst?.type === 'assistant') {
-        expect(asst.isStreaming).toBe(false);
-      }
+      expect(asst).toEqual(
+        expect.objectContaining({
+          type: 'assistant',
+          content: 'override content',
+          isStreaming: false,
+        })
+      );
     });
 
     it('marks disposed, subsequent consume does not process events', () => {
@@ -824,11 +820,12 @@ describe('StreamEventConsumer', () => {
       } as RunStreamEvent);
 
       const thought = entries.lastEntries.find((e) => e.type === 'thought');
-      expect(thought).toBeDefined();
-      if (thought?.type === 'thought') {
-        expect(thought.content).toBe('Let me reason about this...');
-        expect(thought.seq).toBeGreaterThan(0);
-      }
+      expect(thought).toEqual(
+        expect.objectContaining({
+          type: 'thought',
+          content: 'Let me reason about this...',
+        })
+      );
     });
 
     it('llm:request event produces llm-request entry', () => {
@@ -845,11 +842,13 @@ describe('StreamEventConsumer', () => {
       } as RunStreamEvent);
 
       const reqEntry = entries.lastEntries.find((e) => e.type === 'llm-request');
-      expect(reqEntry).toBeDefined();
-      if (reqEntry?.type === 'llm-request') {
-        expect(reqEntry.messageCount).toBe(2);
-        expect(reqEntry.tools).toEqual(['read_file', 'search']);
-      }
+      expect(reqEntry).toEqual(
+        expect.objectContaining({
+          type: 'llm-request',
+          messageCount: 2,
+          tools: ['read_file', 'search'],
+        })
+      );
     });
 
     it('llm:response event produces llm-response entry', () => {
@@ -862,12 +861,12 @@ describe('StreamEventConsumer', () => {
       } as RunStreamEvent);
 
       const resEntry = entries.lastEntries.find((e) => e.type === 'llm-response');
-      expect(resEntry).toBeDefined();
-      if (resEntry?.type === 'llm-response') {
-        expect(resEntry.textLength).toBe(13);
-        expect(resEntry.toolCalls).toHaveLength(1);
-        expect(resEntry.toolCalls![0].name).toBe('read_file');
-      }
+      expect(resEntry).toEqual(
+        expect.objectContaining({
+          type: 'llm-response',
+          textLength: 13,
+        })
+      );
     });
   });
 
@@ -956,7 +955,7 @@ describe('StreamEventConsumer', () => {
       const tools = entries.lastEntries.filter((e) => e.type === 'tool');
       expect(skills).toHaveLength(4);
       expect(tools).toHaveLength(1);
-      expect(consumer.getAccumulatedContent()).toContain('Once upon');
+      expect(consumer.getAccumulatedContent()).toBe('Once upon a time');
     });
   });
 

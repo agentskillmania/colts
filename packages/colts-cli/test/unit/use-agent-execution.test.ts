@@ -7,11 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AgentRunner, AgentState, RunStreamEvent } from '@agentskillmania/colts';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
-import {
-  executeRun,
-  executeStep,
-  executeAdvance,
-} from '../../src/hooks/use-agent.js';
+import { executeRun, executeStep, executeAdvance } from '../../src/hooks/use-agent.js';
 import type { TimelineEntry } from '../../src/types/timeline.js';
 
 // Mock TraceWriter to avoid filesystem I/O
@@ -23,10 +19,18 @@ vi.mock('../../src/trace-writer.js', () => ({
 }));
 
 /** Create a minimal mock AgentRunner for run mode */
-function createMockRunnerForRun(events: RunStreamEvent[], finalResult: {
-  state: AgentState;
-  result: { type: 'success'; answer: string; totalSteps: number; tokens: { input: number; output: number } };
-}): AgentRunner {
+function createMockRunnerForRun(
+  events: RunStreamEvent[],
+  finalResult: {
+    state: AgentState;
+    result: {
+      type: 'success';
+      answer: string;
+      totalSteps: number;
+      tokens: { input: number; output: number };
+    };
+  }
+): AgentRunner {
   return {
     runStream: vi.fn().mockImplementation(async function* () {
       for (const event of events) {
@@ -38,10 +42,13 @@ function createMockRunnerForRun(events: RunStreamEvent[], finalResult: {
 }
 
 /** Create a minimal mock AgentRunner for step mode */
-function createMockRunnerForStep(events: RunStreamEvent[], finalResult: {
-  state: AgentState;
-  result: { type: 'done'; answer: string; tokens: { input: number; output: number } };
-}): AgentRunner {
+function createMockRunnerForStep(
+  events: RunStreamEvent[],
+  finalResult: {
+    state: AgentState;
+    result: { type: 'done'; answer: string; tokens: { input: number; output: number } };
+  }
+): AgentRunner {
   return {
     stepStream: vi.fn().mockImplementation(async function* () {
       for (const event of events) {
@@ -56,7 +63,12 @@ function createMockRunnerForStep(events: RunStreamEvent[], finalResult: {
 function createMockRunnerForAdvance(
   phaseResults: Array<{
     events: RunStreamEvent[];
-    result: { state: AgentState; execState: { phase: { type: string } }; phase: { type: string }; done: boolean };
+    result: {
+      state: AgentState;
+      execState: { phase: { type: string } };
+      phase: { type: string };
+      done: boolean;
+    };
   }>
 ): AgentRunner {
   let callIndex = 0;
@@ -106,9 +118,18 @@ describe('executeRun', () => {
       entries.push(...next);
     });
     let currentState: AgentState | null = assistantState;
-    const setState = vi.fn((s: AgentState) => { currentState = s; });
+    const setState = vi.fn((s: AgentState) => {
+      currentState = s;
+    });
 
-    await executeRun(runner, assistantState, 'Hello', setEntries, setState, new AbortController().signal);
+    await executeRun(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      new AbortController().signal
+    );
 
     // Verify runner was called
     expect(runner.runStream).toHaveBeenCalledTimes(1);
@@ -147,9 +168,18 @@ describe('executeRun', () => {
       entries.push(...next);
     });
     let currentState: AgentState | null = assistantState;
-    const setState = vi.fn((s: AgentState) => { currentState = s; });
+    const setState = vi.fn((s: AgentState) => {
+      currentState = s;
+    });
 
-    await executeRun(runner, assistantState, 'Hello', setEntries, setState, new AbortController().signal);
+    await executeRun(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      new AbortController().signal
+    );
 
     // No error entry should be added on abort
     const errorEntries = entries.filter((e) => e.type === 'error');
@@ -174,9 +204,18 @@ describe('executeRun', () => {
       entries.push(...next);
     });
     let currentState: AgentState | null = assistantState;
-    const setState = vi.fn((s: AgentState) => { currentState = s; });
+    const setState = vi.fn((s: AgentState) => {
+      currentState = s;
+    });
 
-    await executeRun(runner, assistantState, 'Hello', setEntries, setState, new AbortController().signal);
+    await executeRun(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      new AbortController().signal
+    );
 
     // Error should be reflected in assistant entry
     const assistantEntries = entries.filter((e) => e.type === 'assistant');
@@ -214,7 +253,9 @@ describe('executeStep', () => {
       entries.push(...next);
     });
     let currentState: AgentState | null = assistantState;
-    const setState = vi.fn((s: AgentState) => { currentState = s; });
+    const setState = vi.fn((s: AgentState) => {
+      currentState = s;
+    });
 
     let pauseCalled = false;
     const pauseFn = () => {
@@ -222,7 +263,15 @@ describe('executeStep', () => {
       return Promise.resolve();
     };
 
-    await executeStep(runner, assistantState, 'Hello', setEntries, setState, new AbortController().signal, pauseFn);
+    await executeStep(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      new AbortController().signal,
+      pauseFn
+    );
 
     // When step completes with 'done', it should NOT pause
     expect(pauseCalled).toBe(false);
@@ -271,7 +320,9 @@ describe('executeStep', () => {
       entries.push(...next);
     });
     let currentState: AgentState | null = assistantState;
-    const setState = vi.fn((s: AgentState) => { currentState = s; });
+    const setState = vi.fn((s: AgentState) => {
+      currentState = s;
+    });
 
     let pauseCount = 0;
     const pauseFn = () => {
@@ -279,7 +330,15 @@ describe('executeStep', () => {
       return Promise.resolve();
     };
 
-    await executeStep(runner, assistantState, 'Hello', setEntries, setState, new AbortController().signal, pauseFn);
+    await executeStep(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      new AbortController().signal,
+      pauseFn
+    );
 
     // Should have paused once for continue, then completed
     expect(pauseCount).toBe(1);
@@ -306,7 +365,12 @@ describe('executeAdvance', () => {
     const phaseResults = [
       {
         events: [
-          { type: 'phase-change', from: { type: 'idle' }, to: { type: 'preparing' }, timestamp: Date.now() },
+          {
+            type: 'phase-change',
+            from: { type: 'idle' },
+            to: { type: 'preparing' },
+            timestamp: Date.now(),
+          },
         ] as RunStreamEvent[],
         result: {
           state: assistantState,
@@ -317,7 +381,12 @@ describe('executeAdvance', () => {
       },
       {
         events: [
-          { type: 'phase-change', from: { type: 'preparing' }, to: { type: 'calling-llm' }, timestamp: Date.now() },
+          {
+            type: 'phase-change',
+            from: { type: 'preparing' },
+            to: { type: 'calling-llm' },
+            timestamp: Date.now(),
+          },
         ] as RunStreamEvent[],
         result: {
           state: assistantState,
@@ -329,7 +398,12 @@ describe('executeAdvance', () => {
       {
         events: [
           { type: 'token', token: 'Done', timestamp: Date.now() },
-          { type: 'phase-change', from: { type: 'calling-llm' }, to: { type: 'completed' }, timestamp: Date.now() },
+          {
+            type: 'phase-change',
+            from: { type: 'calling-llm' },
+            to: { type: 'completed' },
+            timestamp: Date.now(),
+          },
         ] as RunStreamEvent[],
         result: {
           state: finalState,
@@ -348,7 +422,9 @@ describe('executeAdvance', () => {
       entries.push(...next);
     });
     let currentState: AgentState | null = assistantState;
-    const setState = vi.fn((s: AgentState) => { currentState = s; });
+    const setState = vi.fn((s: AgentState) => {
+      currentState = s;
+    });
 
     let pauseCount = 0;
     const pauseFn = () => {
@@ -356,7 +432,15 @@ describe('executeAdvance', () => {
       return Promise.resolve();
     };
 
-    await executeAdvance(runner, assistantState, 'Hello', setEntries, setState, new AbortController().signal, pauseFn);
+    await executeAdvance(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      new AbortController().signal,
+      pauseFn
+    );
 
     // Should have paused on each phase-change (3 phases = 3 pauses)
     expect(pauseCount).toBe(3);
@@ -381,11 +465,21 @@ describe('executeAdvance', () => {
       entries.push(...next);
     });
     let currentState: AgentState | null = assistantState;
-    const setState = vi.fn((s: AgentState) => { currentState = s; });
+    const setState = vi.fn((s: AgentState) => {
+      currentState = s;
+    });
 
     const pauseFn = () => Promise.resolve();
 
-    await executeAdvance(runner, assistantState, 'Hello', setEntries, setState, new AbortController().signal, pauseFn);
+    await executeAdvance(
+      runner,
+      assistantState,
+      'Hello',
+      setEntries,
+      setState,
+      new AbortController().signal,
+      pauseFn
+    );
 
     const assistantEntries = entries.filter((e) => e.type === 'assistant');
     expect(assistantEntries.length).toBeGreaterThanOrEqual(1);

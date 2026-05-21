@@ -113,6 +113,18 @@ describe('session', () => {
       expect(parsed.meta.messageCount).toBe(0);
     });
 
+    it('should handle state with null context (covers extractMeta ?? [] branch)', async () => {
+      const malformedState = { id: 'null-ctx', context: null } as unknown as AgentState;
+      await saveSession(malformedState, testDir);
+
+      const filePath = path.join(testDir, 'null-ctx.json');
+      const content = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content);
+
+      expect(parsed.meta.messageCount).toBe(0);
+      expect(parsed.meta.lastMessage).toBe('');
+    });
+
     it('should update updatedAt on re-save', async () => {
       const state = createTestState(['first']);
       await saveSession(state, testDir);
@@ -335,6 +347,31 @@ describe('session', () => {
       expect(sessions[0].id).toBe('malformed-id');
       expect(sessions[0].messageCount).toBe(0);
       expect(sessions[0].lastMessage).toBe('');
+    });
+
+    it('should truncate long lastMessage in old format', async () => {
+      const longContent = 'B'.repeat(100);
+      const state = createTestState([longContent]);
+      const legacyJson = JSON.stringify(state);
+      await fs.writeFile(path.join(testDir, `${state.id}.json`), legacyJson, 'utf-8');
+
+      const sessions = await listSessions(testDir);
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].lastMessage).toHaveLength(50);
+      expect(sessions[0].lastMessage).toBe('B'.repeat(50));
+    });
+
+    it('should handle old format with null context (covers extractMeta ?? [] branch)', async () => {
+      // Use null (not undefined) so JSON.stringify preserves the field
+      const bareState = { id: 'bare-state', context: null };
+      const legacyJson = JSON.stringify(bareState);
+      await fs.writeFile(path.join(testDir, 'bare-state.json'), legacyJson, 'utf-8');
+
+      const sessions = await listSessions(testDir);
+      const found = sessions.find((s) => s.id === 'bare-state');
+      expect(found).toBeDefined();
+      expect(found!.messageCount).toBe(0);
+      expect(found!.lastMessage).toBe('');
     });
   });
 
