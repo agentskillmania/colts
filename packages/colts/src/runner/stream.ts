@@ -1,7 +1,7 @@
 /**
  * @fileoverview Streaming Execution Helpers
  *
- * Handles streaming LLM response, advance streaming, and step streaming.
+ * Handles streaming advance and step execution by delegating to PhaseRouter.
  * Extracted from AgentRunner for maintainability.
  */
 
@@ -14,152 +14,18 @@ import type {
   AdvanceOptions,
 } from '../execution/index.js';
 import { createExecutionState, isTerminalPhase, updateExecState } from '../execution/index.js';
-import { addTokenStats, estimateTokens } from '../utils/tokens.js';
+import { addTokenStats } from '../utils/tokens.js';
 import type { RunnerContext } from './advance.js';
-import { executeAdvance } from './advance.js';
-import { buildMessagesFromCtx } from './advance.js';
-import { getToolsForLLM } from '../tools/llm-format.js';
 import { maybeCompress } from './compression.js';
 import type { IContextCompressor } from '../types.js';
 import type { MiddlewareExecutor } from '../middleware/executor.js';
 import type { RunnerOptions } from './options.js';
 
 /**
- * Stream LLM response during calling-llm phase.
- *
- * Shared between advanceStream() and stepStream() to avoid duplicate logic.
- * Yields token events in real-time and returns immutable ExecutionState
- * with the complete response.
- *
- * @param ctx - Runner context
- * @param state - Current agent state
- * @param execState - Execution state (immutable)
- * @param registry - Optional tool registry
- * @param signal - Optional abort signal
- * @yields StreamEvent token events
- * @returns New immutable ExecutionState with LLM response data
- */
-export async function* streamCallingLLM(
-  ctx: RunnerContext,
-  state: AgentState,
-  execState: ExecutionState,
-  registry?: IToolRegistry,
-  signal?: AbortSignal
-): AsyncGenerator<StreamEvent, ExecutionState> {
-  const tools = getToolsForLLM(registry, ctx.toolSchemaFormatter);
-  const messages = execState.preparedMessages ?? buildMessagesFromCtx(ctx, state);
-
-  // Yield llm:request event before LLM call, carrying the full input
-  yield {
-    type: 'llm:request',
-    messages: messages.map((m) => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-    })),
-    tools: tools?.map((t) => t.name) ?? [],
-    skill: state.context.skillState
-      ? {
-          current: state.context.skillState.current,
-          stack: state.context.skillState.stack.map((f) => f.skillName),
-        }
-      : null,
-
-    timestamp: Date.now(),
-  };
-
-  let accumulatedContent = '';
-  let accumulatedThinking = '';
-  let responseContent = '';
-  let responseToolCalls:
-    | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
-    | undefined;
-  let roundTokens: import('../types.js').TokenStats | undefined;
-
-  for await (const event of ctx.llmProvider.stream({
-    model: ctx.options.model,
-    messages,
-    tools,
-    priority: 0,
-    requestTimeout: ctx.options.requestTimeout,
-    thinkingEnabled: ctx.options.thinkingEnabled,
-    signal,
-  })) {
-    if (signal?.aborted) break;
-
-    if (event.type === 'text') {
-      accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
-      yield { type: 'token', token: event.delta ?? '', timestamp: Date.now() };
-    } else if (event.type === 'thinking') {
-      accumulatedThinking += event.delta ?? '';
-      yield { type: 'thinking', content: event.delta ?? '', timestamp: Date.now() };
-    } else if (event.type === 'tool_call' && event.toolCall) {
-      responseToolCalls = responseToolCalls ?? [];
-      responseToolCalls.push({
-        id: event.toolCall.id,
-        name: event.toolCall.name,
-        arguments: event.toolCall.arguments,
-      });
-    } else if (event.type === 'done') {
-      responseContent = accumulatedContent;
-      if (event.roundTotalTokens) {
-        roundTokens = event.roundTotalTokens;
-      }
-    }
-  }
-
-  // Guard: if aborted, do not return mutated state
-  if (signal?.aborted) {
-    return execState;
-  }
-
-  // Estimate context size from prepared messages
-  const estimatedContextSize = messages.reduce(
-    (sum, m) =>
-      sum + estimateTokens(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)),
-    0
-  );
-
-  // Yield llm:response event after LLM response, carrying the full output
-  yield {
-    type: 'llm:response',
-    text: responseContent,
-    toolCalls: responseToolCalls ?? null,
-
-    timestamp: Date.now(),
-  };
-
-  // Build immutable ExecutionState with accumulated data
-  const finalResponse = responseContent || accumulatedContent;
-  const nextExec = updateExecState(execState, (draft) => {
-    draft.llmResponse = finalResponse;
-    draft.llmThinking = accumulatedThinking;
-    draft.estimatedContextSize = estimatedContextSize;
-    if (roundTokens) {
-      draft.tokens = roundTokens;
-    }
-    if (responseToolCalls && responseToolCalls.length > 0) {
-      draft.action = {
-        id: responseToolCalls[0].id,
-        tool: responseToolCalls[0].name,
-        arguments: responseToolCalls[0].arguments,
-      };
-      draft.allActions = responseToolCalls.map((tc) => ({
-        id: tc.id,
-        tool: tc.name,
-        arguments: tc.arguments,
-      }));
-    } else {
-      draft.action = undefined;
-      draft.allActions = undefined;
-    }
-    draft.phase = { type: 'llm-response', response: finalResponse };
-  });
-
-  return nextExec;
-}
-
-/**
  * Stream phase advancement (micro-step streaming)
+ *
+ * Delegates to PhaseRouter.executeStream so that calling-llm phase
+ * is handled by CallingLLMHandler.streamExecute alongside all other phases.
  *
  * @param ctx - Runner context
  * @param state - Current agent state
@@ -176,54 +42,30 @@ export async function* executeAdvanceStream(
   toolRegistry?: IToolRegistry,
   options?: AdvanceOptions
 ): AsyncGenerator<StreamEvent, AdvanceResult> {
-  const registry = toolRegistry ?? ctx.toolRegistry;
   const fromPhase = execState.phase;
+  const registry = toolRegistry ?? ctx.toolRegistry;
 
-  // Handle streaming LLM response
-  // TODO(M3): calling-llm phase bypasses PhaseRouter and uses streamCallingLLM() directly.
-  //   This duplicates logic from CallingLLMHandler (which uses llmProvider.call()).
-  //   Plan: add optional streamExecute() to IPhaseHandler so CallingLLMHandler owns both
-  //   blocking and streaming paths. Then remove streamCallingLLM() and this bypass block.
-  if (fromPhase.type === 'calling-llm') {
-    yield {
-      type: 'phase-change',
-      from: fromPhase,
-      to: { type: 'streaming' },
-      timestamp: Date.now(),
-    };
+  try {
+    const result = yield* ctx.phaseRouter.executeStream(ctx, state, execState, registry, options);
 
-    try {
-      const nextExec = yield* streamCallingLLM(ctx, state, execState, registry, options?.signal);
-      yield {
-        type: 'phase-change',
-        from: { type: 'streaming' },
-        to: nextExec.phase,
-        timestamp: Date.now(),
-      };
-      return { state, execState: nextExec, phase: nextExec.phase, done: false };
-    } catch (error) {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      const nextExec = updateExecState(execState, (draft) => {
-        draft.phase = { type: 'error', error: errorObj };
-      });
-      yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
-      return { state, execState: nextExec, phase: nextExec.phase, done: true };
+    // Forward effects produced by handler (e.g., tool:end, skill:start)
+    if (result.effects && result.effects.length > 0) {
+      for (const effect of result.effects) {
+        yield effect as StreamEvent;
+      }
     }
+
+    yield { type: 'phase-change', from: fromPhase, to: result.phase, timestamp: Date.now() };
+
+    return result;
+  } catch (error) {
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    const nextExec = updateExecState(execState, (draft) => {
+      draft.phase = { type: 'error', error: errorObj };
+    });
+    yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
+    return { state, execState: nextExec, phase: nextExec.phase, done: true };
   }
-
-  // For other phases, delegate to executeAdvance()
-  const result = await executeAdvance(ctx, state, execState, registry, options);
-
-  // Yield effects produced by handler (e.g., tool:end, skill:start)
-  if (result.effects && result.effects.length > 0) {
-    for (const effect of result.effects) {
-      yield effect as StreamEvent;
-    }
-  }
-
-  yield { type: 'phase-change', from: fromPhase, to: result.phase, timestamp: Date.now() };
-
-  return result;
 }
 
 /**
@@ -278,101 +120,27 @@ export async function* executeStepStream(
       if (chain.execState) currentExecState = chain.execState;
     }
 
-    // TODO(M3): same calling-llm bypass as executeAdvanceStream above, see plan there
-    if (fromPhase.type === 'calling-llm') {
-      yield {
-        type: 'phase-change',
-        from: fromPhase,
-        to: { type: 'streaming' },
-        timestamp: Date.now(),
+    let result: AdvanceResult;
+    try {
+      result = yield* ctx.phaseRouter.executeStream(
+        ctx,
+        currentState,
+        currentExecState,
+        registry,
+        options
+      );
+    } catch (error) {
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      const nextExec = updateExecState(currentExecState, (draft) => {
+        draft.phase = { type: 'error', error: errorObj };
+      });
+      currentExecState = nextExec;
+      yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
+      return {
+        state: currentState,
+        result: { type: 'error', error: errorObj, tokens: stepTokens },
       };
-
-      try {
-        currentExecState = yield* streamCallingLLM(
-          ctx,
-          currentState,
-          currentExecState,
-          registry,
-          options?.signal
-        );
-      } catch (error) {
-        const errorObj = error instanceof Error ? error : new Error(String(error));
-        const nextExec = updateExecState(currentExecState, (draft) => {
-          draft.phase = { type: 'error', error: errorObj };
-        });
-        currentExecState = nextExec;
-        yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
-        return {
-          state: currentState,
-          result: { type: 'error', error: errorObj, tokens: stepTokens },
-        };
-      }
-
-      yield {
-        type: 'phase-change',
-        from: { type: 'streaming' },
-        to: currentExecState.phase,
-        timestamp: Date.now(),
-      };
-
-      if (currentExecState.tokens) {
-        stepTokens = addTokenStats(stepTokens, currentExecState.tokens);
-        currentState = {
-          ...currentState,
-          context: {
-            ...currentState.context,
-            totalTokens: addTokenStats(
-              currentState.context.totalTokens ?? { input: 0, output: 0 },
-              currentExecState.tokens
-            ),
-          },
-        };
-      }
-
-      if (currentExecState.estimatedContextSize !== undefined) {
-        currentState = {
-          ...currentState,
-          context: {
-            ...currentState.context,
-            estimatedContextSize: currentExecState.estimatedContextSize,
-          },
-        };
-      }
-
-      // ── afterAdvance (calling-llm path) ──
-      if (middlewareExecutor) {
-        const advanceResult: AdvanceResult = {
-          state: currentState,
-          execState: currentExecState,
-          phase: currentExecState.phase,
-          done: false,
-        };
-        const chain = await middlewareExecutor.runAfterAdvance({
-          state: currentState,
-          execState: currentExecState,
-          result: advanceResult,
-          stepNumber: stepIdx,
-          runnerOptions: runnerOptions!,
-        });
-        if (chain.stopResult) {
-          return {
-            state: currentState,
-            result: {
-              type: 'error',
-              error: new Error('Stopped by middleware'),
-              tokens: stepTokens,
-            },
-          };
-        }
-        if (chain.state) currentState = chain.state;
-        if (chain.execState) currentExecState = chain.execState;
-      }
-
-      continue;
     }
-
-    // All other phases: delegate to executeAdvance()
-    let result = await executeAdvance(ctx, currentState, currentExecState, registry, options);
 
     currentExecState = result.execState;
 
@@ -384,7 +152,7 @@ export async function* executeStepStream(
       return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
     }
 
-    // ── afterAdvance (executeAdvance path) ──
+    // ── afterAdvance ──
     if (middlewareExecutor) {
       const chain = await middlewareExecutor.runAfterAdvance({
         state: result.state,
@@ -401,6 +169,7 @@ export async function* executeStepStream(
       }
       if (chain.state) result = { ...result, state: chain.state };
       if (chain.execState) result = { ...result, execState: chain.execState };
+      currentExecState = result.execState;
     }
 
     currentState = await maybeCompress(compressor, result.state);
