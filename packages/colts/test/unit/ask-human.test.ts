@@ -21,17 +21,16 @@ describe('Step 11: ask_human Tool', () => {
       const tool = createAskHumanTool(handler);
 
       expect(tool.name).toBe('ask_human');
-      expect(tool.description).toBeTruthy();
-      expect(typeof tool.description).toBe('string');
+      expect(tool.description).toBe(
+        'Ask the human one or more questions when you need clarification, input, or a decision. Use text/number for open-ended answers, single-select for one choice, multi-select for multiple choices.'
+      );
     });
 
     it('should return a tool with Zod parameters schema', () => {
       const handler: AskHumanHandler = vi.fn();
       const tool = createAskHumanTool(handler);
 
-      expect(tool.parameters).toBeDefined();
-      // Should be a ZodObject
-      expect(tool.parameters._def).toBeDefined();
+      expect(tool.parameters).toBeInstanceOf(z.ZodType);
     });
 
     it('should call handler with questions and context on execute', async () => {
@@ -83,7 +82,10 @@ describe('Step 11: ask_human Tool', () => {
         {}
       );
 
-      expect(handler).toHaveBeenCalled();
+      expect(handler).toHaveBeenCalledWith({
+        questions: [{ id: 'q1', question: 'OK?', type: 'text' }],
+        context: undefined,
+      });
     });
   });
 
@@ -266,7 +268,7 @@ describe('Step 11: ask_human Tool', () => {
       const registry = new ToolRegistry();
       registry.register(tool);
 
-      expect(registry.has('ask_human')).toBe(true);
+      expect(registry.get('ask_human')).toBeDefined();
     });
 
     it('should generate valid tool schema for LLM', () => {
@@ -282,11 +284,11 @@ describe('Step 11: ask_human Tool', () => {
       const schema = schemas[0];
       expect(schema.type).toBe('function');
       expect(schema.function.name).toBe('ask_human');
-      expect(schema.function.description).toBeTruthy();
+      expect(typeof schema.function.description).toBe('string');
 
       // Parameters should have questions and context
       const params = schema.function.parameters as Record<string, unknown>;
-      expect(params).toBeDefined();
+      expect(params).toEqual(expect.objectContaining({ type: 'object' }));
       expect(params.type).toBe('object');
     });
 
@@ -395,8 +397,9 @@ describe('Step 11: ask_human Tool', () => {
       );
 
       expect(handler).toHaveBeenCalledOnce();
-      expect(handler.mock.calls[0][0].signal?.aborted).toBe(true);
-      expect(result).toBeDefined();
+      expect(handler.mock.calls[0][0].signal).toBeDefined();
+      expect(handler.mock.calls[0][0].signal.aborted).toBe(true);
+      expect(result).toEqual({});
     });
 
     it('handler can detect abort via signal', async () => {
@@ -415,6 +418,7 @@ describe('Step 11: ask_human Tool', () => {
       );
 
       expect(receivedSignals).toHaveLength(1);
+      expect(receivedSignals[0]).toBe(controller.signal);
       expect(receivedSignals[0]).toBe(controller.signal);
       expect(receivedSignals[0]!.aborted).toBe(false);
     });

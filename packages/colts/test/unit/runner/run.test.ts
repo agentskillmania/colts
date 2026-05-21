@@ -240,7 +240,7 @@ describe('run()', () => {
     // step() catches error internally, returns error
     expect(result.type).toBe('error');
     if (result.type === 'error') {
-      expect(result.error.message).toContain('API error');
+      expect(result.error.message).toBe('API error');
       expect(result.totalSteps).toBe(1);
     }
   });
@@ -301,13 +301,9 @@ describe('runStream()', () => {
     }
 
     // Should have step:start
-    expect(events.some((e) => e.type === 'step:start')).toBe(true);
-    // Should have token events (word by word output)
-    expect(events.some((e) => e.type === 'token')).toBe(true);
-    // Should have step:end
-    expect(events.some((e) => e.type === 'step:end')).toBe(true);
-    // Should have complete
-    expect(events.some((e) => e.type === 'complete')).toBe(true);
+    expect(events.map((e) => e.type)).toEqual(
+      expect.arrayContaining(['step:start', 'token', 'step:end', 'complete'])
+    );
   });
 
   it('should yield token events for real-time output', async () => {
@@ -331,7 +327,7 @@ describe('runStream()', () => {
 
     expect(tokens.length).toBeGreaterThan(0);
     // Concatenated result should contain full content
-    expect(tokens.join('')).toContain('One');
+    expect(tokens.join('')).toBe('One two three');
   });
 
   it('should emit events across multiple steps', async () => {
@@ -398,7 +394,6 @@ describe('runStream()', () => {
       }
     }
 
-    expect(returnValue).toBeDefined();
     expect(returnValue.result.type).toBe('success');
     if (returnValue.result.type === 'success') {
       expect(returnValue.result.answer).toBe('Final answer');
@@ -511,8 +506,7 @@ describe('runStream()', () => {
       events.push(event as { type: string });
     }
 
-    expect(events.some((e) => e.type === 'tool:start')).toBe(true);
-    expect(events.some((e) => e.type === 'tool:end')).toBe(true);
+    expect(events.map((e) => e.type)).toEqual(expect.arrayContaining(['tool:start', 'tool:end']));
   });
 
   it('should maintain immutability across streaming steps', async () => {
@@ -584,10 +578,10 @@ describe('runStream()', () => {
     }
 
     // Should emit complete event with error result
-    expect(events.some((e) => e.type === 'complete')).toBe(true);
+    expect(events.map((e) => e.type)).toContain('complete');
     expect(returnValue!.result.type).toBe('error');
     if (returnValue!.result.type === 'error') {
-      expect(returnValue!.result.error.message).toContain('LLM down');
+      expect(returnValue!.result.error.message).toBe('LLM down');
     }
   });
 
@@ -653,14 +647,16 @@ describe('runStream()', () => {
       events.push(event as { type: string });
     }
 
-    // Should have subagent:start and subagent:end events
-    expect(events.some((e) => e.type === 'subagent:start')).toBe(true);
-    expect(events.some((e) => e.type === 'subagent:end')).toBe(true);
-
-    // Should have normal step:start, step:end, and complete events
-    expect(events.some((e) => e.type === 'step:start')).toBe(true);
-    expect(events.some((e) => e.type === 'step:end')).toBe(true);
-    expect(events.some((e) => e.type === 'complete')).toBe(true);
+    // Should have subagent, step, and complete events
+    expect(events.map((e) => e.type)).toEqual(
+      expect.arrayContaining([
+        'subagent:start',
+        'subagent:end',
+        'step:start',
+        'step:end',
+        'complete',
+      ])
+    );
 
     // Verify subagent:start is before subagent:end
     const startIndex = events.findIndex((e) => e.type === 'subagent:start');
@@ -711,7 +707,8 @@ describe('runStream()', () => {
     // Should either have error events or error result
     const hasErrorEvent = events.some((e) => e.type === 'error');
     const hasErrorResult = finalResult?.result?.type === 'error';
-    expect(hasErrorEvent || hasErrorResult).toBe(true);
+    expect(hasErrorEvent).toBe(true);
+    expect(hasErrorResult).toBe(true);
   });
 
   it('should handle error in stepStream when LLM fails', async () => {
@@ -747,7 +744,8 @@ describe('runStream()', () => {
     }
 
     // Should have error event or throw
-    expect(errorThrown || events.some((e) => e.type === 'error')).toBe(true);
+    const eventTypes = events.map((e) => e.type);
+    expect(errorThrown || eventTypes.includes('error')).toBe(true);
   });
 
   it('should reach maxSteps in runStream', async () => {
@@ -809,8 +807,7 @@ describe('runStream()', () => {
       // consume stream
     }
 
-    expect(events).toContain('compressing');
-    expect(events).toContain('compressed');
+    expect(events).toEqual(['compressing', 'compressed']);
   });
 
   it('should emit error event in runStream when error occurs', async () => {
@@ -1008,9 +1005,7 @@ describe('Thinking mechanism', () => {
     const thoughtMsg = messages.find((m) => m.type === 'thought');
     const textMsg = messages.find((m) => m.type === 'text');
 
-    expect(thoughtMsg).toBeDefined();
     expect(thoughtMsg!.content).toBe('Let me reason through this.');
-    expect(textMsg).toBeDefined();
     expect(textMsg!.content).toBe('The answer is 42.');
   });
 
@@ -1032,11 +1027,8 @@ describe('Thinking mechanism', () => {
     const thoughtMsg = messages.find((m) => m.type === 'thought');
     const textMsg = messages.find((m) => m.type === 'text');
 
-    expect(thoughtMsg).toBeDefined();
     expect(thoughtMsg!.content).toBe('I need to calculate this.');
-    expect(textMsg).toBeDefined();
     expect(textMsg!.content).toBe('The answer is 42.');
-    expect(textMsg!.content).not.toContain('<think>');
   });
 
   it('should save native thinking with action in blocking mode', async () => {
@@ -1146,9 +1138,7 @@ describe('Thinking mechanism', () => {
     const thoughtMsg = messages.find((m) => m.type === 'thought');
     const textMsg = messages.find((m) => m.type === 'text');
 
-    expect(thoughtMsg).toBeDefined();
     expect(thoughtMsg!.content).toBe('Let me think about this.');
-    expect(textMsg).toBeDefined();
     expect(textMsg!.content).toBe('The answer is 42.');
   });
 

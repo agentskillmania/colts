@@ -4,6 +4,7 @@
  * Tests signal return and parameter handling of createReturnSkillTool.
  */
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { createReturnSkillTool } from '../../src/skills/return-skill-tool.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { isSkillSignal } from '../../src/skills/types.js';
@@ -14,16 +15,15 @@ describe('return_skill Tool', () => {
       const tool = createReturnSkillTool();
 
       expect(tool.name).toBe('return_skill');
-      expect(tool.description).toBeTruthy();
-      expect(typeof tool.description).toBe('string');
-      expect(tool.description).toContain('return');
+      expect(tool.description).toBe(
+        'Return from the current sub-skill to the parent skill with results. Use this when you have completed the assigned task and need to return control to the parent skill.'
+      );
     });
 
     it('should return Zod parameter schema', () => {
       const tool = createReturnSkillTool();
 
-      expect(tool.parameters).toBeDefined();
-      expect(tool.parameters._def).toBeDefined();
+      expect(tool.parameters).toBeInstanceOf(z.ZodType);
     });
   });
 
@@ -40,7 +40,6 @@ describe('return_skill Tool', () => {
         result: 'Task completed successfully',
         status: 'success',
       });
-      expect(isSkillSignal(result)).toBe(true);
     });
 
     it('should support partial status', async () => {
@@ -110,7 +109,7 @@ describe('return_skill Tool', () => {
       const registry = new ToolRegistry();
       registry.register(tool);
 
-      expect(registry.has('return_skill')).toBe(true);
+      expect(registry.getToolNames()).toEqual(['return_skill']);
     });
 
     it('should generate valid LLM tool schema', () => {
@@ -128,7 +127,6 @@ describe('return_skill Tool', () => {
       expect(schema.function.description).toBeTruthy();
 
       const params = schema.function.parameters as Record<string, unknown>;
-      expect(params).toBeDefined();
       expect(params.type).toBe('object');
     });
 

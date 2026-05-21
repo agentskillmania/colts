@@ -4,6 +4,7 @@
  * Tests createLoadSkillTool for normal, abnormal, and boundary scenarios.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import { createLoadSkillTool } from '../../src/skills/load-skill-tool.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import type { ISkillProvider, SkillManifest } from '../../src/skills/types.js';
@@ -42,16 +43,16 @@ describe('Step 8: load_skill Tool', () => {
       const tool = createLoadSkillTool(provider);
 
       expect(tool.name).toBe('load_skill');
-      expect(tool.description).toBeTruthy();
-      expect(typeof tool.description).toBe('string');
+      expect(tool.description).toBe(
+        "Load a skill's detailed instructions by name. Use this when you need to follow a specific skill's workflow or guidelines. The skill instructions will be loaded and you will switch to that skill mode."
+      );
     });
 
     it('should return Zod parameter schema', () => {
       const provider = createMockProvider();
       const tool = createLoadSkillTool(provider);
 
-      expect(tool.parameters).toBeDefined();
-      expect(tool.parameters._def).toBeDefined();
+      expect(tool.parameters).toBeInstanceOf(z.ZodType);
     });
   });
 
@@ -212,7 +213,7 @@ describe('Step 8: load_skill Tool', () => {
       const registry = new ToolRegistry();
       registry.register(tool);
 
-      expect(registry.has('load_skill')).toBe(true);
+      expect(registry.getToolNames()).toEqual(['load_skill']);
     });
 
     it('should generate valid LLM tool schema', () => {
@@ -231,7 +232,6 @@ describe('Step 8: load_skill Tool', () => {
       expect(schema.function.description).toBeTruthy();
 
       const params = schema.function.parameters as Record<string, unknown>;
-      expect(params).toBeDefined();
       expect(params.type).toBe('object');
     });
 

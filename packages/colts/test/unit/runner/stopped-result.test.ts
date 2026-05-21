@@ -299,4 +299,90 @@ describe('Runner: stopped result propagation', () => {
     expect(result.type).toBe('stopped');
     expect(result.data).toBe(customData);
   });
+
+  it('should propagate stopped result in runStream', async () => {
+    const customData = 'Custom stopped data from runStream';
+
+    const middleware: AgentMiddleware = {
+      name: 'test-middleware',
+      beforeStep: async () => {
+        return {
+          stop: true,
+          result: {
+            type: 'stopped',
+            data: customData,
+            tokens: { input: 10, output: 5 },
+          },
+        };
+      },
+    };
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llm: {
+        provider: 'openai',
+        apiKey: 'test-key',
+      },
+      middleware: [middleware],
+    });
+
+    const initialState = createAgentState({
+      config: { model: 'gpt-4', instructions: 'Test agent' },
+      context: { messages: [] },
+    });
+
+    const iterator = runner.runStream(initialState);
+    let finalResult: { result: { type: string; data?: string } } | undefined;
+
+    while (true) {
+      const { done, value } = await iterator.next();
+      if (done) {
+        finalResult = value as { result: { type: string; data?: string } };
+        break;
+      }
+    }
+
+    expect(finalResult).toBeDefined();
+    expect(finalResult!.result.type).toBe('stopped');
+    expect(finalResult!.result.data).toBe(customData);
+  });
+
+  it('should throw error from runStream catch block', async () => {
+    const middleware: AgentMiddleware = {
+      name: 'test-middleware',
+      beforeStep: async () => {
+        throw new Error('Sync error in runStream');
+      },
+    };
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llm: {
+        provider: 'openai',
+        apiKey: 'test-key',
+      },
+      middleware: [middleware],
+    });
+
+    const initialState = createAgentState({
+      config: { model: 'gpt-4', instructions: 'Test agent' },
+      context: { messages: [] },
+    });
+
+    // Collect any error events
+    const errorEvents: Array<{ error: Error }> = [];
+    runner.on('error', (event: { error: Error }) => {
+      errorEvents.push(event);
+    });
+
+    const iterator = runner.runStream(initialState);
+    // First next() yields step:start
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value.type).toBe('step:start');
+    // Second next() reaches beforeStep which throws
+    await expect(iterator.next()).rejects.toThrow('Sync error in runStream');
+    expect(errorEvents.length).toBeGreaterThan(0);
+    expect(errorEvents[0].error.message).toBe('Sync error in runStream');
+  });
 });

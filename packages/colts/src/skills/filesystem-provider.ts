@@ -36,7 +36,15 @@ interface CacheEntry {
  * @param content - Full SKILL.md file content
  * @returns Parsed result with frontmatter fields and body content
  */
-function parseFrontmatter(content: string): { frontmatter: Record<string, string>; body: string } {
+/**
+ * Parse YAML frontmatter from SKILL.md content
+ *
+ * @internal Exported for testing only
+ */
+export function parseFrontmatter(content: string): {
+  frontmatter: Record<string, string>;
+  body: string;
+} {
   const result: { frontmatter: Record<string, string>; body: string } = {
     frontmatter: {},
     body: '',

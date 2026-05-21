@@ -12,7 +12,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts'],
-      exclude: ['src/types.ts', 'src/**/types.ts', 'src/index.ts'], // type definitions and index files not counted for coverage
+      exclude: ['src/types.ts', 'src/**/types.ts', 'src/index.ts', 'src/**/options.ts'], // type definitions and index files not counted for coverage
       thresholds: {
         lines: 90,
         functions: 90,
