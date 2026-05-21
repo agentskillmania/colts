@@ -342,7 +342,7 @@ describe('Runner: stopped result propagation', () => {
       }
     }
 
-    expect(finalResult).toBeDefined();
+    expect(finalResult).toBeTruthy();
     expect(finalResult!.result.type).toBe('stopped');
     expect(finalResult!.result.data).toBe(customData);
   });

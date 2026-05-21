@@ -116,8 +116,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('my-awesome-skill');
 
-      expect(manifest).toBeDefined();
-      expect(manifest!.name).toBe('my-awesome-skill');
+      expect(manifest).toEqual(expect.objectContaining({ name: 'my-awesome-skill' }));
       expect(manifest!.description).toMatch(/^This is an awesome skill\n?$/);
     });
 
@@ -469,8 +468,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('empty-skill');
-      expect(manifest).toBeDefined();
-      expect(manifest!.name).toBe('empty-skill');
+      expect(manifest).toEqual(expect.objectContaining({ name: 'empty-skill' }));
       expect(manifest!.description).toMatch(/^Empty\n?$/);
 
       const instructions = await provider.loadInstructions('empty-skill');
@@ -491,8 +489,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('complex-skill');
 
-      expect(manifest).toBeDefined();
-      expect(manifest!.name).toBe('complex-skill');
+      expect(manifest).toEqual(expect.objectContaining({ name: 'complex-skill' }));
       expect(manifest!.description).toMatch(/^Line one\nLine two\n?$/);
     });
 
@@ -510,8 +507,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       provider = new FilesystemSkillProvider([tempDir]);
       const manifest = provider.getManifest('gap-skill');
 
-      expect(manifest).toBeDefined();
-      expect(manifest!.name).toBe('gap-skill');
+      expect(manifest).toEqual(expect.objectContaining({ name: 'gap-skill' }));
       expect(manifest!.description).toMatch(/^First line\n?$/);
     });
   });

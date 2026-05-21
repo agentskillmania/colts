@@ -33,7 +33,7 @@ describe('createDefaultPhaseHandlers', () => {
 
     for (const type of expectedTypes) {
       const handler = router.getHandler(type);
-      expect(handler).toBeDefined();
+      expect(handler).toBeTruthy();
       expect(handler!.canHandle(type)).toBe(true);
     }
   });

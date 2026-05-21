@@ -434,10 +434,7 @@ describe('step()', () => {
         }
       }
 
-      expect(result).toBeDefined();
-      expect(result.state).toBeDefined();
-      expect(result.result).toBeDefined();
-      expect(result.result.type).toBe('done');
+      expect(result!.result.type).toBe('done');
     });
 
     it('should update totalTokens in returned state during stepStream', async () => {
@@ -467,9 +464,7 @@ describe('step()', () => {
         }
       }
 
-      expect(result.state.context.totalTokens).toBeDefined();
-      expect(result.state.context.totalTokens!.input).toBe(mockTokens.input);
-      expect(result.state.context.totalTokens!.output).toBe(mockTokens.output);
+      expect(result.state.context.totalTokens).toEqual(mockTokens);
     });
 
     it('should return continue result when tool is called', async () => {

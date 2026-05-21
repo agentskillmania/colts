@@ -53,7 +53,7 @@ describe('applySkillSignal', () => {
       }
 
       const ss = newState.context.skillState!;
-      expect(ss).toBeDefined();
+      expect(ss).toEqual(expect.any(Object));
       expect(ss.current).toBe('greeting');
       expect(ss.loadedInstructions).toBe('Greet the user');
       expect(ss.stack).toHaveLength(0);

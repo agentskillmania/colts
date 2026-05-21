@@ -665,8 +665,7 @@ describe('createDelegateTool', () => {
       expect(typeof schema.function.description).toBe('string');
 
       const params = schema.function.parameters as Record<string, unknown>;
-      expect(params).toBeDefined();
-      expect(params.type).toBe('object');
+      expect(params).toEqual(expect.objectContaining({ type: 'object' }));
     });
   });
 

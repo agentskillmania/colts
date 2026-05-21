@@ -94,7 +94,7 @@ describe('Step 0: AgentState', () => {
         role: 'user',
         content: 'Hello',
       });
-      expect(newState.context.messages[0].timestamp).toBeDefined();
+      expect(typeof newState.context.messages[0].timestamp).toBe('number');
       expect(newState.context.messages[0].tokenCount).toBeGreaterThan(0);
     });
 
@@ -114,6 +114,22 @@ describe('Step 0: AgentState', () => {
       expect(state.context.messages).toHaveLength(2);
       expect(state.context.messages[0].content).toBe('First');
       expect(state.context.messages[1].content).toBe('Second');
+    });
+
+    it('should generate a UUID id for each message', () => {
+      const state = createAgentState(baseConfig);
+      const newState = addUserMessage(state, 'Hello');
+      const msg = newState.context.messages[0];
+      expect(msg.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
+    });
+
+    it('should generate unique ids for different messages', () => {
+      let state = createAgentState(baseConfig);
+      state = addUserMessage(state, 'First');
+      state = addUserMessage(state, 'Second');
+      expect(state.context.messages[0].id).not.toBe(state.context.messages[1].id);
     });
   });
 
@@ -151,6 +167,15 @@ describe('Step 0: AgentState', () => {
         type: 'text',
       });
     });
+
+    it('should generate a UUID id', () => {
+      const state = createAgentState(baseConfig);
+      const newState = addAssistantMessage(state, 'Hi there');
+      expect(newState.context.messages[0].id).toBeDefined();
+      expect(newState.context.messages[0].id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
+    });
   });
 
   describe('addToolMessage', () => {
@@ -164,6 +189,15 @@ describe('Step 0: AgentState', () => {
         type: 'tool-result',
       });
       expect(newState.context.messages[0].tokenCount).toBeGreaterThan(0);
+    });
+
+    it('should generate a UUID id', () => {
+      const state = createAgentState(baseConfig);
+      const newState = addToolMessage(state, '{"result": 42}');
+      expect(newState.context.messages[0].id).toBeDefined();
+      expect(newState.context.messages[0].id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
     });
   });
 
@@ -258,7 +292,7 @@ describe('Step 0: AgentState', () => {
       const state = createAgentState(baseConfig);
       const newState = loadSkill(state, 'tell-time', 'Report current time');
 
-      expect(newState.context.skillState).toBeDefined();
+      expect(newState.context.skillState).toEqual(expect.any(Object));
       expect(newState.context.skillState!.current).toBe('tell-time');
       expect(newState.context.skillState!.loadedInstructions).toBe('Report current time');
       expect(newState.context.skillState!.stack).toEqual([]);

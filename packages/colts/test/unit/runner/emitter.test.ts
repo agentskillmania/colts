@@ -217,7 +217,7 @@ describe('AgentRunner EventEmitter', () => {
 
       expect(startPayload).not.toBeNull();
       expect(startPayload!.step).toBe(0);
-      expect(startPayload!.state).toBeDefined();
+      expect(startPayload!.state).toEqual(expect.any(Object));
     });
 
     it('phase-change payload should contain from and to (no state, aligned with StreamEvent)', async () => {
