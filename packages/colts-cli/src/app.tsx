@@ -23,7 +23,7 @@ import type { AppConfig } from './config.js';
 import type { AgentRunner, AgentState } from '@agentskillmania/colts';
 import type { InteractionState } from './types/interaction.js';
 import {
-  interactionCallbacks,
+  type InteractionCallbacks,
   createRunnerFromConfig,
   createInitialStateFromConfig,
 } from './runner-setup.js';
@@ -40,6 +40,8 @@ interface AppProps {
   initialState?: AgentState | null;
   /** Optional custom session base directory (for test isolation) */
   sessionBaseDir?: string;
+  /** Per-instance interaction callbacks (replaces global mutable reference) */
+  callbacks?: InteractionCallbacks;
 }
 
 /**
@@ -54,7 +56,11 @@ export function App({
   runner: initialRunner,
   initialState: initialInitialState,
   sessionBaseDir,
+  callbacks: externalCallbacks,
 }: AppProps) {
+  const callbacksRef = useRef<InteractionCallbacks>(
+    externalCallbacks ?? { askHuman: null, confirm: null }
+  );
   const [config, setConfig] = useState<AppConfig>(initialConfig);
   const [runner, setRunner] = useState<AgentRunner | null>(initialRunner ?? null);
   const [appInitialState, setAppInitialState] = useState<AgentState | null>(
@@ -73,7 +79,7 @@ export function App({
       const { saveSetup, loadConfig } = await import('./config.js');
       await saveSetup(setup);
       const newConfig = await loadConfig();
-      const newRunner = createRunnerFromConfig(newConfig);
+      const newRunner = createRunnerFromConfig(newConfig, callbacksRef.current);
       const newInitialState = createInitialStateFromConfig(newConfig);
 
       setConfig(newConfig);
@@ -91,6 +97,7 @@ export function App({
           runner={runner}
           initialState={appInitialState}
           sessionBaseDir={sessionBaseDir}
+          callbacks={callbacksRef.current}
         />
       ) : (
         <SetupWizard onComplete={handleSetupComplete} />
@@ -110,11 +117,13 @@ function MainTUI({
   runner,
   initialState,
   sessionBaseDir,
+  callbacks,
 }: {
   config: AppConfig;
   runner: AgentRunner;
   initialState: AgentState | null;
   sessionBaseDir?: string;
+  callbacks: InteractionCallbacks;
 }) {
   const { exit } = useApp();
 
@@ -123,21 +132,21 @@ function MainTUI({
 
   // Lazily bind interaction handler: fill in closure holding setInteraction on mount
   useEffect(() => {
-    interactionCallbacks.askHuman = async ({ questions, context }) => {
+    callbacks.askHuman = async ({ questions, context }) => {
       return new Promise((resolve) => {
         setInteraction({ type: 'ask-human', questions, context, resolve });
       });
     };
-    interactionCallbacks.confirm = async (toolName, args) => {
+    callbacks.confirm = async (toolName, args) => {
       return new Promise((resolve) => {
         setInteraction({ type: 'confirm', toolName, args, resolve });
       });
     };
     return () => {
-      interactionCallbacks.askHuman = null;
-      interactionCallbacks.confirm = null;
+      callbacks.askHuman = null;
+      callbacks.confirm = null;
     };
-  }, []);
+  }, [callbacks]);
 
   // Session persistence
   const { save, restoreLatest, setSessionId } = useSession(sessionBaseDir);
