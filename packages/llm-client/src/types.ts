@@ -701,47 +701,6 @@ export interface SchedulerEvent {
 }
 
 /**
- * Internal request wrapper for queue management.
- *
- * @remarks
- * This interface is used internally by the scheduler to wrap
- * requests with their promise resolvers and timeout tracking.
- *
- * @internal
- */
-export interface InternalRequest {
-  /**
-   * Unique request identifier.
-   */
-  id: string;
-
-  /**
-   * Original call options.
-   */
-  options: CallOptions;
-
-  /**
-   * Promise resolve function.
-   */
-  resolve: (value: LLMResponse | AsyncIterable<StreamEvent>) => void;
-
-  /**
-   * Promise reject function.
-   */
-  reject: (reason: Error) => void;
-
-  /**
-   * Timestamp when the request was queued.
-   */
-  startTime: number;
-
-  /**
-   * Total timeout in milliseconds.
-   */
-  totalTimeout: number;
-}
-
-/**
  * API key with runtime tracking information.
  *
  * @remarks
