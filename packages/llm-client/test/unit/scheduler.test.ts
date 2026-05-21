@@ -20,7 +20,7 @@ describe('RequestScheduler', () => {
       });
 
       const stats = scheduler.getStats();
-      expect(stats.providerActiveCounts.has('openai')).toBe(true);
+      expect(stats.providerActiveCounts.get('openai')).toBe(0);
     });
 
     it('should throw on duplicate provider', () => {
@@ -153,8 +153,8 @@ describe('RequestScheduler', () => {
       await scheduler.execute('gpt-4', 0, async () => 'result');
 
       expect(events.length).toBeGreaterThanOrEqual(1);
-      expect(events[0].position).toBeDefined();
-      expect(events[0].estimatedWait).toBeDefined();
+      expect(events[0].position).toBeGreaterThanOrEqual(0);
+      expect(events[0].estimatedWait).toBeGreaterThanOrEqual(0);
     });
 
     it('should emit started event', async () => {
@@ -177,7 +177,7 @@ describe('RequestScheduler', () => {
       await scheduler.execute('gpt-4', 0, async () => 'result');
 
       expect(events.length).toBeGreaterThanOrEqual(1);
-      expect(events[0].key).toBeDefined();
+      expect(events[0].key).toMatch(/^sk-test/);
       expect(events[0].model).toBe('gpt-4');
     });
   });
@@ -284,7 +284,12 @@ describe('Scheduler concurrency pressure', () => {
 
     // With capacity=1, requests must execute sequentially
     expect(executionLog).toEqual([
-      'req1-start', 'req1-end', 'req2-start', 'req2-end', 'req3-start', 'req3-end',
+      'req1-start',
+      'req1-end',
+      'req2-start',
+      'req2-end',
+      'req3-start',
+      'req3-end',
     ]);
   });
 
@@ -326,8 +331,7 @@ describe('Scheduler concurrency pressure', () => {
     // This is a known design issue — priority does not affect execution order
     // when semaphore is the bottleneck.
     // For now, we verify both tasks execute after blocker.
-    expect(executionLog).toContain('low');
-    expect(executionLog).toContain('high');
+    expect(executionLog).toEqual(expect.arrayContaining(['low', 'high']));
     expect(executionLog.length).toBe(2);
   });
 
@@ -373,7 +377,7 @@ describe('Scheduler default concurrency', () => {
     scheduler.registerProvider({ name: 'openai', maxConcurrency: undefined as unknown as number });
 
     const stats = scheduler.getStats();
-    expect(stats.providerActiveCounts.has('openai')).toBe(true);
+    expect(stats.providerActiveCounts.get('openai')).toBe(0);
   });
 
   it('should use default key concurrency when not specified', () => {
@@ -465,7 +469,7 @@ describe('AbortSignal support', () => {
 
     await expect(
       scheduler.execute('gpt-4', 0, async () => 'result', undefined, controller.signal)
-    ).rejects.toThrow();
+    ).rejects.toThrow('The operation was aborted');
   });
 
   it('should respond to abort while waiting for semaphore (Semaphore interruption)', async () => {
@@ -547,7 +551,7 @@ describe('AbortSignal support', () => {
 
     await new Promise((r) => setTimeout(r, 50));
     controller.abort();
-    await expect(abortPromise).rejects.toThrow();
+    await expect(abortPromise).rejects.toThrow('The operation was aborted');
 
     // Release blocking
     resolveBlock();
@@ -625,7 +629,7 @@ describe('AbortSignal support', () => {
 
     await new Promise((r) => setTimeout(r, 50));
     controller.abort();
-    await expect(abortPromise).rejects.toThrow();
+    await expect(abortPromise).rejects.toThrow('The operation was aborted');
 
     resolveBlock();
     await running;

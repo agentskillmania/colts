@@ -250,7 +250,7 @@ describe('App', () => {
         () => {
           expect(lastFrame()).toContain('RUN');
         },
-        { timeout: 3000 }
+        { timeout: 5000, interval: 10 }
       );
     });
 

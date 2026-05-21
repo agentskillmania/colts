@@ -58,7 +58,7 @@ describe('PiAiAdapter', () => {
         undefined
       );
 
-      expect(piComplete).toHaveBeenCalled();
+      expect(piComplete).toHaveBeenCalledTimes(1);
       expect(result.content).toBe('Hello!');
       expect(result.tokens).toEqual({ input: 10, output: 5 });
       expect(result.stopReason).toBe('stop');
@@ -94,7 +94,7 @@ describe('PiAiAdapter', () => {
       // CR-2: verify retry error contains original error message
       expect(onRetry).toHaveBeenCalledWith(1, expect.any(Error));
       const [, retryError] = onRetry.mock.calls[0];
-      expect((retryError as Error).message).toContain('Rate limit');
+      expect((retryError as Error).message).toBe('Attempt 1 failed: Rate limit');
       expect(result.content).toBe('Success');
     });
 
@@ -167,8 +167,12 @@ describe('PiAiAdapter', () => {
       const doneEvent = events.find((e) => e.type === 'done') as
         | { type: 'done'; tokens: { input: number; output: number } }
         | undefined;
-      expect(doneEvent).toBeDefined();
-      expect(doneEvent!.tokens).toEqual({ input: 10, output: 3 });
+      expect(doneEvent).toEqual(
+        expect.objectContaining({
+          type: 'done',
+          tokens: { input: 10, output: 3 },
+        })
+      );
     });
 
     it('should yield tool_call events', async () => {
@@ -193,9 +197,12 @@ describe('PiAiAdapter', () => {
       }
 
       const toolCallEvent = events.find((e) => e.type === 'tool_call');
-      expect(toolCallEvent).toBeDefined();
-      expect(toolCallEvent!.toolCall!.name).toBe('calc');
-      expect(toolCallEvent!.toolCall!.id).toBe('call-1');
+      expect(toolCallEvent).toEqual(
+        expect.objectContaining({
+          type: 'tool_call',
+          toolCall: { id: 'call-1', name: 'calc', arguments: { expr: '1+1' } },
+        })
+      );
     });
 
     it('should handle stream errors', async () => {
@@ -212,7 +219,7 @@ describe('PiAiAdapter', () => {
         events.push(event);
       }
 
-      expect(events.some((e) => e.type === 'error')).toBe(true);
+      expect(events[events.length - 1]).toEqual(expect.objectContaining({ type: 'error' }));
     });
 
     it('should retry on retryable connection errors', async () => {
@@ -248,8 +255,7 @@ describe('PiAiAdapter', () => {
       // Should have retried and succeeded
       expect(callCount).toBe(2);
       expect(onRetry).toHaveBeenCalledTimes(1);
-      expect(events.some((e) => e.type === 'text')).toBe(true);
-      expect(events.some((e) => e.type === 'done')).toBe(true);
+      expect(events.map((e) => e.type)).toEqual(expect.arrayContaining(['text', 'done']));
     });
 
     it('should not retry on non-retryable errors', async () => {
@@ -298,7 +304,7 @@ describe('PiAiAdapter', () => {
       const textEvents = events.filter((e) => e.type === 'text');
       expect(textEvents.length).toBe(2);
       const errorEvent = events.find((e) => e.type === 'error');
-      expect(errorEvent).toBeDefined();
+      expect(errorEvent).toEqual(expect.objectContaining({ type: 'error' }));
     });
 
     it('should skip null-mapped events (start, toolcall_start, etc)', async () => {
