@@ -14,7 +14,7 @@ export type {
   MessageRole,
   MessageType,
   ToolDefinition,
-  Snapshot,
+
   // Skill state
   SkillState,
   SkillStackFrame,
@@ -50,8 +50,6 @@ export {
   incrementStepCount,
   setLastToolResult,
   loadSkill,
-  createSnapshot,
-  restoreSnapshot,
   serializeState,
   deserializeState,
 } from './state/index.js';

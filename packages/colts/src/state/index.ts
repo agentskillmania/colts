@@ -6,7 +6,7 @@
  */
 
 import { produce, Draft } from 'immer';
-import type { AgentState, AgentConfig, Message, Snapshot, TokenStats } from '../types.js';
+import type { AgentState, AgentConfig, Message, TokenStats } from '../types.js';
 import { generateId } from '../utils/id.js';
 import { estimateTokens, addTokenStats } from '../utils/tokens.js';
 
@@ -189,29 +189,6 @@ export function loadSkill(state: AgentState, skillName: string, instructions: st
     draft.context.skillState.current = skillName;
     draft.context.skillState.loadedInstructions = instructions;
   });
-}
-
-/**
- * Create a state snapshot for time-travel or persistence
- *
- * @param state - Current state
- * @returns Snapshot object for persistence
- */
-export function createSnapshot(state: AgentState): Snapshot {
-  return {
-    timestamp: Date.now(),
-    state: structuredClone(state), // Deep clone for isolation
-  };
-}
-
-/**
- * Restore state from snapshot
- *
- * @param snapshot - Snapshot object
- * @returns Restored AgentState
- */
-export function restoreSnapshot(snapshot: Snapshot): AgentState {
-  return structuredClone(snapshot.state);
 }
 
 /**
