@@ -307,7 +307,13 @@ export class LLMClient extends EventEmitter {
     }
 
     if (signal) {
-      signal.addEventListener('abort', () => abortController.abort(signal.reason), { once: true });
+      if (signal.aborted) {
+        abortController.abort(signal.reason);
+      } else {
+        signal.addEventListener('abort', () => abortController.abort(signal.reason), {
+          once: true,
+        });
+      }
     }
 
     try {
@@ -339,6 +345,9 @@ export class LLMClient extends EventEmitter {
 
       try {
         while (true) {
+          if (abortController.signal.aborted) {
+            throw abortController.signal.reason;
+          }
           const result = await Promise.race([
             iterator.next(),
             new Promise<never>((_, reject) => {
