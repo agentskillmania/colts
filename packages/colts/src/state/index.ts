@@ -199,7 +199,6 @@ export function loadSkill(state: AgentState, skillName: string, instructions: st
  */
 export function createSnapshot(state: AgentState): Snapshot {
   return {
-    version: '1.0.0',
     timestamp: Date.now(),
     state: structuredClone(state), // Deep clone for isolation
   };

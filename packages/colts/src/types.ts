@@ -157,8 +157,6 @@ export interface AgentState {
  * State snapshot
  */
 export interface Snapshot {
-  /** Version number */
-  version: string;
   /** Creation timestamp */
   timestamp: number;
   /** State data */
