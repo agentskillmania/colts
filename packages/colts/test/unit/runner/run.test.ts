@@ -840,6 +840,48 @@ describe('runStream()', () => {
 
     expect(errorThrown || errors.length > 0).toBe(true);
   });
+
+  it('should preserve content in assistant message when tool_calls are present', async () => {
+    // LLM outputs explanatory text before tool_call — standard behavior, not misbehavior
+    const responses: LLMResponse[] = [
+      {
+        content: 'Let me calculate that for you.',
+        toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '3+3' } }],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      },
+      {
+        content: 'The result is 6',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      },
+    ];
+
+    const client = createMockLLMClient(responses);
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculate',
+      description: 'Calculate',
+      parameters: z.object({ expression: z.string() }),
+      execute: async ({ expression }) => eval(expression).toString(),
+    });
+
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+    const state = createAgentState(defaultConfig);
+
+    const { state: finalState } = await runner.run(state, undefined, registry);
+
+    // Find the assistant message with tool_calls — content should be preserved
+    const assistantMsgs = finalState.context.messages.filter((m) => m.role === 'assistant');
+    expect(assistantMsgs.length).toBeGreaterThanOrEqual(1);
+
+    const actionMsg = assistantMsgs.find((m) => m.type === 'action');
+    expect(actionMsg).toBeTruthy();
+    expect(actionMsg!.content).toBe('Let me calculate that for you.');
+    expect(actionMsg!.toolCalls).toHaveLength(1);
+    expect(actionMsg!.toolCalls![0].name).toBe('calculate');
+  });
 });
 
 // ============================================================
