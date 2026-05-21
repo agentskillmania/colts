@@ -9,6 +9,7 @@
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 import type { AgentState, Message as LocalMessage, MessageRole } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
+import { randomUUID } from 'node:crypto';
 import { updateExecState } from '../../execution/index.js';
 
 export class IdleHandler implements IPhaseHandler {
@@ -24,6 +25,7 @@ export class IdleHandler implements IPhaseHandler {
       subAgentConfigs: ctx.subAgentConfigs,
     });
     const displayMessages: LocalMessage[] = messages.map((m) => ({
+      id: randomUUID(),
       role: m.role as MessageRole,
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       timestamp: Date.now(),

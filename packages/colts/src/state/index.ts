@@ -6,6 +6,7 @@
  */
 
 import { produce, Draft } from 'immer';
+import { randomUUID } from 'node:crypto';
 import type { AgentState, AgentConfig, Message, TokenStats } from '../types.js';
 import { generateId } from '../utils/id.js';
 import { estimateTokens, addTokenStats } from '../utils/tokens.js';
@@ -67,6 +68,7 @@ export function updateState(
 export function addUserMessage(state: AgentState, content: string): AgentState {
   return updateState(state, (draft) => {
     draft.context.messages.push({
+      id: randomUUID(),
       role: 'user',
       content,
       timestamp: Date.now(),
@@ -93,6 +95,7 @@ export function addAssistantMessage(
 ): AgentState {
   return updateState(state, (draft) => {
     const msg: Message = {
+      id: randomUUID(),
       role: 'assistant',
       content,
       type: options?.type ?? 'text',
@@ -124,6 +127,7 @@ export function addToolMessage(
 ): AgentState {
   return updateState(state, (draft) => {
     const msg: Message = {
+      id: randomUUID(),
       role: 'tool',
       content,
       type: 'tool-result',
