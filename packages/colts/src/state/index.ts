@@ -11,23 +11,6 @@ import { generateId } from '../utils/id.js';
 import { estimateTokens, addTokenStats } from '../utils/tokens.js';
 
 /**
- * Compute checksum (simple implementation, production can use stricter algorithm)
- *
- * @param state - Agent state to checksum
- * @returns Hexadecimal checksum string
- */
-function computeChecksum(state: AgentState): string {
-  const data = JSON.stringify(state);
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    const char = data.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return hash.toString(16);
-}
-
-/**
  * Create initial AgentState
  *
  * @param config - Agent configuration
@@ -212,14 +195,13 @@ export function loadSkill(state: AgentState, skillName: string, instructions: st
  * Create a state snapshot for time-travel or persistence
  *
  * @param state - Current state
- * @returns Snapshot object with checksum for integrity verification
+ * @returns Snapshot object for persistence
  */
 export function createSnapshot(state: AgentState): Snapshot {
   return {
     version: '1.0.0',
     timestamp: Date.now(),
     state: structuredClone(state), // Deep clone for isolation
-    checksum: computeChecksum(state),
   };
 }
 
@@ -228,17 +210,9 @@ export function createSnapshot(state: AgentState): Snapshot {
  *
  * @param snapshot - Snapshot object
  * @returns Restored AgentState
- * @throws If checksum mismatch
  */
 export function restoreSnapshot(snapshot: Snapshot): AgentState {
-  const restored = structuredClone(snapshot.state);
-  const expectedChecksum = computeChecksum(restored);
-
-  if (expectedChecksum !== snapshot.checksum) {
-    throw new Error('Snapshot checksum mismatch: data may be corrupted');
-  }
-
-  return restored;
+  return structuredClone(snapshot.state);
 }
 
 /**

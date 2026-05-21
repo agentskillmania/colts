@@ -214,7 +214,7 @@ describe('Step 0: AgentState', () => {
       expect(snapshot).toHaveProperty('version', '1.0.0');
       expect(snapshot).toHaveProperty('timestamp');
       expect(snapshot).toHaveProperty('state');
-      expect(snapshot).toHaveProperty('checksum');
+      expect(snapshot).not.toHaveProperty('checksum');
       expect(snapshot.state).toEqual(state);
     });
 
@@ -229,14 +229,16 @@ describe('Step 0: AgentState', () => {
       expect(restored).not.toBe(state); // Different reference
     });
 
-    it('should detect corrupted snapshot', () => {
+    it('should restore corrupted snapshot without throwing (checksum removed)', () => {
       const state = createAgentState(baseConfig);
       const snapshot = createSnapshot(state);
 
       // Corrupt the snapshot
       snapshot.state.config.name = 'corrupted';
 
-      expect(() => restoreSnapshot(snapshot)).toThrow('checksum mismatch');
+      // Without checksum, restore should not throw
+      const restored = restoreSnapshot(snapshot);
+      expect(restored.config.name).toBe('corrupted');
     });
 
     it('should create isolated deep copy', () => {

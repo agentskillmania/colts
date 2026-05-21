@@ -163,8 +163,6 @@ export interface Snapshot {
   timestamp: number;
   /** State data */
   state: AgentState;
-  /** Checksum */
-  checksum: string;
 }
 
 // ========== Runner Configuration Interfaces ==========
