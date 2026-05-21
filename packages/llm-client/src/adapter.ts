@@ -178,6 +178,7 @@ export class PiAiAdapter {
     // Try to get model from pi-ai registry across known providers
     const providers = ['openai', 'opencode', 'opencode-go', 'anthropic', 'google'] as const;
     for (const provider of providers) {
+      // Runtime dispatch: provider is a known string, modelId is validated upstream
       const model = getModel(provider, modelId as never);
       if (model) {
         if (this.customBaseUrl) {
