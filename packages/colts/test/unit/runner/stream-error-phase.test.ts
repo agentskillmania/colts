@@ -1,13 +1,12 @@
 /**
- * @fileoverview Branch coverage tests for runner/stream.ts error phase paths
+ * @fileoverview Branch coverage tests for StepRunner.runStreaming error phase paths
  *
  * Covers:
- * - executeStepStream: error phase handling (L434-445)
- * - executeStepStream: defensive throw (L475-476)
+ * - StepRunner.runStreaming: error phase handling
+ * - StepRunner.runStreaming: defensive throw when loop exits unexpectedly
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { executeStepStream } from '../../../src/runner/stream.js';
 import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
@@ -16,6 +15,8 @@ import { ToolRegistry } from '../../../src/tools/registry.js';
 import type { RunnerContext } from '../../../src/runner/advance.js';
 import { PhaseRouter } from '../../../src/execution-engine/router.js';
 import type { IPhaseHandler } from '../../../src/execution-engine/types.js';
+import { StepRunner } from '../../../src/runner/step-runner.js';
+import type { MiddlewareExecutor } from '../../../src/middleware/executor.js';
 
 const defaultConfig: AgentConfig = {
   name: 'test-agent',
@@ -23,10 +24,11 @@ const defaultConfig: AgentConfig = {
   tools: [],
 };
 
-describe('executeStepStream error phase branch', () => {
-  it('should yield error event when executeAdvance returns error phase', async () => {
-    // Direct test: PhaseRouter.execute throws on first call → executeAdvance
-    // catches it and returns error phase → executeStepStream yields error event
+describe('StepRunner.runStreaming error phase branch', () => {
+  it('should yield phase-change and return error when handler returns error phase', async () => {
+    // PhaseRouter catches handler.execute rejection and returns error phase.
+    // StepRunner yields phase-change and returns error result (no extra error event,
+    // consistent with blocking path behavior).
     const throwingHandler: IPhaseHandler = {
       canHandle: (type: string) => type === 'idle',
       execute: vi.fn().mockRejectedValue(new Error('Advance failed')),
@@ -48,7 +50,8 @@ describe('executeStepStream error phase branch', () => {
     const events: { type: string }[] = [];
     let finalResult: { result: { type: string } } | undefined;
 
-    const iterator = executeStepStream(ctx, undefined, state);
+    const stepRunner = new StepRunner(ctx, undefined, undefined, { model: 'gpt-4' });
+    const iterator = stepRunner.runStreaming(state, new ToolRegistry());
     while (true) {
       const { done, value } = await iterator.next();
       if (done) {
@@ -58,12 +61,13 @@ describe('executeStepStream error phase branch', () => {
       events.push(value as { type: string });
     }
 
-    // Exact event sequence: phase-change idle→error, then error event
-    expect(events.map((e) => e.type)).toEqual(['phase-change', 'error']);
+    // StepRunner yields phase-change; error result is returned (not yielded),
+    // consistent with blocking path.
+    expect(events.map((e) => e.type)).toEqual(['phase-change']);
     expect(finalResult?.result.type).toBe('error');
   });
 
-  it('should return error when middleware afterAdvance requests stop', async () => {
+  it('should return stopped when middleware afterAdvance requests stop with completed phase', async () => {
     const middleware: AgentMiddleware = {
       name: 'test-stop-mw',
       afterAdvance: async () => {
@@ -115,7 +119,9 @@ describe('executeStepStream error phase branch', () => {
       events.push(value as { type: string });
     }
 
-    expect(finalResult?.result.type).toBe('error');
+    // After StepRunner unification, streaming path now correctly handles
+    // completed phase from middleware stopResult (same as blocking path).
+    expect(finalResult?.result.type).toBe('stopped');
   });
 
   it('should return error when middleware beforeAdvance requests stop', async () => {
@@ -172,14 +178,13 @@ describe('executeStepStream error phase branch', () => {
       options: { model: 'gpt-4' },
     } as unknown as RunnerContext;
 
-    const iterator = executeStepStream(
+    const stepRunner = new StepRunner(
       ctx,
       undefined,
-      state,
-      undefined,
-      undefined,
-      mockExecutor as never
+      mockExecutor as unknown as MiddlewareExecutor,
+      { model: 'gpt-4' }
     );
+    const iterator = stepRunner.runStreaming(state, new ToolRegistry());
     const { done, value } = await iterator.next();
     expect(done).toBe(true);
     expect((value as { result: { type: string } }).result.type).toBe('error');
@@ -210,7 +215,8 @@ describe('executeStepStream error phase branch', () => {
     const events: { type: string }[] = [];
     let finalResult: { result: { type: string; error?: Error } } | undefined;
 
-    const iterator = executeStepStream(ctx, undefined, state);
+    const stepRunner = new StepRunner(ctx, undefined, undefined, { model: 'gpt-4' });
+    const iterator = stepRunner.runStreaming(state, new ToolRegistry());
     while (true) {
       const { done, value } = await iterator.next();
       if (done) {
@@ -271,8 +277,9 @@ describe('executeStepStream error phase branch', () => {
       options: { model: 'gpt-4' },
     } as unknown as RunnerContext;
 
-    const iterator = executeStepStream(ctx, undefined, state);
-    // First next() consumes the phase-change event yielded inside executeStepStream
+    const stepRunner = new StepRunner(ctx, undefined, undefined, { model: 'gpt-4' });
+    const iterator = stepRunner.runStreaming(state, new ToolRegistry());
+    // First next() consumes the phase-change event yielded by StepRunner
     const first = await iterator.next();
     expect(first.done).toBe(false);
     expect((first.value as { type: string }).type).toBe('phase-change');

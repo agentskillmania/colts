@@ -11,59 +11,7 @@ import type { SubAgentConfig } from '../../../src/subagent/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { createExecutionState, updateExecState } from '../../../src/execution/index.js';
 import { z } from 'zod';
-
-// Helper to create mock LLM client
-function createMockLLMClient(responses: LLMResponse[]): LLMClient {
-  let callIndex = 0;
-
-  return {
-    call: vi.fn().mockImplementation(() => {
-      if (callIndex >= responses.length) {
-        throw new Error(`No more mock responses (index ${callIndex}, total ${responses.length})`);
-      }
-      return Promise.resolve(responses[callIndex++]);
-    }),
-    stream: vi.fn().mockImplementation(async function* () {
-      if (callIndex >= responses.length) {
-        throw new Error('No more mock responses for stream');
-      }
-      const response = responses[callIndex];
-
-      // Yield content as tokens
-      const content = response.content;
-      const tokens = content.split(' ');
-      for (let i = 0; i < tokens.length; i++) {
-        yield {
-          type: 'text',
-          delta: tokens[i] + (i < tokens.length - 1 ? ' ' : ''),
-          accumulatedContent: tokens.slice(0, i + 1).join(' '),
-        };
-      }
-
-      // Yield tool calls if present
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        for (const toolCall of response.toolCalls) {
-          yield {
-            type: 'tool_call',
-            toolCall: {
-              id: toolCall.id,
-              name: toolCall.name,
-              arguments: toolCall.arguments,
-            },
-          };
-        }
-      }
-
-      yield {
-        type: 'done',
-        roundTotalTokens: response.tokens,
-      };
-
-      // Increment for next call
-      callIndex++;
-    }),
-  } as unknown as LLMClient;
-}
+import { createMockLLMClient } from '../../helpers/mock-llm.js';
 
 // Default config for tests
 const defaultConfig: AgentConfig = {
@@ -341,7 +289,8 @@ describe('step()', () => {
 
       const phaseChanges = events.filter((e) => e.type === 'phase-change');
       expect(phaseChanges.length).toBeGreaterThan(0);
-      expect(events[events.length - 1].type).toBe('phase-change');
+      // After StepRunner unification, stepStream yields step:end as the last event
+      expect(events[events.length - 1].type).toBe('step:end');
     });
 
     it('should emit token events during streaming', async () => {
@@ -588,6 +537,129 @@ describe('step()', () => {
       if (result.result.type === 'continue') {
         expect(typeof result.result.toolResult).toBe('object');
         expect(result.result.toolResult).toEqual({ id: '123', name: 'Test Item', value: 42 });
+      }
+    });
+
+    it('should emit tools:start for multiple tool calls via step()', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Getting data',
+        toolCalls: [
+          {
+            id: 'call-1',
+            name: 'getData',
+            arguments: { id: '1' },
+          },
+          {
+            id: 'call-2',
+            name: 'getData',
+            arguments: { id: '2' },
+          },
+        ],
+        tokens: mockTokens,
+        stopReason: 'tool_calls',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+      });
+
+      const registry = new ToolRegistry();
+      registry.register({
+        name: 'getData',
+        description: 'Get data',
+        parameters: z.object({ id: z.string() }),
+        execute: async ({ id }) => ({ id }),
+      });
+
+      const state = createAgentState(defaultConfig);
+
+      const events: { type: string }[] = [];
+      runner.on('tools:start', () => events.push({ type: 'tools:start' }));
+      runner.on('tool:start', () => events.push({ type: 'tool:start' }));
+
+      await runner.step(state, registry);
+
+      expect(events.some((e) => e.type === 'tools:start')).toBe(true);
+      expect(events.filter((e) => e.type === 'tool:start').length).toBe(0);
+    });
+
+    it('should handle waiting-human from afterAdvance middleware', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Hello',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        middleware: [
+          {
+            name: 'test-waiting-human',
+            async afterAdvance() {
+              return {
+                stop: true,
+                result: {
+                  state: createAgentState(defaultConfig),
+                  execState: createExecutionState(),
+                  phase: {
+                    type: 'waiting-human',
+                    request: { type: 'question', questions: [], toolCallId: 'tc1' },
+                  },
+                  done: true,
+                },
+              };
+            },
+          },
+        ],
+      });
+
+      const state = createAgentState(defaultConfig);
+      const result = await runner.step(state);
+
+      expect(result.result.type).toBe('waiting-human');
+    });
+
+    it('should handle unrecognized stop result from afterAdvance middleware', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Hello',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        middleware: [
+          {
+            name: 'test-unrecognized-stop',
+            async afterAdvance() {
+              return {
+                stop: true,
+                result: {
+                  state: createAgentState(defaultConfig),
+                  execState: createExecutionState(),
+                  phase: { type: 'completed', answer: 'done' },
+                  done: true,
+                },
+              };
+            },
+          },
+        ],
+      });
+
+      const state = createAgentState(defaultConfig);
+      const result = await runner.step(state);
+
+      expect(result.result.type).toBe('stopped');
+      if (result.result.type === 'stopped') {
+        expect(result.result.data).toBe('done');
       }
     });
 
@@ -919,6 +991,99 @@ describe('step()', () => {
 
       // Should have error phase in result execState
       expect(resultExecState.phase.type).toBe('error');
+    });
+
+    it('should handle error fallback from afterAdvance middleware', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Hello',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        middleware: [
+          {
+            name: 'test-unrecognized-phase',
+            async afterAdvance() {
+              return {
+                stop: true,
+                result: {
+                  state: createAgentState(defaultConfig),
+                  execState: createExecutionState(),
+                  phase: {
+                    type: 'unknown-phase',
+                  } as unknown as import('../../../src/execution/index.js').ExecutionState['phase'],
+                  done: true,
+                },
+              };
+            },
+          },
+        ],
+      });
+
+      const state = createAgentState(defaultConfig);
+      const result = await runner.step(state);
+
+      expect(result.result.type).toBe('error');
+      if (result.result.type === 'error') {
+        expect(result.result.error.message).toBe('Stopped by middleware');
+      }
+    });
+
+    it('should propagate error when beforeAdvance throws', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Hello',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        middleware: [
+          {
+            name: 'test-throw',
+            async beforeAdvance() {
+              throw new Error('beforeAdvance error');
+            },
+          },
+        ],
+      });
+
+      const state = createAgentState(defaultConfig);
+      await expect(runner.step(state)).rejects.toThrow('beforeAdvance error');
+    });
+
+    it('should propagate error when afterStep throws', async () => {
+      const mockResponse: LLMResponse = {
+        content: 'Hello',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      };
+
+      const client = createMockLLMClient([mockResponse]);
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        middleware: [
+          {
+            name: 'test-afterStep-throw',
+            async afterStep() {
+              throw new Error('afterStep error');
+            },
+          },
+        ],
+      });
+
+      const state = createAgentState(defaultConfig);
+      await expect(runner.step(state)).rejects.toThrow('afterStep error');
     });
   });
 });

@@ -9,34 +9,18 @@ import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
+import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
 
 const mockTokens = { input: 10, output: 5 };
 
-function createMockLLMClient(responses: LLMResponse[]): LLMClient {
-  let callIndex = 0;
-  return {
-    call: vi.fn().mockImplementation(() => {
-      if (callIndex >= responses.length) {
-        throw new Error(`No more mock responses (index ${callIndex})`);
-      }
-      // Simulate async delay for more realistic concurrency testing
-      return new Promise((resolve) =>
-        setTimeout(() => resolve(responses[callIndex++]), Math.random() * 10)
-      );
-    }),
-    stream: vi.fn().mockImplementation(async function* () {
-      if (callIndex >= responses.length) {
-        throw new Error('No more mock responses for stream');
-      }
-      const response = responses[callIndex++];
-      yield { type: 'text', delta: response.content, accumulatedContent: response.content };
-      yield { type: 'done', roundTotalTokens: response.tokens };
-    }),
-  } as unknown as LLMClient;
-}
-
+const createMockLLMClient = (responses: LLMResponse[]) =>
+  _createMockLLMClient(responses, {
+    split: 'all',
+    callDelay: 'random',
+    enableToolCalls: false,
+  });
 const defaultConfig: AgentConfig = {
   name: 'test-agent',
   instructions: 'You are a helpful assistant.',

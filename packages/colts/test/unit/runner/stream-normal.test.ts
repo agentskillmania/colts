@@ -10,6 +10,7 @@ import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
+import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
 
 const mockTokens = { input: 10, output: 5 };
 
@@ -19,46 +20,8 @@ const defaultConfig: AgentConfig = {
   tools: [],
 };
 
-function createMockLLMClient(responses: LLMResponse[]): LLMClient {
-  let callIndex = 0;
-  return {
-    call: vi.fn().mockImplementation(() => {
-      if (callIndex >= responses.length) {
-        throw new Error(`No more mock responses (index ${callIndex})`);
-      }
-      return Promise.resolve(responses[callIndex++]);
-    }),
-    stream: vi.fn().mockImplementation(async function* () {
-      if (callIndex >= responses.length) {
-        throw new Error('No more mock responses for stream');
-      }
-      const response = responses[callIndex];
-      const content = response.content;
-      // Only yield text events when content is non-empty
-      if (content.length > 0) {
-        const tokens = content.split(' ');
-        for (let i = 0; i < tokens.length; i++) {
-          yield {
-            type: 'text',
-            delta: tokens[i] + (i < tokens.length - 1 ? ' ' : ''),
-            accumulatedContent: tokens.slice(0, i + 1).join(' '),
-          };
-        }
-      }
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        for (const toolCall of response.toolCalls) {
-          yield {
-            type: 'tool_call',
-            toolCall: { id: toolCall.id, name: toolCall.name, arguments: toolCall.arguments },
-          };
-        }
-      }
-      yield { type: 'done', roundTotalTokens: response.tokens };
-      callIndex++;
-    }),
-  } as unknown as LLMClient;
-}
-
+const createMockLLMClient = (responses: LLMResponse[]) =>
+  _createMockLLMClient(responses, { skipEmptyContent: true });
 describe('Streaming normal boundaries', () => {
   it('should handle empty content + empty toolCalls', async () => {
     // LLM yields nothing useful — empty content, no tool calls

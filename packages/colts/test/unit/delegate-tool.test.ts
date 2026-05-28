@@ -18,6 +18,9 @@ import { createDelegateTool } from '../../src/subagent/delegate-tool.js';
 import type { DelegateToolDeps } from '../../src/subagent/delegate-tool.js';
 import type { SubAgentConfig, DelegateResult } from '../../src/subagent/types.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
+import { createNoStreamMockLLMClient } from '../helpers/mock-llm.js';
+
+const createMockLLMClient = createNoStreamMockLLMClient;
 
 // ============================================================
 // Helpers
@@ -32,22 +35,6 @@ const mockTokens = { input: 10, output: 5 };
  * @param responses - LLM response sequence, each call returns the next one
  * @returns Mock LLMClient
  */
-function createMockLLMClient(responses: LLMResponse[]): LLMClient {
-  let callIndex = 0;
-
-  return {
-    call: vi.fn().mockImplementation(() => {
-      if (callIndex >= responses.length) {
-        throw new Error(`No more mock responses (index ${callIndex}, total ${responses.length})`);
-      }
-      return Promise.resolve(responses[callIndex++]);
-    }),
-    stream: vi.fn().mockImplementation(async function* () {
-      throw new Error('Stream not used in delegate tool tests');
-    }),
-  } as unknown as LLMClient;
-}
-
 /** Create mock client that returns LLM error */
 function createErrorLLMClient(errorMessage: string): LLMClient {
   return {

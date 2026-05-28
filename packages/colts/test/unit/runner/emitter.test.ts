@@ -7,7 +7,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
-import type { AgentState, LLMResponse, ILLMProvider } from '../../../src/types.js';
+import type { AgentState, LLMResponse } from '../../../src/types.js';
+import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
 import type { StepResult } from '../../../src/execution/index.js';
 import { createExecutionState } from '../../../src/execution/index.js';
 
@@ -18,38 +19,12 @@ const defaultConfig = {
 
 const mockTokens = { input: 10, output: 5, cachedInput: 0 };
 
-function createMockLLMClient(responses: LLMResponse[]): ILLMProvider {
-  let index = 0;
-  return {
-    call: vi.fn(async () => {
-      if (index >= responses.length) {
-        return {
-          content: 'Default response',
-          toolCalls: [],
-          tokens: mockTokens,
-          stopReason: 'stop',
-        };
-      }
-      return responses[index++];
-    }),
-    stream: vi.fn(async function* () {
-      if (index >= responses.length) {
-        yield { type: 'text' as const, delta: 'Default', accumulatedContent: 'Default' };
-        yield { type: 'done' as const, roundTotalTokens: mockTokens };
-        return;
-      }
-      const response = responses[index++];
-      const chars = response.content.split('');
-      let accumulated = '';
-      for (const char of chars) {
-        accumulated += char;
-        yield { type: 'text' as const, delta: char, accumulatedContent: accumulated };
-      }
-      yield { type: 'done' as const, roundTotalTokens: response.tokens };
-    }),
-  };
-}
-
+const createMockLLMClient = (responses: LLMResponse[]) =>
+  _createMockLLMClient(responses, {
+    split: 'char',
+    onExhausted: 'default',
+    enableToolCalls: false,
+  });
 describe('AgentRunner EventEmitter', () => {
   describe('Lifecycle events', () => {
     it('should emit run:start and run:end during run()', async () => {

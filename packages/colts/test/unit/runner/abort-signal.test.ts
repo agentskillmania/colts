@@ -212,6 +212,52 @@ describe('AbortSignal (Step 16)', () => {
       expect(done2).toBe(true);
       expect(value2.result.type).toBe('abort');
     });
+
+    it('should return abort when signal is aborted mid-runStream', async () => {
+      async function* mockStream() {
+        yield { type: 'text', delta: 'Hello', accumulatedContent: 'Hello' };
+        yield { type: 'text', delta: ' World', accumulatedContent: 'Hello World' };
+        yield { type: 'done', roundTotalTokens: { input: 5, output: 5 } };
+      }
+
+      const client = createMockClient();
+      vi.mocked(client.stream).mockReturnValue(
+        mockStream() as AsyncIterable<{
+          type: string;
+          delta?: string;
+          accumulatedContent?: string;
+          roundTotalTokens?: TokenStats;
+        }>
+      );
+
+      const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+      const state = createAgentState(defaultConfig);
+      const controller = new AbortController();
+
+      const gen = runner.runStream(state, { signal: controller.signal });
+
+      // Consume events until first token, then abort
+      let tokenCount = 0;
+      while (tokenCount < 1) {
+        const { value } = await gen.next();
+        if (value.type === 'token') {
+          tokenCount++;
+        }
+      }
+      controller.abort();
+
+      // Continue consuming until done
+      let lastReturn: { result: { type: string } } | undefined;
+      while (true) {
+        const { done, value } = await gen.next();
+        if (done) {
+          lastReturn = value as { result: { type: string } };
+          break;
+        }
+      }
+
+      expect(lastReturn!.result.type).toBe('abort');
+    });
   });
 
   // ============================================================
@@ -228,10 +274,20 @@ describe('AbortSignal (Step 16)', () => {
 
       const gen = runner.stepStream(state, undefined, { signal: controller.signal });
 
-      // Generator returns immediately with abort result
-      const { done, value } = await gen.next();
-      expect(done).toBe(true);
-      expect(value.result.type).toBe('abort');
+      // stepStream now yields step:start/step:end before returning abort result
+      const events: { type: string }[] = [];
+      let finalResult: { result: { type: string } } | undefined;
+      while (true) {
+        const { done, value } = await gen.next();
+        if (done) {
+          finalResult = value as { result: { type: string } };
+          break;
+        }
+        events.push(value as { type: string });
+      }
+
+      expect(events.map((e) => e.type)).toEqual(['step:start', 'step:end']);
+      expect(finalResult?.result.type).toBe('abort');
     });
 
     it('should stop yielding tokens when signal is aborted during stream', async () => {
