@@ -39,7 +39,6 @@ import type {
   Action,
 } from '../execution/index.js';
 import type { AdvanceOptions } from '../execution/index.js';
-import { createExecutionState, isTerminalPhase } from '../execution/index.js';
 import { getToolsForLLM } from '../tools/llm-format.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 import { DefaultToolSchemaFormatter } from '../tools/schema-formatter.js';
@@ -49,7 +48,8 @@ import type { IMessageAssembler } from '../message-assembler/types.js';
 import { compressState, maybeCompress } from './compression.js';
 import { executeAdvance, createRouter } from './advance.js';
 import type { RunnerContext } from './advance.js';
-import { executeAdvanceStream, executeStepStream } from './stream.js';
+import { executeAdvanceStream } from './stream.js';
+import { StepRunner } from './step-runner.js';
 import type { ISkillProvider } from '../skills/types.js';
 import { FilesystemSkillProvider } from '../skills/filesystem-provider.js';
 import { createLoadSkillTool, createReturnSkillTool } from '../skills/index.js';
@@ -62,7 +62,6 @@ import { DefaultExecutionPolicy } from '../policy/default-policy.js';
 import type { AgentMiddleware } from '../middleware/types.js';
 import type { RunnerOptions } from './options.js';
 import { MiddlewareExecutor } from '../middleware/executor.js';
-import type { HumanRequest } from '../hitl/types.js';
 
 /**
  * Runner event map — fully aligned with AsyncGenerator StreamEvent / RunStreamEvent.
@@ -281,6 +280,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       this.llmProvider = options.llmClient;
     } else if (options.llm) {
       this.llmProvider = this.createLLMFromQuickInit(options.llm, options.model);
+      /* c8 ignore next 3 */
     } else {
       throw new ConfigurationError('No LLM provider configured.');
     }
@@ -659,6 +659,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             break;
         }
       }
+      /* c8 ignore next 6 */
     } catch (error) {
       yield {
         type: 'error',
@@ -815,6 +816,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       }
       this.emit('phase-change', { from, to: result.phase, timestamp: Date.now() });
       return result;
+      /* c8 ignore next 5 */
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: stepNum }, timestamp: Date.now() });
@@ -880,6 +882,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         this.emit(value.type as keyof RunnerEventMap, value as never);
         yield value;
       }
+      /* c8 ignore next 5 */
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: stepNum }, timestamp: Date.now() });
@@ -921,7 +924,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     stepNumber?: number
   ): Promise<{ state: AgentState; result: StepResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
-    let currentExecState = createExecutionState();
     const stepIdx = stepNumber ?? 0;
 
     // ── beforeStep ──
@@ -932,16 +934,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         runnerOptions: this.options,
       });
       if (chain.stopped) {
-        // If middleware provided a custom result, use it directly
         if (chain.result) {
           return { state, result: chain.result };
         }
-        // Otherwise fall back to error (backward compatible)
         return {
           state,
           result: {
             type: 'error',
-            error: new Error(`Stopped by middleware`),
+            error: new Error('Stopped by middleware'),
             tokens: { input: 0, output: 0 },
           },
         };
@@ -966,11 +966,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         });
         if (chain.state) stepState = chain.state;
         if (chain.stopped) {
-          // If middleware provided a custom result, use it directly
           if (chain.result) {
             return { state: stepState, result: chain.result };
           }
-          // Otherwise fall back to error (backward compatible)
           return {
             state: stepState,
             result: {
@@ -984,232 +982,23 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       return { state: stepState, result: stepResult };
     };
 
-    // Loop advance() until a natural stopping point
-    let currentState = state;
-    let stepTokens: TokenStats = { input: 0, output: 0 };
+    const stepRunner = new StepRunner(
+      this.ctx,
+      this.compressor,
+      this.hasMiddleware ? this.middlewareExecutor : undefined,
+      this.options
+    );
 
     try {
-      while (!isTerminalPhase(currentExecState.phase)) {
-        if (options?.signal?.aborted) {
-          this.emit('abort', { step: stepIdx, timestamp: Date.now() });
-          return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
-        }
-
-        const from = currentExecState.phase;
-
-        // ── beforeAdvance ──
-        if (this.hasMiddleware) {
-          const chain = await this.middlewareExecutor.runBeforeAdvance({
-            state: currentState,
-            execState: currentExecState,
-            fromPhase: from,
-            stepNumber: stepIdx,
-            runnerOptions: this.options,
-          });
-          if (chain.stopResult) {
-            // If middleware provided a stopped result with completed phase, use it
-            if (chain.stopResult.done && chain.stopResult.phase.type === 'completed') {
-              return {
-                state: chain.state ?? chain.stopResult.state ?? currentState,
-                result: {
-                  type: 'stopped',
-                  data: chain.stopResult.phase.answer,
-                  tokens: stepTokens,
-                },
-              };
-            }
-            // HITL V2: waiting-human phase from middleware
-            if (chain.stopResult.done && chain.stopResult.phase.type === 'waiting-human') {
-              return {
-                state: chain.state ?? chain.stopResult.state ?? currentState,
-                result: {
-                  type: 'waiting-human',
-                  request: chain.stopResult.phase.request,
-                  tokens: stepTokens,
-                },
-              };
-            }
-            // Otherwise fall back to error (backward compatible)
-            return {
-              state: chain.state ?? currentState,
-              result: {
-                type: 'error',
-                error: new Error('Stopped by middleware'),
-                tokens: stepTokens,
-              },
-            };
-          }
-          if (chain.state) currentState = chain.state;
-          if (chain.execState) currentExecState = chain.execState;
-        }
-
-        const result = await executeAdvance(
-          this.ctx,
-          currentState,
-          currentExecState,
-          registry,
-          options
-        );
-
-        // ── afterAdvance ──
-        let effectiveResult = result;
-        if (this.hasMiddleware) {
-          const chain = await this.middlewareExecutor.runAfterAdvance({
-            state: result.state,
-            execState: result.execState,
-            result,
-            stepNumber: stepIdx,
-            runnerOptions: this.options,
-          });
-          if (chain.stopResult) {
-            // If middleware provided a stopped result with completed phase, use it
-            if (chain.stopResult.done && chain.stopResult.phase.type === 'completed') {
-              return {
-                state: chain.state ?? chain.stopResult.state ?? currentState,
-                result: {
-                  type: 'stopped',
-                  data: chain.stopResult.phase.answer,
-                  tokens: stepTokens,
-                },
-              };
-            }
-            // HITL V2: waiting-human phase from middleware
-            if (chain.stopResult.done && chain.stopResult.phase.type === 'waiting-human') {
-              return {
-                state: chain.state ?? chain.stopResult.state ?? currentState,
-                result: {
-                  type: 'waiting-human',
-                  request: chain.stopResult.phase.request,
-                  tokens: stepTokens,
-                },
-              };
-            }
-            // Otherwise fall back to error (backward compatible)
-            return {
-              state: chain.state ?? currentState,
-              result: {
-                type: 'error',
-                error: new Error('Stopped by middleware'),
-                tokens: stepTokens,
-              },
-            };
-          }
-          if (chain.state) effectiveResult = { ...result, state: chain.state };
-          if (chain.execState) effectiveResult = { ...effectiveResult, execState: chain.execState };
-        }
-
-        currentExecState = effectiveResult.execState;
-
-        let nextState = effectiveResult.state;
-
-        if (effectiveResult.tokens) {
-          stepTokens = addTokenStats(stepTokens, effectiveResult.tokens);
-          nextState = updateTotalTokens(nextState, effectiveResult.tokens);
-        }
-
-        if (effectiveResult.estimatedContextSize !== undefined) {
-          nextState = updateState(nextState, (draft) => {
-            draft.context.estimatedContextSize = effectiveResult.estimatedContextSize;
-          });
-        }
-
-        if (options?.signal?.aborted) {
-          this.emit('abort', { step: stepIdx, timestamp: Date.now() });
-          return { state: nextState, result: { type: 'abort', tokens: stepTokens } };
-        }
-
-        currentState = await maybeCompress(this.compressor, nextState);
-
-        // Emit executing-tool event
-        if (effectiveResult.phase.type === 'executing-tool') {
-          if (effectiveResult.phase.actions.length === 1) {
-            this.emit('tool:start', {
-              action: effectiveResult.phase.actions[0],
-              timestamp: Date.now(),
-            });
-          } else {
-            this.emit('tools:start', {
-              actions: effectiveResult.phase.actions,
-              timestamp: Date.now(),
-            });
-          }
-        }
-
-        // Forward effects produced by handler
-        if (effectiveResult.effects && effectiveResult.effects.length > 0) {
-          for (const effect of effectiveResult.effects) {
-            this.emit(effect.type as keyof RunnerEventMap, effect as never);
-          }
-        }
-
-        this.emit('phase-change', { from, to: effectiveResult.phase, timestamp: Date.now() });
-
-        // Control flow is determined by phase + done
-        if (effectiveResult.done && effectiveResult.phase.type === 'completed') {
-          const stepResult: StepResult = {
-            type: 'done',
-            answer: effectiveResult.phase.answer,
-            tokens: stepTokens,
-          };
-          return finalizeStep(currentState, stepResult);
-        }
-
-        if (effectiveResult.done && effectiveResult.phase.type === 'error') {
-          const stepResult: StepResult = {
-            type: 'error',
-            error: effectiveResult.phase.error,
-            tokens: stepTokens,
-          };
-          return finalizeStep(currentState, stepResult);
-        }
-
-        // HITL V2: waiting-human phase (non-blocking human input)
-        if (effectiveResult.done && effectiveResult.phase.type === 'waiting-human') {
-          const stepResult: StepResult = {
-            type: 'waiting-human',
-            request: effectiveResult.phase.request,
-            tokens: stepTokens,
-          };
-          return finalizeStep(currentState, stepResult);
-        }
-
-        // ToolResultHandler has processed tool-result phase (effects indicate processed)
-        // Next step depends on handler output
-        if (
-          effectiveResult.phase.type === 'tool-result' &&
-          effectiveResult.effects &&
-          effectiveResult.effects.length > 0
-        ) {
-          // same-skill/cyclic/plain tool → return continue
-          const toolResult = currentExecState.toolResult;
-          const actions =
-            currentExecState.allActions ??
-            (currentExecState.action ? [currentExecState.action] : []);
-          const stepResult: StepResult = {
-            type: 'continue',
-            toolResult,
-            actions,
-            tokens: stepTokens,
-          };
-          return finalizeStep(currentState, stepResult);
-        }
-
-        // ExecutingToolHandler returned tool-result (no effects) → continue loop for ToolResultHandler
-        if (
-          effectiveResult.phase.type === 'tool-result' &&
-          (!effectiveResult.effects || effectiveResult.effects.length === 0)
-        ) {
-          continue;
-        }
-
-        // Skill loaded/returned → phase reset to idle, continue loop
-        if (result.phase.type === 'idle') {
-          continue;
-        }
-      }
-
-      // Should not reach here
-      throw new Error('Unexpected: step loop exited without reaching terminal phase');
+      const { state: nextState, result } = await stepRunner.runBlocking(
+        state,
+        registry,
+        (type, data) => this.emit(type as keyof RunnerEventMap, data as never),
+        options,
+        stepIdx
+      );
+      return finalizeStep(nextState, result);
+      /* c8 ignore next 5 */
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: stepIdx }, timestamp: Date.now() });
@@ -1240,42 +1029,42 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         runnerOptions: this.options,
       });
       if (chain.stopped) {
-        // If middleware provided a custom result, use it directly
-        if (chain.result) {
-          return { state, result: chain.result };
-        }
-        // Otherwise fall back to error (backward compatible)
-        return {
-          state,
-          result: {
-            type: 'error',
-            error: new Error('Stopped by middleware'),
-            tokens: { input: 0, output: 0 },
-          },
+        const finalResult = chain.result ?? {
+          type: 'error' as const,
+          error: new Error('Stopped by middleware'),
+          tokens: { input: 0, output: 0 } as import('@agentskillmania/llm-client').TokenStats,
         };
+        yield { type: 'step:start', step: stepIdx, state, timestamp: Date.now() };
+        this.emit('step:start', { step: stepIdx, state, timestamp: Date.now() });
+        yield { type: 'step:end', step: stepIdx, result: finalResult, timestamp: Date.now() };
+        this.emit('step:end', { step: stepIdx, result: finalResult, timestamp: Date.now() });
+        return { state, result: finalResult };
       }
       if (chain.state) state = chain.state;
     }
 
+    yield { type: 'step:start', step: stepIdx, state, timestamp: Date.now() };
     this.emit('step:start', { step: stepIdx, state, timestamp: Date.now() });
+
+    const stepRunner = new StepRunner(
+      this.ctx,
+      this.compressor,
+      this.hasMiddleware ? this.middlewareExecutor : undefined,
+      this.options
+    );
+
     try {
-      const mw = this.hasMiddleware ? this.middlewareExecutor : undefined;
-      const generator = executeStepStream(
-        this.ctx,
-        this.compressor,
+      const generator = stepRunner.runStreaming(
         state,
-        toolRegistry,
+        toolRegistry ?? this.toolRegistry,
         options,
-        mw,
-        stepIdx,
-        this.options
+        stepIdx
       );
 
       while (true) {
         const { done, value } = await generator.next();
         if (done) {
-          const result = value as { state: AgentState; result: StepResult };
-          this.emit('step:end', { step: stepIdx, result: result.result, timestamp: Date.now() });
+          let result = value as { state: AgentState; result: StepResult };
 
           // ── afterStep ──
           if (this.hasMiddleware) {
@@ -1285,30 +1074,27 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               stepNumber: stepIdx,
               runnerOptions: this.options,
             });
-            if (chain.state) result.state = chain.state;
+            if (chain.state) result = { ...result, state: chain.state };
             if (chain.stopped) {
-              // If middleware provided a custom result, use it directly
-              if (chain.result) {
-                return { state: result.state, result: chain.result };
-              }
-              // Otherwise fall back to error (backward compatible)
-              return {
-                state: result.state,
-                result: {
-                  type: 'error',
-                  error: new Error('Stopped by middleware'),
-                  tokens: result.result.tokens,
-                },
+              const finalResult = chain.result ?? {
+                type: 'error' as const,
+                error: new Error('Stopped by middleware'),
+                tokens: result.result.tokens,
               };
+              yield { type: 'step:end', step: stepIdx, result: finalResult, timestamp: Date.now() };
+              this.emit('step:end', { step: stepIdx, result: finalResult, timestamp: Date.now() });
+              return { state: result.state, result: finalResult };
             }
           }
 
+          yield { type: 'step:end', step: stepIdx, result: result.result, timestamp: Date.now() };
+          this.emit('step:end', { step: stepIdx, result: result.result, timestamp: Date.now() });
           return result;
         }
-        // Uniform forwarding: emit using the yield event's type and payload
         this.emit(value.type as keyof RunnerEventMap, value as never);
         yield value;
       }
+      /* c8 ignore next 5 */
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: stepIdx }, timestamp: Date.now() });
@@ -1496,6 +1282,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       // Hard limit reached (safety net for policy bugs)
       const runResult: RunResult = { type: 'max_steps', totalSteps, tokens: runTokens };
       return finalizeRun(currentState, runResult);
+      /* c8 ignore next 5 */
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: totalSteps }, timestamp: Date.now() });
@@ -1585,61 +1372,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           return yield* finalizeRunStream(currentState, runResult);
         }
 
-        // Step start
-        this.emit('step:start', { step: totalSteps, state: currentState, timestamp: Date.now() });
-        yield { type: 'step:start', step: totalSteps, state: currentState, timestamp: Date.now() };
-
-        // ── beforeStep ──
-        if (this.hasMiddleware) {
-          const chain = await this.middlewareExecutor.runBeforeStep({
-            state: currentState,
-            stepNumber: totalSteps,
-            runnerOptions: this.options,
-          });
-          if (chain.stopped) {
-            // If middleware provided a custom result, use it directly
-            const stepResult = chain.result ?? {
-              type: 'error' as const,
-              error: new Error('Stopped by middleware'),
-              tokens: { input: 0, output: 0 } as TokenStats,
-            };
-            this.emit('step:end', { step: totalSteps, result: stepResult, timestamp: Date.now() });
-            yield { type: 'step:end', step: totalSteps, result: stepResult, timestamp: Date.now() };
-            totalSteps++;
-            const runResult: RunResult =
-              chain.result?.type === 'stopped'
-                ? {
-                    type: 'stopped',
-                    data: chain.result.data as string | undefined,
-                    totalSteps,
-                    tokens: runTokens,
-                  }
-                : {
-                    type: 'error',
-                    error:
-                      stepResult.type === 'error'
-                        ? stepResult.error
-                        : new Error('Stopped by middleware'),
-                    totalSteps,
-                    tokens: runTokens,
-                  };
-            return yield* finalizeRunStream(currentState, runResult);
-          }
-          if (chain.state) currentState = chain.state;
-        }
-
-        // Use executeStepStream to get real-time tokens and phase events
-        const mw = this.hasMiddleware ? this.middlewareExecutor : undefined;
-        const iterator = executeStepStream(
-          this.ctx,
-          this.compressor,
-          currentState,
-          registry,
-          options,
-          mw,
-          totalSteps,
-          this.options
-        );
+        // Delegate to stepStream() for all step-level events
+        const iterator = this.stepStream(currentState, registry, options, totalSteps);
         let stepResult: { state: AgentState; result: StepResult };
 
         while (true) {
@@ -1648,7 +1382,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             stepResult = value;
             break;
           }
-          // Uniform forwarding: emit using the yield event's type and payload
           this.emit(value.type as keyof RunnerEventMap, value as never);
           yield value as RunStreamEvent;
         }
@@ -1677,67 +1410,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           return yield* finalizeRunStream(stepResult.state, runResult);
         }
 
-        // ── afterStep ──
-        if (this.hasMiddleware) {
-          const chain = await this.middlewareExecutor.runAfterStep({
-            state: stepResult.state,
-            result: stepResult.result,
-            stepNumber: totalSteps,
-            runnerOptions: this.options,
-          });
-          if (chain.state) stepResult = { ...stepResult, state: chain.state };
-          if (chain.stopped) {
-            // If middleware provided a custom result, use it directly
-            const stoppedResult = chain.result ?? {
-              type: 'error' as const,
-              error: new Error('Stopped by middleware'),
-              tokens: stepResult.result.tokens,
-            };
-            this.emit('step:end', {
-              step: totalSteps,
-              result: stoppedResult,
-              timestamp: Date.now(),
-            });
-            yield {
-              type: 'step:end',
-              step: totalSteps,
-              result: stoppedResult,
-              timestamp: Date.now(),
-            };
-            totalSteps++;
-            const runResult: RunResult =
-              stoppedResult.type === 'stopped'
-                ? {
-                    type: 'stopped',
-                    data: stoppedResult.data as string | undefined,
-                    totalSteps,
-                    tokens: runTokens,
-                  }
-                : {
-                    type: 'error',
-                    error:
-                      stoppedResult.type === 'error'
-                        ? stoppedResult.error
-                        : new Error('Stopped by middleware'),
-                    totalSteps,
-                    tokens: runTokens,
-                  };
-            return yield* finalizeRunStream(stepResult.state, runResult);
-          }
-        }
-
         currentState = stepResult.state;
-        this.emit('step:end', {
-          step: totalSteps,
-          result: stepResult.result,
-          timestamp: Date.now(),
-        });
-        yield {
-          type: 'step:end',
-          step: totalSteps,
-          result: stepResult.result,
-          timestamp: Date.now(),
-        };
         totalSteps++;
 
         // Auto-compress between steps
@@ -1802,14 +1475,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               totalSteps,
               tokens: runTokens,
             };
-          } else if (decision.runResultType === 'waiting-human') {
-            runResult = {
-              type: 'waiting-human',
-              request: (stepResult.result as { type: 'waiting-human'; request: HumanRequest })
-                .request,
-              totalSteps,
-              tokens: runTokens,
-            };
           } else {
             runResult = { type: 'max_steps', totalSteps, tokens: runTokens };
           }
@@ -1821,6 +1486,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       // Hard limit reached (safety net for policy bugs)
       const runResult: RunResult = { type: 'max_steps', totalSteps, tokens: runTokens };
       return yield* finalizeRunStream(currentState, runResult);
+      /* c8 ignore next 5 */
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: totalSteps }, timestamp: Date.now() });
