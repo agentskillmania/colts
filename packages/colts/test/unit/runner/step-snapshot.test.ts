@@ -12,47 +12,11 @@ import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
+import { createMockLLMClient } from '../../helpers/mock-llm.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function createMockLLMClient(responses: LLMResponse[]): LLMClient {
-  let callIndex = 0;
-  return {
-    call: vi.fn().mockImplementation(() => {
-      if (callIndex >= responses.length) {
-        throw new Error(`No more mock responses (index ${callIndex})`);
-      }
-      return Promise.resolve(responses[callIndex++]);
-    }),
-    stream: vi.fn().mockImplementation(async function* () {
-      if (callIndex >= responses.length) {
-        throw new Error('No more mock responses for stream');
-      }
-      const response = responses[callIndex];
-      const content = response.content;
-      const tokens = content.split(' ');
-      for (let i = 0; i < tokens.length; i++) {
-        yield {
-          type: 'text',
-          delta: tokens[i] + (i < tokens.length - 1 ? ' ' : ''),
-          accumulatedContent: tokens.slice(0, i + 1).join(' '),
-        };
-      }
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        for (const toolCall of response.toolCalls) {
-          yield {
-            type: 'tool_call',
-            toolCall: { id: toolCall.id, name: toolCall.name, arguments: toolCall.arguments },
-          };
-        }
-      }
-      yield { type: 'done', roundTotalTokens: response.tokens };
-      callIndex++;
-    }),
-  } as unknown as LLMClient;
-}
 
 const defaultConfig: AgentConfig = {
   name: 'test-agent',

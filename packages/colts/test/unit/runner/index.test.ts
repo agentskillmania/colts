@@ -11,6 +11,7 @@ import type { ISkillProvider, SkillManifest } from '../../../src/skills/types.js
 import type { SubAgentConfig } from '../../../src/subagent/types.js';
 import { FilesystemSkillProvider } from '../../../src/skills/filesystem-provider.js';
 import type { IMessageAssembler } from '../../../src/message-assembler/types.js';
+import { createCallOnlyMockLLMClient } from '../../helpers/mock-llm.js';
 
 describe('AgentRunner', () => {
   // Mock LLMClient
@@ -1005,18 +1006,7 @@ describe('AgentRunner', () => {
     const mockTokens = { input: 10, output: 5 };
 
     /** Create mock LLM Client (supports multiple response sequences) */
-    const createMultiResponseClient = (responses: LLMResponse[]): LLMClient => {
-      let callIndex = 0;
-      return {
-        call: vi.fn().mockImplementation(() => {
-          if (callIndex >= responses.length) {
-            throw new Error(`No more mock responses (index ${callIndex})`);
-          }
-          return Promise.resolve(responses[callIndex++]);
-        }),
-        stream: vi.fn(),
-      } as unknown as LLMClient;
-    };
+    const createMultiResponseClient = createCallOnlyMockLLMClient;
 
     /** Create test sub-agent configs */
     const createTestSubAgents = (): SubAgentConfig[] => [

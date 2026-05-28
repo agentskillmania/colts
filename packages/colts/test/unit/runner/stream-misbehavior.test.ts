@@ -12,50 +12,14 @@ import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
+import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createMockLLMClient(responses: LLMResponse[]): LLMClient {
-  let callIndex = 0;
-  return {
-    call: vi.fn().mockImplementation(() => {
-      if (callIndex >= responses.length) {
-        throw new Error(`No more mock responses (index ${callIndex})`);
-      }
-      return Promise.resolve(responses[callIndex++]);
-    }),
-    stream: vi.fn().mockImplementation(async function* () {
-      if (callIndex >= responses.length) {
-        throw new Error('No more mock responses for stream');
-      }
-      const response = responses[callIndex];
-      const content = response.content;
-      if (content.length > 0) {
-        const tokens = content.split(' ');
-        for (let i = 0; i < tokens.length; i++) {
-          yield {
-            type: 'text',
-            delta: tokens[i] + (i < tokens.length - 1 ? ' ' : ''),
-            accumulatedContent: tokens.slice(0, i + 1).join(' '),
-          };
-        }
-      }
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        for (const toolCall of response.toolCalls) {
-          yield {
-            type: 'tool_call',
-            toolCall: { id: toolCall.id, name: toolCall.name, arguments: toolCall.arguments },
-          };
-        }
-      }
-      yield { type: 'done', roundTotalTokens: response.tokens };
-      callIndex++;
-    }),
-  } as unknown as LLMClient;
-}
-
+const createMockLLMClient = (responses: LLMResponse[]) =>
+  _createMockLLMClient(responses, { skipEmptyContent: true });
 const mockTokens = { input: 10, output: 5 };
 
 const defaultConfig: AgentConfig = {
@@ -152,5 +116,37 @@ describe('Streaming error handling', () => {
     const complete = events.find((e) => e.type === 'complete');
     expect(complete).toBeTruthy();
     expect((complete as { result: { type: string } }).result.type).toBe('success');
+  });
+
+  it('should emit abort event when custom policy returns abort', async () => {
+    const client = createMockLLMClient([
+      { content: 'Hello', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
+    ]);
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      executionPolicy: {
+        shouldStop: () => ({ decision: 'stop', reason: 'abort', runResultType: 'abort' }),
+        onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
+        onParseError: (error) => ({ decision: 'fail', error }),
+      },
+    });
+
+    const state = createAgentState(defaultConfig);
+
+    const events: Array<{ type: string }> = [];
+    const gen = runner.runStream(state);
+    let lastReturn: { result: { type: string } } | undefined;
+    while (true) {
+      const { done, value } = await gen.next();
+      if (done) {
+        lastReturn = value as { result: { type: string } };
+        break;
+      }
+      events.push(value as { type: string });
+    }
+
+    expect(lastReturn!.result.type).toBe('abort');
   });
 });

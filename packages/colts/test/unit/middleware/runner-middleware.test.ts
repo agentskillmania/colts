@@ -354,10 +354,21 @@ describe('AgentRunner + Middleware: stepStream()', () => {
 
     const state = createAgentState(defaultConfig);
     const iterator = runner.stepStream(state);
-    const { value } = await iterator.next();
 
-    // Should return immediately with error result
-    expect(value.result.type).toBe('error');
+    // stepStream now yields step:start and step:end even when beforeStep stops
+    const events: { type: string }[] = [];
+    let finalResult: { result: { type: string } } | undefined;
+    while (true) {
+      const { done, value } = await iterator.next();
+      if (done) {
+        finalResult = value as { result: { type: string } };
+        break;
+      }
+      events.push(value as { type: string });
+    }
+
+    expect(events.map((e) => e.type)).toEqual(['step:start', 'step:end']);
+    expect(finalResult?.result.type).toBe('error');
     // LLM stream should NOT have been called
     expect(client.stream).not.toHaveBeenCalled();
   });

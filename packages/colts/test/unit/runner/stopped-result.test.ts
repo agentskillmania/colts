@@ -376,11 +376,8 @@ describe('Runner: stopped result propagation', () => {
     });
 
     const iterator = runner.runStream(initialState);
-    // First next() yields step:start
-    const first = await iterator.next();
-    expect(first.done).toBe(false);
-    expect(first.value.type).toBe('step:start');
-    // Second next() reaches beforeStep which throws
+    // After runStream() delegates to stepStream(), beforeStep throw happens
+    // on the first next() call (before step:start is yielded)
     await expect(iterator.next()).rejects.toThrow('Sync error in runStream');
     expect(errorEvents.length).toBeGreaterThan(0);
     expect(errorEvents[0].error.message).toBe('Sync error in runStream');
