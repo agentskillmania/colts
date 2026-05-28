@@ -80,6 +80,8 @@ export type StepResult =
  * Events emitted during step/advance stream
  */
 export type StreamEvent =
+  | { type: 'step:start'; step: number; state: import('../types.js').AgentState; timestamp: number }
+  | { type: 'step:end'; step: number; result: StepResult; timestamp: number }
   | { type: 'phase-change'; from: Phase; to: Phase; timestamp: number }
   | { type: 'token'; token: string; timestamp: number }
   | { type: 'tool:start'; action: Action; timestamp: number }
