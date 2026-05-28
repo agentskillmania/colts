@@ -7,74 +7,14 @@ import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
+import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
 import type { SubAgentConfig } from '../../../src/subagent/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
 
 // Helper to create mock LLM client
-function createMockLLMClient(responses: LLMResponse[]): LLMClient {
-  let callIndex = 0;
-
-  return {
-    call: vi.fn().mockImplementation(() => {
-      if (callIndex >= responses.length) {
-        throw new Error(`No more mock responses (index ${callIndex}, total ${responses.length})`);
-      }
-      return Promise.resolve(responses[callIndex++]);
-    }),
-    stream: vi.fn().mockImplementation(async function* () {
-      if (callIndex >= responses.length) {
-        throw new Error('No more mock responses for stream');
-      }
-      const response = responses[callIndex];
-
-      // Yield thinking tokens if present
-      if (response.thinking) {
-        const thinkingTokens = response.thinking.split(' ');
-        for (let i = 0; i < thinkingTokens.length; i++) {
-          yield {
-            type: 'thinking',
-            delta: thinkingTokens[i] + (i < thinkingTokens.length - 1 ? ' ' : ''),
-          };
-        }
-      }
-
-      // Yield content as tokens
-      const content = response.content;
-      const tokens = content.split(' ');
-      for (let i = 0; i < tokens.length; i++) {
-        yield {
-          type: 'text',
-          delta: tokens[i] + (i < tokens.length - 1 ? ' ' : ''),
-          accumulatedContent: tokens.slice(0, i + 1).join(' '),
-        };
-      }
-
-      // Yield tool calls if present
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        for (const toolCall of response.toolCalls) {
-          yield {
-            type: 'tool_call',
-            toolCall: {
-              id: toolCall.id,
-              name: toolCall.name,
-              arguments: toolCall.arguments,
-            },
-          };
-        }
-      }
-
-      yield {
-        type: 'done',
-        roundTotalTokens: response.tokens,
-      };
-
-      // Increment for next call
-      callIndex++;
-    }),
-  } as unknown as LLMClient;
-}
-
+const createMockLLMClient = (responses: LLMResponse[]) =>
+  _createMockLLMClient(responses, { enableThinking: true });
 // Default config for tests
 const defaultConfig: AgentConfig = {
   name: 'test-agent',
@@ -772,6 +712,86 @@ describe('runStream()', () => {
     expect(finalResult?.totalSteps).toBe(1);
   });
 
+  it('should emit compress events in run when compression is triggered', async () => {
+    // Need at least 3 steps with 2 compressions to cover all ?? branches
+    const toolCallResponse: LLMResponse = {
+      content: 'Calculating',
+      toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+    const finalResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([toolCallResponse, toolCallResponse, finalResponse]);
+
+    let compressCount = 0;
+    const mockCompressor: import('../../../src/types.js').IContextCompressor = {
+      shouldCompress: vi.fn().mockReturnValue(true),
+      compress: vi.fn().mockImplementation(() => {
+        compressCount++;
+        return Promise.resolve({
+          summary: 'Test summary ' + compressCount,
+          anchor: 5 * compressCount,
+        });
+      }),
+    };
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculate',
+      description: 'Calculate',
+      parameters: z.object({ expression: z.string() }),
+      execute: async ({ expression }) => eval(expression).toString(),
+    });
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      compressor: mockCompressor,
+    });
+
+    const state = createAgentState(defaultConfig);
+
+    const events: string[] = [];
+    runner.on('compressing', () => events.push('compressing'));
+    runner.on('compressed', () => events.push('compressed'));
+
+    await runner.run(state, undefined, registry);
+
+    expect(events).toEqual(['compressing', 'compressed', 'compressing', 'compressed']);
+  });
+
+  it('should emit abort event when custom policy returns abort in run()', async () => {
+    const client = createMockLLMClient([
+      { content: 'Hello', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
+    ]);
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      executionPolicy: {
+        shouldStop: () => ({ decision: 'stop', reason: 'abort', runResultType: 'abort' }),
+        onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
+        onParseError: (error) => ({ decision: 'fail', error }),
+      },
+    });
+
+    const state = createAgentState(defaultConfig);
+
+    const events: string[] = [];
+    runner.on('abort', () => events.push('abort'));
+
+    const { result } = await runner.run(state);
+
+    expect(result.type).toBe('abort');
+    expect(events).toContain('abort');
+  });
+
   it('should emit compress events in runStream when compression is triggered', async () => {
     const mockResponse: LLMResponse = {
       content: 'Answer',
@@ -1025,6 +1045,77 @@ describe('Execution Policy injection', () => {
       expect(result.totalSteps).toBe(1000);
     }
   });
+
+  it('should fallback to max_steps when policy returns unknown runResultType in run()', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      executionPolicy: {
+        shouldStop: () => ({
+          decision: 'stop',
+          reason: 'Unknown type',
+          runResultType:
+            'unknown_type' as unknown as import('../../../src/policy/types.js').RunResultType,
+        }),
+        onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
+        onParseError: (error) => ({ decision: 'fail', error }),
+      },
+    });
+
+    const state = createAgentState(defaultConfig);
+    const { result } = await runner.run(state);
+
+    expect(result.type).toBe('max_steps');
+  });
+
+  it('should fallback to max_steps when policy returns unknown runResultType in runStream()', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      executionPolicy: {
+        shouldStop: () => ({
+          decision: 'stop',
+          reason: 'Unknown type',
+          runResultType:
+            'unknown_type' as unknown as import('../../../src/policy/types.js').RunResultType,
+        }),
+        onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
+        onParseError: (error) => ({ decision: 'fail', error }),
+      },
+    });
+
+    const state = createAgentState(defaultConfig);
+    const gen = runner.runStream(state);
+    let lastReturn: { result: { type: string } } | undefined;
+
+    while (true) {
+      const { done, value } = await gen.next();
+      if (done) {
+        lastReturn = value as { result: { type: string } };
+        break;
+      }
+    }
+
+    expect(lastReturn!.result.type).toBe('max_steps');
+  });
 });
 
 describe('Thinking mechanism', () => {
@@ -1221,5 +1312,178 @@ describe('Thinking mechanism', () => {
     expect(thoughtMsgs[0].content).toBe('I need to search.');
     expect(actionMsgs.length).toBe(1);
     expect(actionMsgs[0].content).toBe('');
+  });
+
+  it('should return custom result when beforeRun middleware stops with result', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Hello',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      middleware: [
+        {
+          name: 'test-beforeRun-stop',
+          async beforeRun() {
+            return {
+              stop: true,
+              result: {
+                type: 'success',
+                answer: 'Custom result',
+                totalSteps: 0,
+                tokens: { input: 0, output: 0 },
+              },
+            };
+          },
+        },
+      ],
+    });
+
+    const state = createAgentState(defaultConfig);
+    const { result } = await runner.run(state);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.answer).toBe('Custom result');
+    }
+  });
+
+  it('should return custom result when beforeRun middleware stops runStream with result', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Hello',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      middleware: [
+        {
+          name: 'test-beforeRun-stop-stream',
+          async beforeRun() {
+            return {
+              stop: true,
+              result: {
+                type: 'success',
+                answer: 'Stream custom',
+                totalSteps: 0,
+                tokens: { input: 0, output: 0 },
+              },
+            };
+          },
+        },
+      ],
+    });
+
+    const state = createAgentState(defaultConfig);
+    const gen = runner.runStream(state);
+    const { done, value } = await gen.next();
+
+    expect(done).toBe(true);
+    expect(value.result.type).toBe('success');
+    if (value.result.type === 'success') {
+      expect(value.result.answer).toBe('Stream custom');
+    }
+  });
+
+  it('should propagate error when beforeRun throws in run()', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Hello',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      middleware: [
+        {
+          name: 'test-throw-run',
+          async beforeRun() {
+            throw new Error('beforeRun run error');
+          },
+        },
+      ],
+    });
+
+    const state = createAgentState(defaultConfig);
+    await expect(runner.run(state)).rejects.toThrow('beforeRun run error');
+  });
+
+  it('should propagate non-Error throw from beforeRun in run()', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Hello',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      middleware: [
+        {
+          name: 'test-throw-string',
+          async beforeRun() {
+            throw 'string error';
+          },
+        },
+      ],
+    });
+
+    const state = createAgentState(defaultConfig);
+    await expect(runner.run(state)).rejects.toThrow('string error');
+  });
+
+  it('should hit HARD_LIMIT in runStream when policy never stops', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'Continue',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const responses = Array(1100).fill(mockResponse);
+    const client = createMockLLMClient(responses, { split: 'all' });
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      executionPolicy: {
+        shouldStop: () => ({ decision: 'continue' }),
+        onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
+        onParseError: (error) => ({ decision: 'fail', error }),
+      },
+    });
+
+    const state = createAgentState(defaultConfig);
+    const events: Array<{ type: string }> = [];
+    let lastReturn: { result: { type: string; totalSteps?: number } } | undefined;
+
+    const gen = runner.runStream(state);
+    while (true) {
+      const { done, value } = await gen.next();
+      if (done) {
+        lastReturn = value as { result: { type: string; totalSteps?: number } };
+        break;
+      }
+      events.push(value as { type: string });
+    }
+
+    expect(lastReturn!.result.type).toBe('max_steps');
+    if (lastReturn!.result.type === 'max_steps') {
+      expect(lastReturn!.result.totalSteps).toBe(1000);
+    }
   });
 });
