@@ -113,6 +113,32 @@ export interface ModelConstraint {
    * different keys to have different limits for the same model.
    */
   maxConcurrency: number;
+
+  /**
+   * Maximum context window size in tokens for this model.
+   *
+   * @remarks
+   * If not set, defaults to 128000 in the adapter fallback.
+   */
+  contextWindow?: number;
+
+  /**
+   * Maximum output tokens per request for this model.
+   *
+   * @remarks
+   * If not set, defaults to 16384 in the adapter fallback.
+   */
+  maxTokens?: number;
+
+  /**
+   * Whether the model supports native thinking/reasoning.
+   *
+   * @remarks
+   * If not set, defaults to true in the adapter fallback.
+   * Most modern models support reasoning; APIs that don't understand
+   * thinking parameters silently ignore them.
+   */
+  reasoning?: boolean;
 }
 
 /**
