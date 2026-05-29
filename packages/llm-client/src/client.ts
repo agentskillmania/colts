@@ -413,6 +413,21 @@ export class LLMClient extends EventEmitter {
   }
 
   /**
+   * Get model metadata (context window, max output tokens).
+   *
+   * @param modelId - Model identifier
+   * @returns Model metadata with contextWindow and maxTokens
+   *
+   * @remarks
+   * Returns metadata from ModelConstraint registration if available,
+   * otherwise returns adapter defaults.
+   */
+  getModelMeta(modelId: string): import('./types.js').ModelMeta {
+    const meta = this.scheduler.getModelMeta(modelId);
+    return this.adapter.getModelMeta(modelId, meta);
+  }
+
+  /**
    * Clear all registered providers and API keys.
    *
    * @returns Nothing; clears all registrations as a side effect.
