@@ -23,6 +23,21 @@ import pTimeout from 'p-timeout';
 import type { CallOptions, LLMResponse, StreamEvent, TokenStats, RetryOptions } from './types.js';
 
 /**
+ * Detect pi-ai thinkingFormat from base URL patterns.
+ *
+ * @param baseUrl - The API base URL
+ * @returns thinkingFormat string for pi-ai compat, or undefined to let pi-ai auto-detect
+ */
+function detectThinkingFormat(baseUrl: string): string | undefined {
+  if (!baseUrl) return undefined;
+  if (baseUrl.includes('deepseek.com')) return 'deepseek';
+  if (baseUrl.includes('bigmodel.cn') || baseUrl.includes('zhipuai')) return 'deepseek';
+  if (baseUrl.includes('moonshot') || baseUrl.includes('kimi')) return 'deepseek';
+  if (baseUrl.includes('aliyun') || baseUrl.includes('dashscope')) return 'qwen';
+  return undefined;
+}
+
+/**
  * Check if an error is retryable.
  *
  * @param error - Error to check
@@ -160,6 +175,7 @@ export class PiAiAdapter {
    * Create a Model instance for the pi-ai library.
    *
    * @param modelId - Model identifier (e.g., 'gpt-4', 'gpt-3.5-turbo')
+   * @param meta - Optional model metadata
    * @returns Model instance configured for the identifier
    *
    * @remarks
@@ -175,7 +191,10 @@ export class PiAiAdapter {
    *
    * @internal
    */
-  private createModel(modelId: string): Model<string> {
+  private createModel(
+    modelId: string,
+    meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean }
+  ): Model<string> {
     // Try to get model from pi-ai registry across known providers
     const providers = ['openai', 'opencode', 'opencode-go', 'anthropic', 'google'] as const;
     for (const provider of providers) {
@@ -194,17 +213,20 @@ export class PiAiAdapter {
 
     // Fallback: create a custom model for OpenAI-compatible APIs
     // Use 'openai-completions' which is the correct API type in pi-ai
+    const thinkingFormat = detectThinkingFormat(this.customBaseUrl ?? '');
+
     return {
       id: modelId,
       name: modelId,
       api: 'openai-completions',
       provider: 'openai',
       baseUrl: this.customBaseUrl ?? 'https://api.openai.com/v1',
-      reasoning: false,
+      reasoning: meta?.reasoning ?? true,
       input: ['text'],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 128000,
-      maxTokens: 4096,
+      contextWindow: meta?.contextWindow ?? 128000,
+      maxTokens: meta?.maxTokens ?? 16384,
+      ...(thinkingFormat ? { compat: { thinkingFormat } } : {}),
     } as Model<string>;
   }
 
@@ -212,10 +234,14 @@ export class PiAiAdapter {
    * Get model metadata (context window size, max output tokens).
    *
    * @param modelId - Model identifier (e.g., 'gpt-4', 'claude-3-5-sonnet')
+   * @param meta - Optional model metadata
    * @returns Model metadata including context window and max tokens
    */
-  getModelMeta(modelId: string): import('./types.js').ModelMeta {
-    const model = this.createModel(modelId);
+  getModelMeta(
+    modelId: string,
+    meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean }
+  ): import('./types.js').ModelMeta {
+    const model = this.createModel(modelId, meta);
     return {
       contextWindow: model.contextWindow,
       maxTokens: model.maxTokens,
@@ -375,8 +401,9 @@ export class PiAiAdapter {
       const result = await piComplete(model, context, {
         apiKey,
         thinkingEnabled: options.thinkingEnabled,
+        reasoning: options.thinkingEnabled && model.reasoning ? 'medium' : undefined,
         signal: options.signal,
-      });
+      } as Record<string, unknown>);
 
       // Extract text content
       let content = '';
@@ -596,8 +623,9 @@ export class PiAiAdapter {
           const stream = piStream(model, context, {
             apiKey,
             thinkingEnabled: options.thinkingEnabled,
+            reasoning: options.thinkingEnabled && model.reasoning ? 'medium' : undefined,
             signal: options.signal,
-          });
+          } as Record<string, unknown>);
           const iter = stream[Symbol.asyncIterator]();
           const { done, value } = await iter.next();
           if (done) {
