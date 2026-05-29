@@ -320,8 +320,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       if (typeof options.compressor === 'object' && 'shouldCompress' in options.compressor) {
         this.compressor = options.compressor as IContextCompressor;
       } else {
+        const compressionConfig = options.compressor as CompressionConfig;
+        // Auto-fill contextWindowSize from model metadata if not explicitly set
+        let contextWindowSize = compressionConfig.contextWindowSize;
+        if (contextWindowSize === undefined && 'getModelMeta' in this.llmProvider) {
+          const modelMeta = (
+            this.llmProvider as { getModelMeta(modelId: string): { contextWindow: number } }
+          ).getModelMeta(this.options.model);
+          contextWindowSize = modelMeta?.contextWindow;
+        }
         this.compressor = new DefaultContextCompressor(
-          options.compressor as CompressionConfig,
+          { ...compressionConfig, contextWindowSize },
           this.llmProvider,
           this.options.model
         );
