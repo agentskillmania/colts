@@ -317,6 +317,20 @@ export class RequestScheduler extends EventEmitter {
   }
 
   /**
+   * Get model metadata for a registered model.
+   *
+   * @param modelId - Model identifier
+   * @returns The ModelConstraint for the model, or undefined if not found
+   */
+  getModelMeta(modelId: string): import('./types.js').ModelConstraint | undefined {
+    for (const key of this.apiKeys.values()) {
+      const model = key.models.find((m) => m.modelId === modelId);
+      if (model) return model;
+    }
+    return undefined;
+  }
+
+  /**
    * Get all API keys that support a specific model.
    *
    * @param modelId - Model identifier

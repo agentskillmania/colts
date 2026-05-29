@@ -201,13 +201,22 @@ export class PiAiAdapter {
       // Runtime dispatch: provider is a known string, modelId is validated upstream
       const model = getModel(provider, modelId as never);
       if (model) {
-        if (this.customBaseUrl) {
+        // Apply metadata overrides when provided
+        const baseModel = this.customBaseUrl
+          ? ({ ...model, baseUrl: this.customBaseUrl } as Model<string>)
+          : (model as Model<string>);
+
+        // If metadata is provided, override the registry values
+        if (meta) {
           return {
-            ...model,
-            baseUrl: this.customBaseUrl,
+            ...baseModel,
+            ...(meta.contextWindow !== undefined && { contextWindow: meta.contextWindow }),
+            ...(meta.maxTokens !== undefined && { maxTokens: meta.maxTokens }),
+            ...(meta.reasoning !== undefined && { reasoning: meta.reasoning }),
           } as Model<string>;
         }
-        return model as Model<string>;
+
+        return baseModel;
       }
     }
 

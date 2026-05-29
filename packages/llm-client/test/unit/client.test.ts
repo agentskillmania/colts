@@ -144,4 +144,42 @@ describe('LLMClient', () => {
       expect(typeof client.stream).toBe('function');
     });
   });
+
+  describe('getModelMeta', () => {
+    it('returns metadata from registered model', () => {
+      client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+      client.registerApiKey({
+        key: 'test-key',
+        provider: 'openai',
+        maxConcurrency: 5,
+        models: [
+          {
+            modelId: 'glm-5',
+            maxConcurrency: 3,
+            contextWindow: 200000,
+            maxTokens: 131072,
+            reasoning: true,
+          },
+        ],
+      });
+
+      const meta = client.getModelMeta('glm-5');
+      expect(meta.contextWindow).toBe(200000);
+      expect(meta.maxTokens).toBe(131072);
+    });
+
+    it('returns defaults for model without metadata', () => {
+      client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+      client.registerApiKey({
+        key: 'test-key',
+        provider: 'openai',
+        maxConcurrency: 5,
+        models: [{ modelId: 'some-model', maxConcurrency: 3 }],
+      });
+
+      const meta = client.getModelMeta('some-model');
+      expect(meta.contextWindow).toBe(128000);
+      expect(meta.maxTokens).toBe(16384);
+    });
+  });
 });
