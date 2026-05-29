@@ -6,8 +6,9 @@
 
 import { EventEmitter } from 'eventemitter3';
 import pTimeout from 'p-timeout';
-import { RequestScheduler } from './scheduler.js';
+
 import { PiAiAdapter } from './adapter.js';
+import { RequestScheduler } from './scheduler.js';
 import type {
   ProviderConfig,
   ApiKeyConfig,

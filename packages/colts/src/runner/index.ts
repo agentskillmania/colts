@@ -5,29 +5,13 @@
  * Configurable with dependency inversion and quick initialization.
  */
 
-import { LLMClient } from '@agentskillmania/llm-client';
 import type { TokenStats } from '@agentskillmania/llm-client';
+import { LLMClient } from '@agentskillmania/llm-client';
 import type { Message, Tool } from '@mariozechner/pi-ai';
-import type {
-  AgentState,
-  ILLMProvider,
-  IToolRegistry,
-  IContextCompressor,
-  CompressionConfig,
-  LLMQuickInit,
-} from '../types.js';
-import { ConfigurationError } from '../types.js';
-import { DefaultContextCompressor } from '../compressor/index.js';
-import {
-  addUserMessage,
-  addAssistantMessage,
-  incrementStepCount,
-  updateState,
-  updateTotalTokens,
-} from '../state/index.js';
-import { addTokenStats, estimateTokens } from '../utils/tokens.js';
-import { ToolRegistry } from '../tools/registry.js';
-import type { Tool as ColtsTool } from '../tools/registry.js';
+import { EventEmitter } from 'eventemitter3';
+
+import type { RunnerContext } from './advance.js';
+import type { RunnerOptions } from './options.js';
 import type {
   StepResult,
   AdvanceResult,
@@ -39,29 +23,47 @@ import type {
   Action,
 } from '../execution/index.js';
 import type { AdvanceOptions } from '../execution/index.js';
-import { getToolsForLLM } from '../tools/llm-format.js';
-import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
-import { DefaultToolSchemaFormatter } from '../tools/schema-formatter.js';
-export type { RunnerOptions } from './options.js';
-import { DefaultMessageAssembler } from '../message-assembler/index.js';
 import type { IMessageAssembler } from '../message-assembler/types.js';
-import { compressState, maybeCompress } from './compression.js';
+import type { IExecutionPolicy } from '../policy/types.js';
+import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from '../subagent/types.js';
+import type { Tool as ColtsTool } from '../tools/registry.js';
+import type {
+  AgentState,
+  ILLMProvider,
+  IToolRegistry,
+  IContextCompressor,
+  CompressionConfig,
+  LLMQuickInit,
+} from '../types.js';
 import { executeAdvance, createRouter } from './advance.js';
-import type { RunnerContext } from './advance.js';
-import { executeAdvanceStream } from './stream.js';
+import { compressState, maybeCompress } from './compression.js';
 import { StepRunner } from './step-runner.js';
-import type { ISkillProvider } from '../skills/types.js';
+import { executeAdvanceStream } from './stream.js';
+import { DefaultContextCompressor } from '../compressor/index.js';
+import { DefaultMessageAssembler } from '../message-assembler/index.js';
+import { MiddlewareExecutor } from '../middleware/executor.js';
+import type { AgentMiddleware } from '../middleware/types.js';
+import { DefaultExecutionPolicy } from '../policy/default-policy.js';
 import { FilesystemSkillProvider } from '../skills/filesystem-provider.js';
 import { createLoadSkillTool, createReturnSkillTool } from '../skills/index.js';
-import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from '../subagent/types.js';
-import { DefaultSubAgentFactory } from '../subagent/types.js';
+import type { ISkillProvider } from '../skills/types.js';
+import {
+  addUserMessage,
+  addAssistantMessage,
+  incrementStepCount,
+  updateState,
+  updateTotalTokens,
+} from '../state/index.js';
 import { createDelegateTool } from '../subagent/delegate-tool.js';
-import { EventEmitter } from 'eventemitter3';
-import type { IExecutionPolicy } from '../policy/types.js';
-import { DefaultExecutionPolicy } from '../policy/default-policy.js';
-import type { AgentMiddleware } from '../middleware/types.js';
-import type { RunnerOptions } from './options.js';
-import { MiddlewareExecutor } from '../middleware/executor.js';
+import { DefaultSubAgentFactory } from '../subagent/types.js';
+import { getToolsForLLM } from '../tools/llm-format.js';
+import { ToolRegistry } from '../tools/registry.js';
+import { DefaultToolSchemaFormatter } from '../tools/schema-formatter.js';
+import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
+import { ConfigurationError } from '../types.js';
+import { addTokenStats, estimateTokens } from '../utils/tokens.js';
+
+export type { RunnerOptions } from './options.js';
 
 /**
  * Runner event map — fully aligned with AsyncGenerator StreamEvent / RunStreamEvent.

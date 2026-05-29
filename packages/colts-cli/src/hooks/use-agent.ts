@@ -9,7 +9,6 @@
  * - StreamEvent → TimelineEntry conversion
  */
 
-import { useState, useCallback, useRef } from 'react';
 import type { AgentRunner, AgentState, ISkillProvider, StreamEvent } from '@agentskillmania/colts';
 import {
   createAgentState,
@@ -18,10 +17,12 @@ import {
   isTerminalPhase,
   loadSkill,
 } from '@agentskillmania/colts';
-import type { TimelineEntry, DetailLevel } from '../types/timeline.js';
-import { nextSeq } from '../types/timeline.js';
+import { useState, useCallback, useRef } from 'react';
+
 import { createTraceWriter } from '../trace-writer.js';
 import { StreamEventConsumer } from './stream-event-consumer.js';
+import type { TimelineEntry, DetailLevel } from '../types/timeline.js';
+import { nextSeq } from '../types/timeline.js';
 
 /**
  * Execution mode

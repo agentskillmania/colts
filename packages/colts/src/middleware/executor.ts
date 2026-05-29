@@ -5,8 +5,8 @@
  * 以及 override 合并和 stop 信号处理。
  */
 
-import type { AgentState } from '../types.js';
 import type { ExecutionState, AdvanceResult } from '../execution/index.js';
+import type { AgentState } from '../types.js';
 import type {
   AgentMiddleware,
   AdvanceHookReturn,

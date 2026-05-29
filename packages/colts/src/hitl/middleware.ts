@@ -8,13 +8,13 @@
  * Returns an AdvanceResult with waiting-human phase, so step()/run() return cleanly.
  */
 
+import type { HumanRequest, HumanQuestion } from './types.js';
+import type { AdvanceResult, ExecutionState } from '../execution/index.js';
 import type {
   AgentMiddleware,
   BeforeAdvanceContext,
   AdvanceHookReturn,
 } from '../middleware/types.js';
-import type { AdvanceResult, ExecutionState } from '../execution/index.js';
-import type { HumanRequest, HumanQuestion } from './types.js';
 import type { AgentState } from '../types.js';
 
 export interface HitlMiddlewareOptions {

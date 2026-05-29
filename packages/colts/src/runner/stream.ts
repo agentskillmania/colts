@@ -5,7 +5,7 @@
  * Extracted from AgentRunner for maintainability.
  */
 
-import type { AgentState, IToolRegistry } from '../types.js';
+import type { RunnerContext } from './advance.js';
 import type {
   AdvanceResult,
   ExecutionState,
@@ -13,7 +13,7 @@ import type {
   AdvanceOptions,
 } from '../execution/index.js';
 import { updateExecState } from '../execution/index.js';
-import type { RunnerContext } from './advance.js';
+import type { AgentState, IToolRegistry } from '../types.js';
 
 /**
  * Stream phase advancement (micro-step streaming)

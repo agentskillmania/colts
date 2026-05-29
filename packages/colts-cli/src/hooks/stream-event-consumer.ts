@@ -12,9 +12,10 @@
  * is greater than structural events like step-start / phase-change, so render order is correct.
  */
 
-import throttle from 'throttleit';
 import type { AgentState } from '@agentskillmania/colts';
 import type { StreamEvent, RunStreamEvent } from '@agentskillmania/colts';
+import throttle from 'throttleit';
+
 import type { TimelineEntry } from '../types/timeline.js';
 import { nextSeq } from '../types/timeline.js';
 

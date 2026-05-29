@@ -6,6 +6,7 @@
  */
 
 import type { Tool } from '@mariozechner/pi-ai';
+
 import type { IToolRegistry } from '../types.js';
 import type { IToolSchemaFormatter } from './schema-formatter.js';
 import { DefaultToolSchemaFormatter } from './schema-formatter.js';

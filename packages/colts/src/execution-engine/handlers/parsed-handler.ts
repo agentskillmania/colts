@@ -7,11 +7,11 @@
  * or text message.
  */
 
-import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
-import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
 import { addAssistantMessage, incrementStepCount } from '../../state/index.js';
+import type { AgentState } from '../../types.js';
+import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 
 export class ParsedHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

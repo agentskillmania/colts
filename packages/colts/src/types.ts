@@ -4,6 +4,7 @@
  * Pure data types for AgentState, runner configuration, and compression.
  */
 
+// eslint-disable-next-line import/order
 import type { TokenStats as LLMTokenStats } from '@agentskillmania/llm-client';
 export type TokenStats = LLMTokenStats;
 
@@ -159,10 +160,13 @@ export interface AgentState {
 
 // ========== Runner Configuration Interfaces ==========
 
-import type { ZodTypeAny } from 'zod';
 import type { LLMResponse, StreamEvent } from '@agentskillmania/llm-client';
 import type { Message as LLMMessage, Tool as LLMTool } from '@mariozechner/pi-ai';
+import type { ZodTypeAny } from 'zod';
+
 import type { ToolSchema, Tool as LocalTool } from './tools/registry.js';
+
+export type { SkillManifest, ISkillProvider } from './skills/types.js';
 
 /**
  * LLM Provider Interface
@@ -400,5 +404,3 @@ export interface CompressionConfig {
 }
 
 // ========== Skill Interfaces ==========
-
-export type { SkillManifest, ISkillProvider } from './skills/types.js';

@@ -5,8 +5,13 @@
  * that previously existed in `AgentRunner.step()` and `executeStepStream()`.
  */
 
-import type { AgentState, IToolRegistry, IContextCompressor } from '../types.js';
 import type { TokenStats } from '@agentskillmania/llm-client';
+
+import type { RunnerContext } from './advance.js';
+import { executeAdvance } from './advance.js';
+import { maybeCompress } from './compression.js';
+import type { RunnerOptions } from './options.js';
+import { createExecutionState, isTerminalPhase, updateExecState } from '../execution/index.js';
 import type {
   StepResult,
   AdvanceResult,
@@ -15,14 +20,10 @@ import type {
   Phase,
   Action,
 } from '../execution/index.js';
-import { createExecutionState, isTerminalPhase, updateExecState } from '../execution/index.js';
-import { addTokenStats } from '../utils/tokens.js';
-import { updateTotalTokens, updateState } from '../state/index.js';
-import type { RunnerContext } from './advance.js';
-import { executeAdvance } from './advance.js';
-import { maybeCompress } from './compression.js';
 import type { MiddlewareExecutor } from '../middleware/executor.js';
-import type { RunnerOptions } from './options.js';
+import { updateTotalTokens, updateState } from '../state/index.js';
+import type { AgentState, IToolRegistry, IContextCompressor } from '../types.js';
+import { addTokenStats } from '../utils/tokens.js';
 
 /**
  * Unified step-level event produced by StepRunner.

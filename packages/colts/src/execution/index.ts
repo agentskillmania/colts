@@ -4,12 +4,13 @@
  * Phase-based execution state machine for fine-grained control.
  */
 
-import type { AgentState, Message } from '../types.js';
+import type { TokenStats } from '@agentskillmania/llm-client';
+import { produce, type Draft } from 'immer';
+
+import type { HumanRequest } from '../hitl/types.js';
 import type { ToolCall } from '../parser/index.js';
 import type { DelegateResult } from '../subagent/types.js';
-import type { TokenStats } from '@agentskillmania/llm-client';
-import type { HumanRequest } from '../hitl/types.js';
-import { produce, type Draft } from 'immer';
+import type { AgentState, Message } from '../types.js';
 
 // ---------------------------------------------------------------------------
 // ToolPostEffect — lifecycle side effects produced by handler

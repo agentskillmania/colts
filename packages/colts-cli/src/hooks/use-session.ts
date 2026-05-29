@@ -5,8 +5,9 @@
  * Supports auto-save (on state change) and restoring the most recent session.
  */
 
-import { useState, useCallback } from 'react';
 import type { AgentState } from '@agentskillmania/colts';
+import { useState, useCallback } from 'react';
+
 import { saveSession, loadSession, listSessions } from '../session.js';
 
 /**

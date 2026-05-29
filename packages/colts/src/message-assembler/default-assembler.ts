@@ -7,6 +7,7 @@
  */
 
 import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
+
 import type { AgentState, SkillState } from '../types.js';
 import type { BuildMessagesOptions, IMessageAssembler } from './types.js';
 

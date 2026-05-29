@@ -6,8 +6,6 @@
  * Extracts tool calls into actions. Transitions to llm-response phase.
  */
 
-import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
-import type { AgentState, IToolRegistry } from '../../types.js';
 import type {
   ExecutionState,
   AdvanceResult,
@@ -17,7 +15,9 @@ import type {
 } from '../../execution/index.js';
 import { updateExecState, toolCallToAction } from '../../execution/index.js';
 import { getToolsForLLM } from '../../tools/llm-format.js';
+import type { AgentState, IToolRegistry } from '../../types.js';
 import { estimateTokens } from '../../utils/tokens.js';
+import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 
 export class CallingLLMHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

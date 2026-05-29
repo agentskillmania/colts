@@ -18,6 +18,7 @@ import type {
   AskHumanHandler,
   ConfirmHandler,
 } from '@agentskillmania/colts';
+
 import type { AppConfig } from './config.js';
 
 /** Interaction callback interface for runner instance binding */

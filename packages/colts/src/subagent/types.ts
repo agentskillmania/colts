@@ -1,8 +1,8 @@
 /**
  * @fileoverview Core sub-agent type definitions
  */
-import type { AgentConfig, AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 import { AgentRunner } from '../runner/index.js';
+import type { AgentConfig, AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 
 /**
  * Sub-agent configuration

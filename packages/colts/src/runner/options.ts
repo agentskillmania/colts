@@ -4,6 +4,13 @@
  * 独立于 runner/index.ts，避免 middleware/types.ts 的循环依赖。
  */
 
+import type { IMessageAssembler } from '../message-assembler/types.js';
+import type { AgentMiddleware } from '../middleware/types.js';
+import type { IExecutionPolicy } from '../policy/types.js';
+import type { ISkillProvider } from '../skills/types.js';
+import type { SubAgentConfig, ISubAgentFactory } from '../subagent/types.js';
+import type { Tool as ColtsTool } from '../tools/registry.js';
+import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 import type {
   ILLMProvider,
   IToolRegistry,
@@ -11,13 +18,6 @@ import type {
   CompressionConfig,
   LLMQuickInit,
 } from '../types.js';
-import type { Tool as ColtsTool } from '../tools/registry.js';
-import type { ISkillProvider } from '../skills/types.js';
-import type { SubAgentConfig, ISubAgentFactory } from '../subagent/types.js';
-import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
-import type { IExecutionPolicy } from '../policy/types.js';
-import type { AgentMiddleware } from '../middleware/types.js';
-import type { IMessageAssembler } from '../message-assembler/types.js';
 
 /**
  * AgentRunner 配置选项

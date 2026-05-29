@@ -7,9 +7,10 @@
  */
 
 import type { Message as PiAIMessage } from '@mariozechner/pi-ai';
-import type { AgentState } from '../types.js';
+
 import type { ISkillProvider } from '../skills/types.js';
 import type { SubAgentConfig } from '../subagent/types.js';
+import type { AgentState } from '../types.js';
 
 /**
  * Options passed to IMessageAssembler.build()

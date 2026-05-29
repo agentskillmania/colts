@@ -6,7 +6,6 @@
  * registered with the PhaseRouter.
  */
 
-import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 import type {
   ExecutionState,
   AdvanceResult,
@@ -14,10 +13,11 @@ import type {
   StreamEvent,
 } from '../execution/index.js';
 import type { IMessageAssembler } from '../message-assembler/types.js';
+import type { IExecutionPolicy } from '../policy/types.js';
 import type { ISkillProvider } from '../skills/types.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
-import type { IExecutionPolicy } from '../policy/types.js';
+import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 
 /**
  * Context passed to every IPhaseHandler

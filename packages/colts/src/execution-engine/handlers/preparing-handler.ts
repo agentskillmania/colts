@@ -5,10 +5,10 @@
  * assembled by IdleHandler.
  */
 
-import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
-import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
+import type { AgentState } from '../../types.js';
+import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 
 export class PreparingHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {
