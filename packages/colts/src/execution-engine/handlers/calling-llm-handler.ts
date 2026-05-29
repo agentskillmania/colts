@@ -40,7 +40,7 @@ export class CallingLLMHandler implements IPhaseHandler {
       tools,
       priority: 0,
       requestTimeout: ctx.options.requestTimeout,
-      thinkingEnabled: ctx.options.thinkingEnabled,
+      thinkingEnabled: options?.thinkingEnabled ?? ctx.options.thinkingEnabled,
       signal: options?.signal,
     });
 
@@ -115,7 +115,7 @@ export class CallingLLMHandler implements IPhaseHandler {
         tools,
         priority: 0,
         requestTimeout: ctx.options.requestTimeout,
-        thinkingEnabled: ctx.options.thinkingEnabled,
+        thinkingEnabled: options?.thinkingEnabled ?? ctx.options.thinkingEnabled,
         signal,
       })) {
         if (signal?.aborted) break;

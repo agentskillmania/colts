@@ -122,6 +122,8 @@ export interface AdvanceOptions {
   priority?: number;
   /** AbortSignal to cancel execution */
   signal?: AbortSignal;
+  /** Enable thinking/reasoning for this specific request (overrides runner default) */
+  thinkingEnabled?: boolean;
 }
 
 /**
