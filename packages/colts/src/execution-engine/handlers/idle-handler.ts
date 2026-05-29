@@ -6,11 +6,12 @@
  * to preparing phase.
  */
 
-import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
-import type { AgentState, Message as LocalMessage, MessageRole } from '../../types.js';
-import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
 import { randomUUID } from 'node:crypto';
+
+import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
+import type { AgentState, Message as LocalMessage, MessageRole } from '../../types.js';
+import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 
 export class IdleHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

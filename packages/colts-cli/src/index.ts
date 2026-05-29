@@ -6,8 +6,9 @@
  * index.ts is only responsible for: load config → create runner → render App.
  */
 
-import React from 'react';
 import { render } from 'ink';
+import React from 'react';
+
 import { App } from './app.js';
 import { loadConfig } from './config.js';
 import { createRunnerFromConfig, createInitialStateFromConfig } from './runner-setup.js';

@@ -6,11 +6,11 @@
  * cleans the content, and sets both execState.thought and execState.cleanedContent.
  */
 
-import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
-import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
 import { extractThinkingAndContent } from '../../parser/index.js';
+import type { AgentState } from '../../types.js';
+import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 
 export class ParsingHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

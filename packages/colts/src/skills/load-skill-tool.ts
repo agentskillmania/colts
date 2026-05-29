@@ -4,8 +4,9 @@
  * Allows the agent to proactively load skill instructions for nested calling.
  */
 import { z } from 'zod';
-import type { Tool } from '../tools/registry.js';
+
 import type { ISkillProvider, SkillSignal } from './types.js';
+import type { Tool } from '../tools/registry.js';
 
 /**
  * Create the load_skill tool

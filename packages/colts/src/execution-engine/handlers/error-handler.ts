@@ -4,9 +4,9 @@
  * Terminal phase. Returns done=true with current state unchanged.
  */
 
-import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
-import type { AgentState } from '../../types.js';
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
+import type { AgentState } from '../../types.js';
+import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 
 export class ErrorHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

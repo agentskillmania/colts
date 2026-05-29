@@ -5,8 +5,8 @@
  * from AgentRunner.run() into an injectable interface.
  */
 
-import type { AgentState } from '../types.js';
 import type { StepResult, Action } from '../execution/index.js';
+import type { AgentState } from '../types.js';
 
 /**
  * Stop decision returned by IExecutionPolicy.shouldStop()

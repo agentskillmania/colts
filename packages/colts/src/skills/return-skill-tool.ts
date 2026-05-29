@@ -4,8 +4,9 @@
  * Allows a sub-skill to return results to its parent skill.
  */
 import { z } from 'zod';
-import type { Tool } from '../tools/registry.js';
+
 import type { SkillSignal } from './types.js';
+import type { Tool } from '../tools/registry.js';
 
 /**
  * Create the return_skill tool

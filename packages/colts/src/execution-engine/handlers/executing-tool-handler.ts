@@ -5,12 +5,12 @@
  * signals, writes tool messages to state. Transitions to tool-result phase.
  */
 
-import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
-import type { AgentState, IToolRegistry } from '../../types.js';
 import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
 import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
 import { addToolMessage, addUserMessage, incrementStepCount } from '../../state/index.js';
+import type { AgentState, IToolRegistry } from '../../types.js';
+import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 
 export class ExecutingToolHandler implements IPhaseHandler {
   canHandle(phaseType: string): boolean {

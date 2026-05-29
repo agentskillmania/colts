@@ -3,6 +3,7 @@
  */
 
 import { encodingForModel } from 'js-tiktoken';
+
 import type { TokenStats } from '../types.js';
 
 const enc = encodingForModel('gpt-4');

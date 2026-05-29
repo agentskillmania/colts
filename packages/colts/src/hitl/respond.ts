@@ -5,8 +5,10 @@
  * can continue from where it left off.
  */
 
-import { produce } from 'immer';
 import { randomUUID } from 'node:crypto';
+
+import { produce } from 'immer';
+
 import type { AgentState } from '../types.js';
 import type { HumanRequest, HumanResponse } from './types.js';
 import { estimateTokens } from '../utils/tokens.js';

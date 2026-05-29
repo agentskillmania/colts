@@ -5,7 +5,6 @@
  * 中间件可以观察状态、修改状态、或通过 stop 字段受控中断执行。
  */
 
-import type { AgentState } from '../types.js';
 import type {
   ExecutionState,
   Phase,
@@ -14,6 +13,7 @@ import type {
   RunResult,
 } from '../execution/index.js';
 import type { RunnerOptions } from '../runner/options.js';
+import type { AgentState } from '../types.js';
 
 // ─── Return Types ────────────────────────────────────────────────
 

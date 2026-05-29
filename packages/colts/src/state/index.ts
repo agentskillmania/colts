@@ -5,8 +5,10 @@
  * - All update operations return new state, original state remains unchanged
  */
 
-import { produce, Draft } from 'immer';
 import { randomUUID } from 'node:crypto';
+
+import { produce, Draft } from 'immer';
+
 import type { AgentState, AgentConfig, Message, TokenStats } from '../types.js';
 import { generateId } from '../utils/id.js';
 import { estimateTokens, addTokenStats } from '../utils/tokens.js';

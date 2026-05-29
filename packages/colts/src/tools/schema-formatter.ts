@@ -6,9 +6,10 @@
  * providers (pi-ai, MCP, etc.).
  */
 
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { Tool } from './registry.js';
 import type { Tool as PiAiTool } from '@mariozechner/pi-ai';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+
+import type { Tool } from './registry.js';
 
 /**
  * Interface for converting tool definitions to LLM-compatible format

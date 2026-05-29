@@ -5,10 +5,11 @@
  */
 
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
-import { Settings } from '@agentskillmania/settings-yaml';
+import * as path from 'node:path';
+
 import type { SubAgentConfig } from '@agentskillmania/colts';
+import { Settings } from '@agentskillmania/settings-yaml';
 
 /** Default configuration directory */
 const CONFIG_DIR = path.join(os.homedir(), '.agentskillmania', 'colts');

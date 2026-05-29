@@ -7,7 +7,6 @@
  */
 
 import type { IPhaseHandler, PhaseHandlerContext } from './types.js';
-import type { AgentState, IToolRegistry } from '../types.js';
 import type {
   ExecutionState,
   AdvanceResult,
@@ -15,6 +14,7 @@ import type {
   StreamEvent,
 } from '../execution/index.js';
 import { updateExecState } from '../execution/index.js';
+import type { AgentState, IToolRegistry } from '../types.js';
 
 /**
  * Phase router that dispatches to registered handlers
