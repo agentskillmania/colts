@@ -114,9 +114,6 @@ importers:
       '@inkjs/ui':
         specifier: ^2.0.0
         version: 2.0.0(ink@5.2.1(@types/react@18.3.28)(react@18.3.1))
-      chalk:
-        specifier: ^5.3.0
-        version: 5.6.2
       ink:
         specifier: ^5.1.0
         version: 5.2.1(@types/react@18.3.28)(react@18.3.1)
@@ -126,9 +123,6 @@ importers:
       throttleit:
         specifier: ^2.1.0
         version: 2.1.0
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
