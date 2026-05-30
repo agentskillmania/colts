@@ -357,3 +357,133 @@ describe('PerRequestOptions — stepStream()', () => {
     expect(lastStream!.model).toBe('step-stream-model');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Negative paths
+// ---------------------------------------------------------------------------
+
+describe('PerRequestOptions — negative paths', () => {
+  it('should use runner default when empty RunOptions is passed', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'ok',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+    const { client, getLastCallArg } = createCapturingClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'runner-model',
+      llmClient: client,
+      thinkingEnabled: true,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'You are a test assistant.',
+      tools: [],
+    });
+
+    // Empty options object — all fields undefined
+    const opts: RunOptions = {};
+    await runner.run(state, opts);
+
+    const lastCall = getLastCallArg();
+    expect(lastCall).toBeDefined();
+    expect(lastCall!.model).toBe('runner-model');
+    expect(lastCall!.thinkingEnabled).toBe(true);
+  });
+
+  it('should use runner default when step() receives no options', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'ok',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+    const { client, getLastCallArg } = createCapturingClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'default-model',
+      llmClient: client,
+      thinkingEnabled: false,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'You are a test assistant.',
+      tools: [],
+    });
+
+    // No options at all
+    await runner.step(state);
+
+    const lastCall = getLastCallArg();
+    expect(lastCall).toBeDefined();
+    expect(lastCall!.model).toBe('default-model');
+    expect(lastCall!.thinkingEnabled).toBe(false);
+  });
+
+  it('should allow model override without thinkingEnabled', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'ok',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+    const { client, getLastCallArg } = createCapturingClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'default',
+      llmClient: client,
+      thinkingEnabled: true,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'You are a test assistant.',
+      tools: [],
+    });
+
+    // Only model override, thinkingEnabled not specified
+    const opts: RunOptions = { model: 'other-model', maxSteps: 1 };
+    await runner.run(state, opts);
+
+    const lastCall = getLastCallArg();
+    expect(lastCall).toBeDefined();
+    expect(lastCall!.model).toBe('other-model');
+    // Falls back to runner default (true)
+    expect(lastCall!.thinkingEnabled).toBe(true);
+  });
+
+  it('should allow thinkingEnabled override without model', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'ok',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+    const { client, getLastCallArg } = createCapturingClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'default',
+      llmClient: client,
+      thinkingEnabled: true,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'You are a test assistant.',
+      tools: [],
+    });
+
+    // Only thinkingEnabled override, model not specified
+    const opts: RunOptions = { thinkingEnabled: false, maxSteps: 1 };
+    await runner.run(state, opts);
+
+    const lastCall = getLastCallArg();
+    expect(lastCall).toBeDefined();
+    expect(lastCall!.model).toBe('default');
+    expect(lastCall!.thinkingEnabled).toBe(false);
+  });
+});
