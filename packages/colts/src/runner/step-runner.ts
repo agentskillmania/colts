@@ -10,7 +10,7 @@ import type { TokenStats } from '@agentskillmania/llm-client';
 import type { RunnerContext } from './advance.js';
 import { executeAdvance } from './advance.js';
 import { maybeCompress } from './compression.js';
-import type { RunnerOptions } from './options.js';
+import type { RunnerOptions, StepOptions } from './options.js';
 import { createExecutionState, isTerminalPhase, updateExecState } from '../execution/index.js';
 import type {
   StepResult,
@@ -70,7 +70,7 @@ export class StepRunner {
     state: AgentState,
     registry: IToolRegistry,
     emit: StepEventEmitter,
-    options?: { signal?: AbortSignal },
+    options?: StepOptions,
     stepNumber?: number
   ): Promise<{ state: AgentState; result: StepResult }> {
     let currentExecState = createExecutionState();
@@ -177,7 +177,7 @@ export class StepRunner {
   async *runStreaming(
     state: AgentState,
     registry: IToolRegistry,
-    options?: { signal?: AbortSignal },
+    options?: StepOptions,
     stepNumber?: number
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
     let currentExecState = createExecutionState();
