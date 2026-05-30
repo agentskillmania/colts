@@ -254,6 +254,7 @@ export class PiAiAdapter {
     return {
       contextWindow: model.contextWindow,
       maxTokens: model.maxTokens,
+      reasoning: meta?.reasoning,
     };
   }
 
