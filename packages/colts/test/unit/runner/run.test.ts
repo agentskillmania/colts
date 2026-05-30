@@ -898,7 +898,7 @@ describe('runStream()', () => {
     expect(assistantMsgs.length).toBeGreaterThanOrEqual(1);
 
     const actionMsg = assistantMsgs.find((m) => m.type === 'action');
-    expect(actionMsg).toBeTruthy();
+    expect(actionMsg).toBeDefined();
     expect(actionMsg!.content).toBe('Let me calculate that for you.');
     expect(actionMsg!.toolCalls).toHaveLength(1);
     expect(actionMsg!.toolCalls![0].name).toBe('calculate');

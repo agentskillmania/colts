@@ -72,7 +72,7 @@ describe('Streaming error handling', () => {
 
     // Should complete with error result
     const complete = events.find((e) => e.type === 'complete');
-    expect(complete).toBeTruthy();
+    expect(complete).toBeDefined();
     expect((complete as { result: { type: string } }).result.type).toBe('error');
   });
 
@@ -114,7 +114,7 @@ describe('Streaming error handling', () => {
 
     // Run should complete successfully on step 2
     const complete = events.find((e) => e.type === 'complete');
-    expect(complete).toBeTruthy();
+    expect(complete).toBeDefined();
     expect((complete as { result: { type: string } }).result.type).toBe('success');
   });
 

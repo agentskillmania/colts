@@ -161,7 +161,7 @@ describe('Naughty LLM - misbehavior edge cases', () => {
 
     // Find the skill:end event — it should carry the correct name
     const skillEnd = events.find((e) => e.type === 'skill:end');
-    expect(skillEnd).toBeTruthy();
+    expect(skillEnd).toBeDefined();
     expect((skillEnd as { type: string; name: string }).name).toBe('child');
   });
 
