@@ -82,3 +82,26 @@ export interface RunnerOptions {
   /** 自定义消息组装器（默认 DefaultMessageAssembler） */
   messageAssembler?: IMessageAssembler;
 }
+
+/**
+ * Options that can vary per-request across all runner methods.
+ * Shared by step/run/advance — any field here can be overridden
+ * on each call without recreating the runner.
+ */
+export interface PerRequestOptions {
+  /** Enable thinking/reasoning for this specific request (overrides runner default) */
+  thinkingEnabled?: boolean;
+  /** Override the model for this specific request (overrides runner default) */
+  model?: string;
+  /** AbortSignal to cancel execution */
+  signal?: AbortSignal;
+}
+
+/** Options for step/stepStream */
+export type StepOptions = PerRequestOptions;
+
+/** Options for run/runStream */
+export interface RunOptions extends PerRequestOptions {
+  /** Maximum number of steps (overrides runner default) */
+  maxSteps?: number;
+}

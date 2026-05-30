@@ -9,6 +9,7 @@ import { produce, type Draft } from 'immer';
 
 import type { HumanRequest } from '../hitl/types.js';
 import type { ToolCall } from '../parser/index.js';
+import type { PerRequestOptions } from '../runner/options.js';
 import type { DelegateResult } from '../subagent/types.js';
 import type { AgentState, Message } from '../types.js';
 
@@ -117,13 +118,9 @@ export type StreamEvent =
 /**
  * Options for advance execution
  */
-export interface AdvanceOptions {
+export interface AdvanceOptions extends PerRequestOptions {
   /** Priority for LLM call (default: 0) */
   priority?: number;
-  /** AbortSignal to cancel execution */
-  signal?: AbortSignal;
-  /** Enable thinking/reasoning for this specific request (overrides runner default) */
-  thinkingEnabled?: boolean;
 }
 
 /**

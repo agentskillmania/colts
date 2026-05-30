@@ -102,6 +102,9 @@ export {
   type ChatStreamChunk,
 } from './runner/index.js';
 
+// Per-request option types
+export type { PerRequestOptions, StepOptions, RunOptions } from './runner/options.js';
+
 // Execution Control
 export {
   createExecutionState,
