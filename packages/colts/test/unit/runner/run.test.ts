@@ -8,6 +8,7 @@ import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
+import { safeEval } from '../helpers/safe-eval.js';
 import type { SubAgentConfig } from '../../../src/subagent/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
@@ -82,7 +83,7 @@ describe('run()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -122,7 +123,7 @@ describe('run()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -152,7 +153,7 @@ describe('run()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -207,7 +208,7 @@ describe('run()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, toolRegistry: registry });
@@ -292,7 +293,7 @@ describe('runStream()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -358,7 +359,7 @@ describe('runStream()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -396,7 +397,7 @@ describe('runStream()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -435,7 +436,7 @@ describe('runStream()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -471,7 +472,7 @@ describe('runStream()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -746,7 +747,7 @@ describe('runStream()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({
@@ -884,7 +885,7 @@ describe('runStream()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
@@ -1022,7 +1023,7 @@ describe('Execution Policy injection', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     // Policy that never stops (always continues)

@@ -16,6 +16,7 @@ import type { AgentConfig, AgentState } from '../../../src/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
 import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
+import { safeEval } from '../helpers/safe-eval.js';
 
 // --- Helpers (adapted from run.test.ts) ---
 
@@ -214,7 +215,7 @@ describe('blocking/streaming path equivalence', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const blocking = await runBlocking(responses, registry);

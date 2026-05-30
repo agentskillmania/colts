@@ -15,6 +15,7 @@ import type { AgentConfig, AgentState } from '../../../src/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
 import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
+import { safeEval } from '../helpers/safe-eval.js';
 
 // --- Helpers (copied from path-equivalence.test.ts) ---
 
@@ -204,7 +205,7 @@ describe('step() vs stepStream() equivalence', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const blocking = await runStepBlocking(responses, registry);
@@ -256,7 +257,7 @@ describe('step() vs stepStream() equivalence', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const blocking = await runStepBlocking(responses, registry);

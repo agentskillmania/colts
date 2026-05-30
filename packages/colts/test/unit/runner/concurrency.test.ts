@@ -10,6 +10,7 @@ import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
+import { safeEval } from '../helpers/safe-eval.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
 
@@ -108,7 +109,7 @@ describe('Step 14: Concurrency isolation', () => {
       name: 'calc',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }: { expression: string }) => eval(expression).toString(),
+      execute: async ({ expression }: { expression: string }) => safeEval(expression).toString(),
     });
 
     // Runner 1: maxSteps=2
