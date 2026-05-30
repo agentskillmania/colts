@@ -965,51 +965,6 @@ describe('Execution Policy integration', () => {
     });
   });
 
-  describe('CallingLLMHandler with custom policy', () => {
-    const handler = new CallingLLMHandler();
-
-    it('should call onParseError when toolCallToAction fails', async () => {
-      const state = createMockState();
-      const execState = createExecutionState();
-      execState.phase = { type: 'calling-llm' };
-      execState.preparedMessages = [{ role: 'user', content: 'test' }];
-
-      const onParseError = vi.fn().mockResolvedValue({
-        decision: 'ignore',
-        fallbackText: 'treated as text',
-      });
-
-      const ctx = createMockCtx({
-        llmProvider: {
-          call: vi.fn().mockResolvedValue({
-            content: 'response with bad tool call',
-            toolCalls: [{ id: 'bad', name: 'tool', arguments: null }],
-            tokens: { input: 10, output: 5 },
-            stopReason: 'tool_calls',
-          }),
-          stream: vi.fn(),
-        } as never,
-        executionPolicy: {
-          shouldStop: () => ({ decision: 'continue' }),
-          onToolError: (error: Error) => ({
-            decision: 'continue' as const,
-            sanitizedResult: `Error: ${error.message}`,
-          }),
-          onParseError,
-        },
-      });
-
-      // toolCallToAction will fail if arguments is null (not an object)
-      // But actually it just passes through. We need a different approach.
-      // Since toolCallToAction is a simple mapper, let's mock it at the module level.
-      // For now, test that when toolCallToAction throws, onParseError is called.
-
-      // The current toolCallToAction just maps fields, so null arguments won't throw.
-      // Skip this test as the parse error path requires a real parsing failure.
-      // onParseError is tested via integration when LLM returns malformed JSON.
-    });
-  });
-
   // T3: Regression test — onParseError ignore should preserve fallbackText in execState.llmResponse (CR P0-3)
   describe('CallingLLMHandler onParseError fail path', () => {
     it('should throw error when policy decides to fail on parse error', async () => {
