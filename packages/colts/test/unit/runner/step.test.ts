@@ -12,6 +12,7 @@ import { ToolRegistry } from '../../../src/tools/registry.js';
 import { createExecutionState, updateExecState } from '../../../src/execution/index.js';
 import { z } from 'zod';
 import { createMockLLMClient } from '../../helpers/mock-llm.js';
+import { safeEval } from '../helpers/safe-eval.js';
 
 // Default config for tests
 const defaultConfig: AgentConfig = {
@@ -94,7 +95,7 @@ describe('step()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const state = createAgentState(defaultConfig);
@@ -200,7 +201,7 @@ describe('step()', () => {
       name: 'calculate',
       description: 'Calculate math expression',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const runner = new AgentRunner({
@@ -343,7 +344,7 @@ describe('step()', () => {
         name: 'calculate',
         description: 'Calculate',
         parameters: z.object({ expression: z.string() }),
-        execute: async ({ expression }) => eval(expression).toString(),
+        execute: async ({ expression }) => safeEval(expression).toString(),
       });
 
       const state = createAgentState(defaultConfig);
@@ -441,7 +442,7 @@ describe('step()', () => {
         name: 'calculate',
         description: 'Calculate',
         parameters: z.object({ expression: z.string() }),
-        execute: async ({ expression }) => eval(expression).toString(),
+        execute: async ({ expression }) => safeEval(expression).toString(),
       });
 
       const state = createAgentState(defaultConfig);
@@ -845,7 +846,7 @@ describe('step()', () => {
         name: 'calculate',
         description: 'Calculate',
         parameters: z.object({ expression: z.string() }),
-        execute: async ({ expression }) => eval(expression).toString(),
+        execute: async ({ expression }) => safeEval(expression).toString(),
       });
 
       const runner = new AgentRunner({
@@ -888,7 +889,7 @@ describe('step()', () => {
         name: 'calculate',
         description: 'Calculate',
         parameters: z.object({ expression: z.string() }),
-        execute: async ({ expression }) => eval(expression).toString(),
+        execute: async ({ expression }) => safeEval(expression).toString(),
       });
 
       const runner = new AgentRunner({

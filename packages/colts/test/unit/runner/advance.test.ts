@@ -16,6 +16,7 @@ import {
 import type { ExecutionState } from '../../../src/execution/index.js';
 import { z } from 'zod';
 import { createMockLLMClient } from '../../helpers/mock-llm.js';
+import { safeEval } from '../helpers/safe-eval.js';
 
 // Default config for tests
 const defaultConfig: AgentConfig = {
@@ -192,7 +193,7 @@ describe('advance()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const mockResponse: LLMResponse = {
@@ -364,7 +365,7 @@ describe('advance()', () => {
       description: 'Calculate math expression',
       parameters: z.object({ expression: z.string() }),
       execute: async ({ expression }) => {
-        return eval(expression).toString();
+        return safeEval(expression).toString();
       },
     });
 
@@ -569,7 +570,7 @@ describe('advance()', () => {
       name: 'calculate',
       description: 'Calculate',
       parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => eval(expression).toString(),
+      execute: async ({ expression }) => safeEval(expression).toString(),
     });
 
     const stepResult = await runner.advance(result.state, interventionExecState, registry); // parsed -> executing-tool

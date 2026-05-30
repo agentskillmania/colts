@@ -8,6 +8,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { ToolRegistry, ConfirmableRegistry, type ConfirmHandler } from '../../src/index.js';
+import { safeEval } from './helpers/safe-eval.js';
 
 function createInnerRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
@@ -16,7 +17,7 @@ function createInnerRegistry(): ToolRegistry {
     name: 'calculate',
     description: 'Calculate math expression',
     parameters: z.object({ expression: z.string() }),
-    execute: async ({ expression }: { expression: string }) => eval(expression).toString(),
+    execute: async ({ expression }: { expression: string }) => safeEval(expression).toString(),
   });
 
   registry.register({
