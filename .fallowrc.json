@@ -4,22 +4,21 @@
     "src/index.{ts,tsx,js,jsx}",
     "src/main.{ts,tsx,js,jsx}"
   ],
+  "ignorePatterns": [
+    "**/*.test.{ts,tsx,js,jsx}",
+    "**/*.spec.{ts,tsx,js,jsx}",
+    "**/test/**",
+    "**/tests/**",
+    "**/__tests__/**",
+    "**/__mocks__/**"
+  ],
   "workspaces": {
     "packages": [
       "packages/*"
     ]
   },
   "duplicates": {
-    // Hide pair-only clones; focus on widespread copy-paste
-    // worth refactoring. Lower to 2 to report every duplicate pair.
     "minOccurrences": 3
-    // Common additions (uncomment to enable):
-    // "ignore": [
-    //   "**/lib/**",          // for repos that publish transpiled output to lib/
-    //   "**/legacy/**",       // for repos with legacy-build artifacts
-    //   "**/__generated__/**", // Relay, GraphQL Code Generator
-    //   "**/generated/**"     // OpenAPI, Protobuf codegen
-    // ]
   },
   "rules": {
     "unused-dependencies": "warn"
