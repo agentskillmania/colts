@@ -472,6 +472,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         systemPrompt: this.options.systemPrompt,
         requestTimeout: this.options.requestTimeout,
         maxSteps: this.options.maxSteps,
+        thinkingEnabled: this.options.thinkingEnabled,
+        enablePromptThinking: this.options.enablePromptThinking,
       },
     };
   }
