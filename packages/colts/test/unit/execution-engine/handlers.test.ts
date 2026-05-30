@@ -22,6 +22,8 @@ import { createExecutionState } from '../../../src/execution/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { ToolSchema } from '../../../src/tools/registry.js';
 import { DefaultToolSchemaFormatter } from '../../../src/tools/schema-formatter.js';
+import { createDefaultPhaseHandlers } from '../../../src/execution-engine/default-registry.js';
+import { PhaseRouter } from '../../../src/execution-engine/router.js';
 
 // ---------------------------------------------------------------------------
 // Shared test helpers
@@ -1074,5 +1076,52 @@ describe('Execution Policy integration', () => {
         vi.restoreAllMocks();
       }
     });
+  });
+});
+
+// ===========================================================================
+// DefaultHandlerRegistry
+// ===========================================================================
+describe('DefaultHandlerRegistry', () => {
+  const expectedPhaseTypes = [
+    'idle',
+    'preparing',
+    'calling-llm',
+    'llm-response',
+    'parsing',
+    'parsed',
+    'executing-tool',
+    'tool-result',
+    'completed',
+    'error',
+  ] as const;
+
+  it('should return handlers for all known phase types', () => {
+    const handlers = createDefaultPhaseHandlers();
+    expect(handlers).toHaveLength(expectedPhaseTypes.length);
+  });
+
+  it('should register all handlers without error', () => {
+    const handlers = createDefaultPhaseHandlers();
+    const router = new PhaseRouter(handlers);
+    expect(router).toBeInstanceOf(PhaseRouter);
+  });
+
+  it('should have each handler cover exactly one phase type', () => {
+    const handlers = createDefaultPhaseHandlers();
+    for (const handler of handlers) {
+      const matchingTypes = expectedPhaseTypes.filter((t) => handler.canHandle(t));
+      expect(matchingTypes).toHaveLength(1);
+    }
+  });
+
+  it('should provide a handler for every expected phase type', () => {
+    const handlers = createDefaultPhaseHandlers();
+    const router = new PhaseRouter(handlers);
+    for (const type of expectedPhaseTypes) {
+      const handler = router.getHandler(type);
+      expect(handler).toBeDefined();
+      expect(handler!.canHandle(type)).toBe(true);
+    }
   });
 });
