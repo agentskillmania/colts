@@ -380,6 +380,50 @@ describe('MiddlewareExecutor', () => {
     });
   });
 
+  // ─── Stopped Result Propagation ─────────────────────────────────
+
+  describe('stopped result propagation', () => {
+    it('should propagate stopped StepResult from beforeStep', async () => {
+      const stoppedResult = {
+        type: 'stopped' as const,
+        data: { response: 'handled' },
+        tokens: { input: 0, output: 0 },
+      };
+      const mw: AgentMiddleware = {
+        name: 'stopper',
+        beforeStep: vi.fn().mockResolvedValue({ stop: true, result: stoppedResult }),
+      };
+      const executor = new MiddlewareExecutor([mw]);
+      const chain = await executor.runBeforeStep({
+        state: makeState(),
+        stepNumber: 0,
+        runnerOptions: {} as any,
+      });
+      expect(chain.stopped).toBe(true);
+      expect(chain.result).toEqual(stoppedResult);
+    });
+
+    it('should propagate stopped RunResult from beforeRun', async () => {
+      const stoppedResult = {
+        type: 'stopped' as const,
+        data: 'Command handled',
+        totalSteps: 0,
+        tokens: { input: 0, output: 0 },
+      };
+      const mw: AgentMiddleware = {
+        name: 'stopper',
+        beforeRun: vi.fn().mockResolvedValue({ stop: true, result: stoppedResult }),
+      };
+      const executor = new MiddlewareExecutor([mw]);
+      const chain = await executor.runBeforeRun({
+        state: makeState(),
+        runnerOptions: {} as any,
+      });
+      expect(chain.stopped).toBe(true);
+      expect(chain.result).toEqual(stoppedResult);
+    });
+  });
+
   // ─── Error Handling ─────────────────────────────────────────────
 
   describe('error propagation', () => {
