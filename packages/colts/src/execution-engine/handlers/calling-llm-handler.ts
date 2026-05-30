@@ -34,8 +34,9 @@ export class CallingLLMHandler implements IPhaseHandler {
     const registry = toolRegistry ?? ctx.toolRegistry;
     const { tools, messages, estimatedContextSize } = this.prepare(ctx, state, execState, registry);
 
+    const resolvedModel = options?.model ?? ctx.options.model;
     const response = await ctx.llmProvider.call({
-      model: ctx.options.model,
+      model: resolvedModel,
       messages,
       tools,
       priority: 0,
@@ -83,6 +84,7 @@ export class CallingLLMHandler implements IPhaseHandler {
     const registry = toolRegistry ?? ctx.toolRegistry;
     const { tools, messages, estimatedContextSize } = this.prepare(ctx, state, execState, registry);
     const signal = options?.signal;
+    const resolvedModel = options?.model ?? ctx.options.model;
 
     // Yield llm:request event before LLM call
     yield {
@@ -110,7 +112,7 @@ export class CallingLLMHandler implements IPhaseHandler {
 
     try {
       for await (const event of ctx.llmProvider.stream({
-        model: ctx.options.model,
+        model: resolvedModel,
         messages,
         tools,
         priority: 0,
