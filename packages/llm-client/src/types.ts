@@ -786,4 +786,6 @@ export interface ModelMeta {
   contextWindow: number;
   /** Maximum output tokens per request */
   maxTokens: number;
+  /** Whether the model supports native thinking/reasoning */
+  reasoning?: boolean;
 }
