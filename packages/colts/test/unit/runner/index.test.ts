@@ -1170,7 +1170,7 @@ describe('AgentRunner', () => {
       });
 
       const delegateResult = result as { answer: string; totalSteps: number };
-      expect(delegateResult.answer).toContain('Error');
+      expect(delegateResult.answer).toContain('Unknown sub-agent');
       expect(delegateResult.totalSteps).toBe(0);
     });
 

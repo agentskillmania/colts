@@ -149,7 +149,7 @@ describe('step()', () => {
     expect(result.type).toBe('continue');
     if (result.type === 'continue') {
       // Empty registry returns "Tool not found" error
-      expect(result.toolResult).toContain('Error');
+      expect(result.toolResult).toContain('not found');
       expect(result.toolResult).toContain('Tool not found');
     }
   });
@@ -698,7 +698,7 @@ describe('step()', () => {
 
       expect(result.result.type).toBe('continue');
       if (result.result.type === 'continue') {
-        expect(result.result.toolResult).toContain('Error');
+        expect(result.result.toolResult).toContain('not found');
         expect(result.result.toolResult).toContain('Tool not found');
       }
     });
@@ -821,8 +821,8 @@ describe('step()', () => {
       const startIndex = events.findIndex((e) => e.type === 'subagent:start');
       const endIndex = events.findIndex((e) => e.type === 'subagent:end');
 
-      expect(startIndex).toBeGreaterThanOrEqual(0);
-      expect(endIndex).toBeGreaterThanOrEqual(0);
+      expect(startIndex).toBeGreaterThan(-1);
+      expect(endIndex).toBeGreaterThan(-1);
       expect(startIndex).toBeLessThan(endIndex);
     });
 

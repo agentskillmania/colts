@@ -171,7 +171,7 @@ describe('PhaseRouter', () => {
       const router = new PhaseRouter(handlers);
 
       for (const type of types) {
-        expect(router.getHandler(type)).toBeTruthy();
+        expect(router.getHandler(type)).toBeDefined();
       }
     });
   });

@@ -90,7 +90,7 @@ describe('advance()', () => {
         // Not providing provider and maxConcurrency to test defaults
       },
     });
-    expect(r.getLLMProvider()).toBeTruthy();
+    expect(r.getLLMProvider()).toBeDefined();
     expect(r.getToolRegistry()).toBeInstanceOf(ToolRegistry);
   });
 

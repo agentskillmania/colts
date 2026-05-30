@@ -124,7 +124,7 @@ describe('return_skill Tool', () => {
       const schema = schemas[0];
       expect(schema.type).toBe('function');
       expect(schema.function.name).toBe('return_skill');
-      expect(schema.function.description).toBeTruthy();
+      expect(schema.function.description).toEqual(expect.any(String));
 
       const params = schema.function.parameters as Record<string, unknown>;
       expect(params.type).toBe('object');
