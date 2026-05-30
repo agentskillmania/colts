@@ -11,7 +11,7 @@ import type { Message, Tool } from '@mariozechner/pi-ai';
 import { EventEmitter } from 'eventemitter3';
 
 import type { RunnerContext } from './advance.js';
-import type { RunnerOptions } from './options.js';
+import type { RunnerOptions, StepOptions, RunOptions } from './options.js';
 import type {
   StepResult,
   AdvanceResult,
@@ -931,7 +931,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   async step(
     state: AgentState,
     toolRegistry?: IToolRegistry,
-    options?: { signal?: AbortSignal },
+    options?: StepOptions,
     stepNumber?: number
   ): Promise<{ state: AgentState; result: StepResult }> {
     const registry = toolRegistry ?? this.toolRegistry;
@@ -1027,7 +1027,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   async *stepStream(
     state: AgentState,
     toolRegistry?: IToolRegistry,
-    options?: { signal?: AbortSignal },
+    options?: StepOptions,
     stepNumber?: number
   ): AsyncGenerator<StreamEvent, { state: AgentState; result: StepResult }> {
     const stepIdx = stepNumber ?? 0;
@@ -1133,7 +1133,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    */
   async run(
     state: AgentState,
-    options?: { maxSteps?: number; signal?: AbortSignal },
+    options?: RunOptions,
     toolRegistry?: IToolRegistry
   ): Promise<{ state: AgentState; result: RunResult }> {
     // Initialize skill state if needed
@@ -1193,10 +1193,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         }
 
         // Call step() to get full event propagation (advance → step → run)
+        const stepOpts: StepOptions | undefined = options
+          ? {
+              thinkingEnabled: options.thinkingEnabled,
+              model: options.model,
+              signal: options.signal,
+            }
+          : undefined;
         const { state: newState, result } = await this.step(
           currentState,
           registry,
-          options,
+          stepOpts,
           totalSteps
         );
 
@@ -1322,7 +1329,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    */
   async *runStream(
     state: AgentState,
-    options?: { maxSteps?: number; signal?: AbortSignal },
+    options?: RunOptions,
     toolRegistry?: IToolRegistry
   ): AsyncGenerator<RunStreamEvent, { state: AgentState; result: RunResult }> {
     // Initialize skill state if needed
@@ -1384,7 +1391,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         }
 
         // Delegate to stepStream() for all step-level events
-        const iterator = this.stepStream(currentState, registry, options, totalSteps);
+        const stepOpts: StepOptions | undefined = options
+          ? {
+              thinkingEnabled: options.thinkingEnabled,
+              model: options.model,
+              signal: options.signal,
+            }
+          : undefined;
+        const iterator = this.stepStream(currentState, registry, stepOpts, totalSteps);
         let stepResult: { state: AgentState; result: StepResult };
 
         while (true) {
