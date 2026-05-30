@@ -1,15 +1,18 @@
 /**
- * @fileoverview Execution state type tests
+ * @fileoverview Execution lifecycle integration tests
+ *
+ * Tests multi-phase transitions with a full AgentRunner instance.
+ * Originally in test/unit/execution/ — relocated because it exercises
+ * the complete phase lifecycle (integration scope).
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
-import { AgentRunner } from '../../../src/runner/index.js';
-import { createAgentState } from '../../../src/state/index.js';
-import type { AgentConfig } from '../../../src/types.js';
-import { createExecutionState, isTerminalPhase } from '../../../src/execution/index.js';
-import type { ExecutionState } from '../../../src/execution/index.js';
-import { createMockLLMClient } from '../../helpers/mock-llm.js';
+import { describe, it, expect } from 'vitest';
+import type { LLMResponse } from '@agentskillmania/llm-client';
+import { AgentRunner } from '../../src/runner/index.js';
+import { createAgentState } from '../../src/state/index.js';
+import type { AgentConfig } from '../../src/types.js';
+import { createExecutionState, isTerminalPhase } from '../../src/execution/index.js';
+import { createMockLLMClient } from '../helpers/mock-llm.js';
 
 // Default config for tests
 const defaultConfig: AgentConfig = {
@@ -24,7 +27,7 @@ const mockTokens = {
   output: 5,
 };
 
-describe('Invariants', () => {
+describe('Execution lifecycle', () => {
   it('should maintain state data integrity across all operations', async () => {
     const mockResponse: LLMResponse = {
       content: 'Test response',
