@@ -1010,12 +1010,16 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         options,
         stepIdx
       );
-      return finalizeStep(nextState, result);
+      return await finalizeStep(nextState, result);
       /* c8 ignore next 5 */
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: stepIdx }, timestamp: Date.now() });
-      throw error;
+      // Return error result (consistent with stepStream)
+      return {
+        state,
+        result: { type: 'error', error: err, tokens: { input: 0, output: 0 } },
+      };
     }
   }
 
@@ -1306,7 +1310,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('error', { error: err, context: { step: totalSteps }, timestamp: Date.now() });
-      throw error;
+      // Return error result (consistent with runStream)
+      return finalizeRun(currentState, {
+        type: 'error',
+        error: err,
+        totalSteps,
+        tokens: runTokens,
+      });
     }
   }
 

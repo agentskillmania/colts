@@ -666,27 +666,29 @@ describe('runStream()', () => {
     });
     const state = createAgentState(defaultConfig);
 
+    // stepStream catches execution errors and returns error result (does not throw)
     const events: { type: string; error?: Error }[] = [];
-    let finalResult;
-    let errorThrown = false;
+    let finalResult: { state: AgentState; result: { type: string; error?: Error } } | undefined;
 
-    try {
-      const iterator = runner.stepStream(state);
-      while (true) {
-        const { done, value } = await iterator.next();
-        if (done) {
-          finalResult = value;
-          break;
-        }
-        events.push(value as { type: string; error?: Error });
+    const iterator = runner.stepStream(state);
+    while (true) {
+      const { done, value } = await iterator.next();
+      if (done) {
+        finalResult = value as typeof finalResult;
+        break;
       }
-    } catch (error) {
-      errorThrown = true;
+      events.push(value as { type: string; error?: Error });
     }
 
-    // Should have error event or throw
-    const eventTypes = events.map((e) => e.type);
-    expect(errorThrown || eventTypes.includes('error')).toBe(true);
+    // Should return error result
+    expect(finalResult).toBeDefined();
+    expect(finalResult!.result.type).toBe('error');
+    expect(finalResult!.result.error!.message).toBe('Step Error');
+
+    // Should have yielded an error event before returning
+    const errorEvents = events.filter((e) => e.type === 'error');
+    expect(errorEvents.length).toBeGreaterThanOrEqual(1);
+    expect(errorEvents[0]!.error!.message).toBe('Step Error');
   });
 
   it('should reach maxSteps in runStream', async () => {
@@ -850,16 +852,25 @@ describe('runStream()', () => {
       errors.push({ message: e.error.message });
     });
 
-    let errorThrown = false;
-    try {
-      for await (const _ of runner.runStream(state, { maxSteps: 1 })) {
-        // consume
+    // runStream catches execution errors and returns error result (does not throw)
+    let finalResult: { state: AgentState; result: { type: string; error?: Error } } | undefined;
+    const iterator = runner.runStream(state, { maxSteps: 1 });
+    while (true) {
+      const { done, value } = await iterator.next();
+      if (done) {
+        finalResult = value as typeof finalResult;
+        break;
       }
-    } catch {
-      errorThrown = true;
     }
 
-    expect(errorThrown || errors.length > 0).toBe(true);
+    // Should return error result
+    expect(finalResult).toBeDefined();
+    expect(finalResult!.result.type).toBe('error');
+    expect(finalResult!.result.error!.message).toBe('Stream Error');
+
+    // Should have emitted error event
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors[0]!.message).toBe('Stream Error');
   });
 
   it('should preserve content in assistant message when tool_calls are present', async () => {
