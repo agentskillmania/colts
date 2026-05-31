@@ -162,7 +162,11 @@ export class StepRunner {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       emit('error', { error: err, context: { step: stepIdx }, timestamp: Date.now() });
-      throw error;
+      // Return error result (consistent with streaming mode)
+      return {
+        state: currentState,
+        result: { type: 'error', error: err, tokens: stepTokens },
+      };
     }
   }
 

@@ -1058,7 +1058,12 @@ describe('step()', () => {
       });
 
       const state = createAgentState(defaultConfig);
-      await expect(runner.step(state)).rejects.toThrow('beforeAdvance error');
+      // beforeAdvance throw is an execution error → returns error result
+      const { result } = await runner.step(state);
+      expect(result.type).toBe('error');
+      if (result.type === 'error') {
+        expect(result.error.message).toBe('beforeAdvance error');
+      }
     });
 
     it('should propagate error when afterStep throws', async () => {
@@ -1084,7 +1089,12 @@ describe('step()', () => {
       });
 
       const state = createAgentState(defaultConfig);
-      await expect(runner.step(state)).rejects.toThrow('afterStep error');
+      // afterStep throw is an execution error → returns error result
+      const { result } = await runner.step(state);
+      expect(result.type).toBe('error');
+      if (result.type === 'error') {
+        expect(result.error.message).toBe('afterStep error');
+      }
     });
   });
 });
