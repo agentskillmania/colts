@@ -557,10 +557,9 @@ describe('AgentRunner', () => {
 
       // Should include user messages
       expect(userMsgs).toContainEqual(expect.objectContaining({ content: 'Hello' }));
-      // Should include ALL assistant messages (both thought and final)
+      // Thought messages are skipped by the assembler — only action messages appear
       expect(assistantContents).toEqual([
         'Understood. I will follow these instructions.',
-        'Thinking about it',
         'Final response',
       ]);
     });

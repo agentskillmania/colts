@@ -411,7 +411,7 @@ export class PiAiAdapter {
       const result = await piComplete(model, context, {
         apiKey,
         thinkingEnabled: options.thinkingEnabled,
-        reasoning: options.thinkingEnabled && model.reasoning ? 'medium' : undefined,
+        reasoningEffort: options.thinkingEnabled && model.reasoning ? 'high' : undefined,
         signal: options.signal,
       } as Record<string, unknown>);
 
@@ -630,10 +630,11 @@ export class PiAiAdapter {
           iterator: AsyncIterator<AssistantMessageEvent>;
           firstEvent: AssistantMessageEvent;
         }> => {
+          const reasoningEffort = options.thinkingEnabled && model.reasoning ? 'high' : undefined;
           const stream = piStream(model, context, {
             apiKey,
             thinkingEnabled: options.thinkingEnabled,
-            reasoning: options.thinkingEnabled && model.reasoning ? 'medium' : undefined,
+            reasoningEffort,
             signal: options.signal,
           } as Record<string, unknown>);
           const iter = stream[Symbol.asyncIterator]();

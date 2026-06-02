@@ -280,6 +280,92 @@ describe('DefaultMessageAssembler', () => {
     });
   });
 
+  describe('Thought message skipping', () => {
+    it('should skip assistant thought messages from conversation history', () => {
+      const state: AgentState = {
+        id: 'test',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [
+            { role: 'user', content: 'Hello' },
+            {
+              role: 'assistant',
+              type: 'thought',
+              content: 'Let me think about this...',
+            },
+            { role: 'assistant', content: 'Hi there!' },
+          ],
+          stepCount: 0,
+        },
+      };
+
+      const messages = assembler.build(state, { model: 'gpt-4' });
+
+      // No thought content should appear in the output
+      const hasThought = messages.some(
+        (m) => typeof m.content === 'string' && m.content.includes('Let me think about this')
+      );
+      expect(hasThought).toBe(false);
+
+      // Non-thought assistant message should still be present
+      const hasReply = messages.some(
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c) => 'text' in c && c.text === 'Hi there!')
+      );
+      expect(hasReply).toBe(true);
+    });
+
+    it('should skip multiple consecutive thought messages', () => {
+      const state: AgentState = {
+        id: 'test',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [
+            { role: 'user', content: 'Solve this' },
+            { role: 'assistant', type: 'thought', content: 'Thinking step 1...' },
+            { role: 'assistant', type: 'thought', content: 'Thinking step 2...' },
+            { role: 'assistant', content: 'Here is the answer.' },
+          ],
+          stepCount: 0,
+        },
+      };
+
+      const messages = assembler.build(state, { model: 'gpt-4' });
+
+      const hasThought1 = messages.some(
+        (m) => typeof m.content === 'string' && m.content.includes('Thinking step 1')
+      );
+      const hasThought2 = messages.some(
+        (m) => typeof m.content === 'string' && m.content.includes('Thinking step 2')
+      );
+      expect(hasThought1).toBe(false);
+      expect(hasThought2).toBe(false);
+    });
+
+    it('should preserve regular assistant messages when no thoughts exist', () => {
+      const state: AgentState = {
+        id: 'test',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hi!' },
+            { role: 'user', content: 'How are you?' },
+            { role: 'assistant', content: 'Fine!' },
+          ],
+          stepCount: 0,
+        },
+      };
+
+      const messages = assembler.build(state, { model: 'gpt-4' });
+
+      const assistantMsgs = messages.filter((m) => m.role === 'assistant');
+      expect(assistantMsgs).toHaveLength(2);
+    });
+  });
+
   describe('enablePromptThinking', () => {
     it('should inject thinking guidance when enabled', () => {
       const state = createMockState();
