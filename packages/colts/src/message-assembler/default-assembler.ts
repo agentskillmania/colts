@@ -9,6 +9,7 @@
  * - Static prefix: system prompt + instructions + skill catalog + sub-agents + thinking guidance
  * - Dynamic content (todolist, active skill): injected as <system-reminder>
  *   into the last user message, keeping the static prefix stable for caching
+ * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
 
 import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
@@ -107,14 +108,28 @@ export class DefaultMessageAssembler implements IMessageAssembler {
       messages.push(this.createFakeAck(opts.model, now));
     }
 
+    // ── Turn boundary scan ──
+    // Find the last user message index for same-turn thought handling.
+    // Thoughts after this index are same-turn (include); at or before are cross-turn (skip).
+    let lastUserMsgIdx = -1;
+    for (let i = startIdx; i < state.context.messages.length; i++) {
+      if (state.context.messages[i].role === 'user') {
+        lastUserMsgIdx = i;
+      }
+    }
+
     // ── Conversation history ──
     for (let i = startIdx; i < state.context.messages.length; i++) {
       const msg = state.context.messages[i];
 
-      // Skip thought messages — they are internal reasoning, not conversation turns.
-      // Same-turn thought handling will be added in a follow-up spec.
+      // Skip cross-turn thought messages — old reasoning is irrelevant and wastes tokens.
+      // Same-turn thoughts (after last user message) fall through to the assistant handler
+      // so the LLM retains its own reasoning context during tool chains.
       if (msg.role === 'assistant' && msg.type === 'thought') {
-        continue;
+        if (i <= lastUserMsgIdx) {
+          continue; // Cross-turn: skip
+        }
+        // Same-turn: fall through to normal assistant message conversion
       }
 
       switch (msg.role) {
