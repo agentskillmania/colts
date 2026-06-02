@@ -4,37 +4,24 @@
  * Migrated from runner-message-builder.ts. Converts internal AgentState
  * messages to pi-ai Message format. Handles system prompts, skill guides,
  * compression summaries, and conversation history.
+ *
+ * KV-cache design:
+ * - Static prefix: system prompt + instructions + skill catalog + sub-agents + thinking guidance
+ * - Dynamic content (todolist, active skill): injected as <system-reminder>
+ *   into the last user message, keeping the static prefix stable for caching
  */
 
 import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
 
-import type { AgentState, SkillState } from '../types.js';
+import type { AgentState } from '../types.js';
 import type { BuildMessagesOptions, IMessageAssembler } from './types.js';
 
-/**
- * Build skill mode guide based on current skill state
- *
- * Unified guide for all skill levels. Every active skill must call
- * return_skill when done, and may call load_skill to delegate.
- */
-function buildSkillGuide(skillState: SkillState | undefined): string | null {
-  if (!skillState || !skillState.current) return null;
-
-  return `=== SKILL MODE ===
-You are currently executing the '${skillState.current}' skill.
-
-You may switch to another skill at any time using the \`load_skill\` tool.
-When you COMPLETE your task, you MUST call the \`return_skill\` tool:
-{
-  "result": "Your final answer here (be detailed)",
-  "status": "success"
-}
-
-Rules:
-- ALWAYS use return_skill when done — do NOT just respond with text
-- You may call load_skill to delegate sub-tasks to specialized skills
-=============================`.trim();
-}
+/** Status-to-checkbox mapping for todolist display */
+const STATUS_CHECK: Record<string, string> = {
+  pending: '[ ]',
+  in_progress: '[~]',
+  completed: '[x]',
+};
 
 /**
  * Default IMessageAssembler implementation
@@ -55,8 +42,9 @@ export class DefaultMessageAssembler implements IMessageAssembler {
     const messages: PiAIMessage[] = [];
     const now = Date.now();
 
-    // Combine system prompts into a single user message prefix
-    // pi-ai doesn't have a 'system' role, so we prepend to first user message
+    // ── Static prefix ──
+    // Only content that never changes within a session.
+    // Dynamic content (skill state, todolist) is injected later as <system-reminder>.
     const systemParts: string[] = [];
 
     if (opts.systemPrompt) {
@@ -67,18 +55,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
       systemParts.push(state.config.instructions);
     }
 
-    // Inject current skill instructions (if in sub-skill mode)
-    if (state.context.skillState?.loadedInstructions) {
-      systemParts.push(state.context.skillState.loadedInstructions);
-    }
-
-    // Inject dynamic skill guide based on current mode
-    const skillGuide = buildSkillGuide(state.context.skillState);
-    if (skillGuide) {
-      systemParts.push(skillGuide);
-    }
-
-    // Always inject global skill list when a skill provider is configured
+    // Skill catalog — static, skills don't change during a session
     if (opts.skillProvider) {
       const skills = opts.skillProvider.listSkills();
       if (skills.length > 0) {
@@ -92,12 +69,12 @@ export class DefaultMessageAssembler implements IMessageAssembler {
     // Prompt-level thinking guidance
     if (opts.enablePromptThinking) {
       systemParts.push(
-        'Before answering or using tools, please think step by step inside <think>...</think> tags. ' +
-          'After the closing </think> tag, provide your final response or tool calls.'
+        'Before answering or using tools, please think step by step inside <think...</think (closing)> tags. ' +
+          'After the closing </think (closing)> tag, provide your final response or tool calls.'
       );
     }
 
-    // Inject sub-agent list into system prompt
+    // Sub-agent list — static
     if (opts.subAgentConfigs && opts.subAgentConfigs.size > 0) {
       const subAgentLines = Array.from(opts.subAgentConfigs.values()).map(
         (sa) => `- ${sa.name}: ${sa.description}`
@@ -107,7 +84,6 @@ export class DefaultMessageAssembler implements IMessageAssembler {
       );
     }
 
-    // Add combined system prompt as first message if exists
     if (systemParts.length > 0) {
       messages.push({
         role: 'user',
@@ -115,64 +91,28 @@ export class DefaultMessageAssembler implements IMessageAssembler {
         timestamp: now,
       });
 
-      // Fake assistant acknowledgment to maintain conversation flow
-      messages.push({
-        role: 'assistant',
-        content: [{ type: 'text', text: 'Understood. I will follow these instructions.' }],
-        api: 'openai-completions',
-        provider: 'openai',
-        model: opts.model,
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: 'stop',
-        timestamp: now,
-      });
+      messages.push(this.createFakeAck(opts.model, now));
     }
 
-    // Add conversation history (respecting compression boundary)
+    // ── Compression summary ──
     const compression = state.context.compression;
     const startIdx = compression ? compression.anchor : 0;
 
-    // If compressed, inject summary as a system-like user message
     if (compression && compression.summary) {
       messages.push({
         role: 'user',
         content: `[Conversation History Summary]\n${compression.summary}`,
         timestamp: now,
       });
-      messages.push({
-        role: 'assistant',
-        content: [
-          { type: 'text', text: 'Understood. I have the context from our previous conversation.' },
-        ],
-        api: 'openai-completions',
-        provider: 'openai',
-        model: opts.model,
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: 'stop',
-        timestamp: now,
-      });
+      messages.push(this.createFakeAck(opts.model, now));
     }
 
+    // ── Conversation history ──
     for (let i = startIdx; i < state.context.messages.length; i++) {
       const msg = state.context.messages[i];
 
       // Skip thought messages — they are internal reasoning, not conversation turns.
-      // Sending them back to the LLM would make the model treat its own thinking
-      // as spoken text, polluting the conversation context.
+      // Same-turn thought handling will be added in a follow-up spec.
       if (msg.role === 'assistant' && msg.type === 'thought') {
         continue;
       }
@@ -221,7 +161,6 @@ export class DefaultMessageAssembler implements IMessageAssembler {
         }
 
         case 'tool':
-          // Tool results use pi-ai's toolResult role
           messages.push({
             role: 'toolResult',
             toolCallId: msg.toolCallId ?? 'unknown',
@@ -234,6 +173,110 @@ export class DefaultMessageAssembler implements IMessageAssembler {
       }
     }
 
+    // ── Dynamic context injection ──
+    // Inject todolist and active skill as <system-reminder> into the last user message.
+    // This keeps the static prefix stable for KV-cache.
+    const reminder = this.buildDynamicReminder(state);
+    if (reminder && messages.length > 0) {
+      const lastIdx = messages.length - 1;
+      const last = messages[lastIdx];
+      if (last.role === 'user') {
+        // Append to existing user message
+        if (typeof last.content === 'string') {
+          messages[lastIdx] = {
+            ...last,
+            content:
+              last.content + '\n\n---\n<system-reminder>\n' + reminder + '\n</system-reminder>',
+          };
+        } else {
+          // Array content — append a new text part
+          messages[lastIdx] = {
+            ...last,
+            content: [
+              ...last.content,
+              {
+                type: 'text' as const,
+                text: '\n\n---\n<system-reminder>\n' + reminder + '\n</system-reminder>',
+              },
+            ],
+          };
+        }
+      } else {
+        // Last message is not user — add a new user message
+        messages.push({
+          role: 'user',
+          content: '<system-reminder>\n' + reminder + '\n</system-reminder>',
+          timestamp: now,
+        });
+      }
+    }
+
     return messages;
+  }
+
+  /**
+   * Create a fake assistant acknowledgment
+   *
+   * Used to maintain the user/assistant conversation flow pattern
+   * required by pi-ai (no system role).
+   */
+  private createFakeAck(model: string, timestamp: number): PiAIMessage {
+    return {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Understood. I will follow these instructions.' }],
+      api: 'openai-completions',
+      provider: 'openai',
+      model,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp,
+    };
+  }
+
+  /**
+   * Build <system-reminder> content from dynamic state
+   *
+   * Reads todolist and active skill directly from state.context.
+   * Todolist comes from wrangler's module augmentation (state.context.todoList).
+   * Active skill comes from colts core (state.context.skillState).
+   *
+   * @returns Formatted reminder text, or null if no dynamic content exists
+   */
+  private buildDynamicReminder(state: AgentState): string | null {
+    const parts: string[] = [];
+
+    // Todolist — may come from wrangler's module augmentation
+    const todoList = (state.context as unknown as Record<string, unknown>).todoList as
+      | { items: Array<{ id: number; subject: string; status: string }> }
+      | undefined;
+    if (todoList?.items?.length) {
+      const lines = todoList.items.map(
+        (i) => `- ${STATUS_CHECK[i.status] ?? '[ ]'} ${i.id}. ${i.subject}`
+      );
+      parts.push('## Task List\n' + lines.join('\n'));
+    }
+
+    // Active skill — from colts core
+    const skillState = state.context.skillState;
+    if (skillState?.current) {
+      parts.push('## Active Skill: ' + skillState.current);
+      if (skillState.loadedInstructions) {
+        parts.push(skillState.loadedInstructions);
+      }
+      parts.push(
+        `You are currently executing the '${skillState.current}' skill.\n\n` +
+          'You may switch to another skill at any time using the `load_skill` tool.\n' +
+          'When you COMPLETE your task, you MUST call the `return_skill` tool.'
+      );
+    }
+
+    return parts.length > 0 ? parts.join('\n\n') : null;
   }
 }
