@@ -169,6 +169,14 @@ export class DefaultMessageAssembler implements IMessageAssembler {
 
     for (let i = startIdx; i < state.context.messages.length; i++) {
       const msg = state.context.messages[i];
+
+      // Skip thought messages — they are internal reasoning, not conversation turns.
+      // Sending them back to the LLM would make the model treat its own thinking
+      // as spoken text, polluting the conversation context.
+      if (msg.role === 'assistant' && msg.type === 'thought') {
+        continue;
+      }
+
       switch (msg.role) {
         case 'user':
           messages.push({
