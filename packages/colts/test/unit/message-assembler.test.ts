@@ -423,8 +423,8 @@ describe('DefaultMessageAssembler', () => {
     });
   });
 
-  describe('Thought message skipping', () => {
-    it('should skip assistant thought messages from conversation history', () => {
+  describe('Thought message handling', () => {
+    it('should include same-turn thought in output messages', () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -444,13 +444,16 @@ describe('DefaultMessageAssembler', () => {
 
       const messages = assembler.build(state, { model: 'gpt-4' });
 
-      // No thought content should appear in the output
+      // Same-turn thought (after last user) should appear as assistant message
       const hasThought = messages.some(
-        (m) => typeof m.content === 'string' && m.content.includes('Let me think about this')
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c) => 'text' in c && c.text === 'Let me think about this...')
       );
-      expect(hasThought).toBe(false);
+      expect(hasThought).toBe(true);
 
-      // Non-thought assistant message should still be present
+      // Non-thought assistant message should also be present
       const hasReply = messages.some(
         (m) =>
           m.role === 'assistant' &&
@@ -460,7 +463,37 @@ describe('DefaultMessageAssembler', () => {
       expect(hasReply).toBe(true);
     });
 
-    it('should skip multiple consecutive thought messages', () => {
+    it('should skip cross-turn thought messages', () => {
+      const state: AgentState = {
+        id: 'test',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [
+            {
+              role: 'assistant',
+              type: 'thought',
+              content: 'Old thinking from previous turn...',
+            },
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hi there!' },
+          ],
+          stepCount: 0,
+        },
+      };
+
+      const messages = assembler.build(state, { model: 'gpt-4' });
+
+      // Cross-turn thought (before last user) should NOT appear
+      const hasOldThought = messages.some(
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c) => 'text' in c && c.text === 'Old thinking from previous turn...')
+      );
+      expect(hasOldThought).toBe(false);
+    });
+
+    it('should include multiple same-turn thoughts', () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -468,6 +501,12 @@ describe('DefaultMessageAssembler', () => {
           messages: [
             { role: 'user', content: 'Solve this' },
             { role: 'assistant', type: 'thought', content: 'Thinking step 1...' },
+            {
+              role: 'assistant',
+              content: 'Reading file...',
+              toolCalls: [{ id: 'tc-1', name: 'read_file', arguments: { path: '/tmp/a' } }],
+            },
+            { role: 'tool', content: 'file contents', toolCallId: 'tc-1', toolName: 'read_file' },
             { role: 'assistant', type: 'thought', content: 'Thinking step 2...' },
             { role: 'assistant', content: 'Here is the answer.' },
           ],
@@ -477,14 +516,94 @@ describe('DefaultMessageAssembler', () => {
 
       const messages = assembler.build(state, { model: 'gpt-4' });
 
+      // Both same-turn thoughts should appear
       const hasThought1 = messages.some(
-        (m) => typeof m.content === 'string' && m.content.includes('Thinking step 1')
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c) => 'text' in c && c.text === 'Thinking step 1...')
       );
       const hasThought2 = messages.some(
-        (m) => typeof m.content === 'string' && m.content.includes('Thinking step 2')
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c) => 'text' in c && c.text === 'Thinking step 2...')
       );
-      expect(hasThought1).toBe(false);
-      expect(hasThought2).toBe(false);
+      expect(hasThought1).toBe(true);
+      expect(hasThought2).toBe(true);
+    });
+
+    it('should handle mixed same-turn and cross-turn thoughts', () => {
+      const state: AgentState = {
+        id: 'test',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [
+            {
+              role: 'assistant',
+              type: 'thought',
+              content: 'Old thinking from before...',
+            },
+            { role: 'user', content: 'New request' },
+            {
+              role: 'assistant',
+              type: 'thought',
+              content: 'Fresh thinking...',
+            },
+            { role: 'assistant', content: 'Done.' },
+          ],
+          stepCount: 0,
+        },
+      };
+
+      const messages = assembler.build(state, { model: 'gpt-4' });
+
+      // Cross-turn thought should NOT appear
+      const hasOldThought = messages.some(
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c) => 'text' in c && c.text === 'Old thinking from before...')
+      );
+      expect(hasOldThought).toBe(false);
+
+      // Same-turn thought should appear
+      const hasNewThought = messages.some(
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c) => 'text' in c && c.text === 'Fresh thinking...')
+      );
+      expect(hasNewThought).toBe(true);
+    });
+
+    it('should include same-turn thought even when it is the last message', () => {
+      const state: AgentState = {
+        id: 'test',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [
+            { role: 'user', content: 'What is 2+2?' },
+            {
+              role: 'assistant',
+              type: 'thought',
+              content: 'Calculating the sum...',
+            },
+          ],
+          stepCount: 0,
+        },
+      };
+
+      const messages = assembler.build(state, { model: 'gpt-4' });
+
+      // Thought is same-turn and last message — should still appear
+      const hasThought = messages.some(
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c) => 'text' in c && c.text === 'Calculating the sum...')
+      );
+      expect(hasThought).toBe(true);
     });
 
     it('should preserve regular assistant messages when no thoughts exist', () => {
