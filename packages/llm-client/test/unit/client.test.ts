@@ -182,4 +182,47 @@ describe('LLMClient', () => {
       expect(meta.maxTokens).toBe(16384);
     });
   });
+
+  describe('getModelCapabilities', () => {
+    it('returns strict capabilities from registered model', () => {
+      client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+      client.registerApiKey({
+        key: 'test-key',
+        provider: 'openai',
+        maxConcurrency: 5,
+        models: [
+          {
+            modelId: 'gpt-4',
+            maxConcurrency: 3,
+            contextWindow: 200000,
+            maxTokens: 131072,
+            reasoning: true,
+            input: ['text', 'image'],
+          },
+        ],
+      });
+
+      const caps = client.getModelCapabilities('gpt-4');
+      expect(caps.contextWindow).toBe(200000);
+      expect(caps.maxTokens).toBe(131072);
+      expect(caps.reasoning).toBe(true);
+      expect(caps.input).toEqual(['text', 'image']);
+    });
+
+    it('returns fallback capabilities for unregistered model', () => {
+      client.registerProvider({ name: 'openai', maxConcurrency: 10 });
+      client.registerApiKey({
+        key: 'test-key',
+        provider: 'openai',
+        maxConcurrency: 5,
+        models: [{ modelId: 'other-model', maxConcurrency: 3 }],
+      });
+
+      const caps = client.getModelCapabilities('other-model');
+      expect(caps.contextWindow).toBe(128000);
+      expect(caps.maxTokens).toBe(16384);
+      expect(caps.reasoning).toBe(true);
+      expect(caps.input).toEqual(['text']);
+    });
+  });
 });

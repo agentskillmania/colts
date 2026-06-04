@@ -44,6 +44,8 @@ describe('PiAiAdapter', () => {
       const meta = adapter.getModelMeta('unknown-model');
       expect(meta.contextWindow).toBe(128000);
       expect(meta.maxTokens).toBe(16384);
+      expect(meta.reasoning).toBe(true);
+      expect(meta.input).toEqual(['text']);
     });
 
     it('returns user-provided metadata', () => {
@@ -55,6 +57,12 @@ describe('PiAiAdapter', () => {
       });
       expect(meta.contextWindow).toBe(200000);
       expect(meta.maxTokens).toBe(131072);
+    });
+
+    it('allows input override via meta', () => {
+      const adapter = new PiAiAdapter();
+      const meta = adapter.getModelMeta('gpt-4', { input: ['text', 'image'] });
+      expect(meta.input).toEqual(['text', 'image']);
     });
 
     it('falls back for individual fields not provided', () => {
@@ -84,6 +92,31 @@ describe('PiAiAdapter', () => {
       });
       expect(meta.contextWindow).toBe(32000);
       expect(meta.maxTokens).toBe(2048);
+    });
+  });
+
+  describe('getModelCapabilities', () => {
+    it('returns strict capabilities with all required fields for unknown models', () => {
+      const adapter = new PiAiAdapter();
+      const caps = adapter.getModelCapabilities('unknown-model');
+      expect(caps.contextWindow).toBe(128000);
+      expect(caps.maxTokens).toBe(16384);
+      expect(caps.reasoning).toBe(true);
+      expect(caps.input).toEqual(['text']);
+    });
+
+    it('returns overridden capabilities when meta provided', () => {
+      const adapter = new PiAiAdapter();
+      const caps = adapter.getModelCapabilities('gpt-4', {
+        contextWindow: 64000,
+        maxTokens: 2048,
+        reasoning: false,
+        input: ['text', 'image'],
+      });
+      expect(caps.contextWindow).toBe(64000);
+      expect(caps.maxTokens).toBe(2048);
+      expect(caps.reasoning).toBe(false);
+      expect(caps.input).toEqual(['text', 'image']);
     });
   });
 
