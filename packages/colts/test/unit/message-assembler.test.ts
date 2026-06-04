@@ -134,28 +134,6 @@ describe('DefaultMessageAssembler', () => {
       const content = typeof last.content === 'string' ? last.content : '';
       expect(content).toContain('<system-reminder>');
     });
-
-    it('should include todolist in system-reminder when todoList is set', () => {
-      const state = createMockState(undefined);
-      (state.context as any).todoList = {
-        items: [
-          { id: 1, subject: 'Task A', status: 'pending' },
-          { id: 2, subject: 'Task B', status: 'in_progress' },
-        ],
-      };
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
-
-      expect(content).toContain('<system-reminder>');
-      expect(content).toContain('## Task List');
-      expect(content).toContain('[ ] 1. Task A');
-      expect(content).toContain('[~] 2. Task B');
-    });
   });
 
   describe('Skill mode guides', () => {

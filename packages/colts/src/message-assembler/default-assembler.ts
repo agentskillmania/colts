@@ -7,7 +7,7 @@
  *
  * KV-cache design:
  * - Static prefix: system prompt + instructions + skill catalog + sub-agents + thinking guidance
- * - Dynamic content (todolist, active skill): injected as <system-reminder>
+ * - Dynamic content (active skill): injected as <system-reminder>
  *   into the last user message, keeping the static prefix stable for caching
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
@@ -16,13 +16,6 @@ import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
 
 import type { AgentState } from '../types.js';
 import type { BuildMessagesOptions, IMessageAssembler } from './types.js';
-
-/** Status-to-checkbox mapping for todolist display */
-const STATUS_CHECK: Record<string, string> = {
-  pending: '[ ]',
-  in_progress: '[~]',
-  completed: '[x]',
-};
 
 /**
  * Default IMessageAssembler implementation
@@ -45,7 +38,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
 
     // ── Static prefix ──
     // Only content that never changes within a session.
-    // Dynamic content (skill state, todolist) is injected later as <system-reminder>.
+    // Dynamic content (skill state) is injected later as <system-reminder>.
     const systemParts: string[] = [];
 
     if (opts.systemPrompt) {
@@ -189,7 +182,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
     }
 
     // ── Dynamic context injection ──
-    // Inject todolist and active skill as <system-reminder> into the last user message.
+    // Inject active skill as <system-reminder> into the last user message.
     // This keeps the static prefix stable for KV-cache.
     const reminder = this.buildDynamicReminder(state);
     if (reminder && messages.length > 0) {
@@ -258,25 +251,13 @@ export class DefaultMessageAssembler implements IMessageAssembler {
   /**
    * Build <system-reminder> content from dynamic state
    *
-   * Reads todolist and active skill directly from state.context.
-   * Todolist comes from wrangler's module augmentation (state.context.todoList).
-   * Active skill comes from colts core (state.context.skillState).
+   * Reads active skill from state.context.skillState.
+   * Todolist is a wrangler concern and handled by MarkdownMessageAssembler.
    *
    * @returns Formatted reminder text, or null if no dynamic content exists
    */
   private buildDynamicReminder(state: AgentState): string | null {
     const parts: string[] = [];
-
-    // Todolist — may come from wrangler's module augmentation
-    const todoList = (state.context as unknown as Record<string, unknown>).todoList as
-      | { items: Array<{ id: number; subject: string; status: string }> }
-      | undefined;
-    if (todoList?.items?.length) {
-      const lines = todoList.items.map(
-        (i) => `- ${STATUS_CHECK[i.status] ?? '[ ]'} ${i.id}. ${i.subject}`
-      );
-      parts.push('## Task List\n' + lines.join('\n'));
-    }
 
     // Active skill — from colts core
     const skillState = state.context.skillState;
