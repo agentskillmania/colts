@@ -193,7 +193,7 @@ export class PiAiAdapter {
    */
   private createModel(
     modelId: string,
-    meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean }
+    meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean; input?: string[] }
   ): Model<string> {
     // Try to get model from pi-ai registry across known providers
     const providers = ['openai', 'opencode', 'opencode-go', 'anthropic', 'google'] as const;
@@ -213,6 +213,7 @@ export class PiAiAdapter {
             ...(meta.contextWindow !== undefined && { contextWindow: meta.contextWindow }),
             ...(meta.maxTokens !== undefined && { maxTokens: meta.maxTokens }),
             ...(meta.reasoning !== undefined && { reasoning: meta.reasoning }),
+            ...(meta.input !== undefined && { input: meta.input }),
           } as Model<string>;
         }
 
@@ -231,7 +232,7 @@ export class PiAiAdapter {
       provider: 'openai',
       baseUrl: this.customBaseUrl ?? 'https://api.openai.com/v1',
       reasoning: meta?.reasoning ?? true,
-      input: ['text'],
+      input: meta?.input ?? ['text'],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: meta?.contextWindow ?? 128000,
       maxTokens: meta?.maxTokens ?? 16384,
@@ -248,13 +249,27 @@ export class PiAiAdapter {
    */
   getModelMeta(
     modelId: string,
-    meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean }
+    meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean; input?: string[] }
   ): import('./types.js').ModelMeta {
     const model = this.createModel(modelId, meta);
     return {
       contextWindow: model.contextWindow,
       maxTokens: model.maxTokens,
-      reasoning: meta?.reasoning,
+      reasoning: model.reasoning,
+      input: model.input,
+    };
+  }
+
+  getModelCapabilities(
+    modelId: string,
+    meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean; input?: string[] }
+  ): import('./types.js').ModelCapabilities {
+    const model = this.createModel(modelId, meta);
+    return {
+      contextWindow: model.contextWindow,
+      maxTokens: model.maxTokens,
+      reasoning: model.reasoning,
+      input: model.input,
     };
   }
 

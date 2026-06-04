@@ -83,6 +83,43 @@ export interface ProviderConfig {
 }
 
 /**
+ * Model metadata for context management.
+ *
+ * @remarks
+ * Backward-compatible interface used by {@link LLMClient.getModelMeta}.
+ * All capability fields are optional to avoid breaking existing callers.
+ */
+export interface ModelMeta {
+  /** Maximum context window size in tokens */
+  contextWindow: number;
+  /** Maximum output tokens per request */
+  maxTokens: number;
+  /** Whether the model supports native thinking/reasoning */
+  reasoning?: boolean;
+  /** Supported input modalities (e.g. ['text'], ['text', 'image']) */
+  input?: string[];
+}
+
+/**
+ * Resolved model capabilities with all fields required.
+ *
+ * @remarks
+ * This is the strict version of {@link ModelMeta} where every field
+ * is guaranteed to be present after merging pi-ai registry defaults
+ * with user overrides.
+ */
+export interface ModelCapabilities {
+  /** Maximum context window size in tokens */
+  contextWindow: number;
+  /** Maximum output tokens per request */
+  maxTokens: number;
+  /** Whether the model supports native thinking/reasoning */
+  reasoning: boolean;
+  /** Supported input modalities (e.g. ['text'], ['text', 'image']) */
+  input: string[];
+}
+
+/**
  * Concurrency constraint for a specific model under an API key.
  *
  * @remarks
@@ -139,6 +176,15 @@ export interface ModelConstraint {
    * thinking parameters silently ignore them.
    */
   reasoning?: boolean;
+
+  /**
+   * Supported input modalities for this model.
+   *
+   * @remarks
+   * If not set, defaults to ['text'] in the adapter fallback.
+   * Examples: ['text'], ['text', 'image'], ['text', 'image', 'audio']
+   */
+  input?: string[];
 }
 
 /**
@@ -776,16 +822,4 @@ export interface TrackedProvider extends ProviderConfig {
    * Number of currently active requests for this provider.
    */
   activeCount: number;
-}
-
-/**
- * Model metadata for context management.
- */
-export interface ModelMeta {
-  /** Maximum context window size in tokens */
-  contextWindow: number;
-  /** Maximum output tokens per request */
-  maxTokens: number;
-  /** Whether the model supports native thinking/reasoning */
-  reasoning?: boolean;
 }

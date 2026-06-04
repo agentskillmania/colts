@@ -423,8 +423,33 @@ export class LLMClient extends EventEmitter {
    * otherwise returns adapter defaults.
    */
   getModelMeta(modelId: string): import('./types.js').ModelMeta {
-    const meta = this.scheduler.getModelMeta(modelId);
-    return this.adapter.getModelMeta(modelId, meta);
+    const constraint = this.scheduler.getModelConstraint(modelId);
+    return this.adapter.getModelMeta(
+      modelId,
+      constraint
+        ? {
+            contextWindow: constraint.contextWindow,
+            maxTokens: constraint.maxTokens,
+            reasoning: constraint.reasoning,
+            input: constraint.input,
+          }
+        : undefined
+    );
+  }
+
+  getModelCapabilities(modelId: string): import('./types.js').ModelCapabilities {
+    const constraint = this.scheduler.getModelConstraint(modelId);
+    return this.adapter.getModelCapabilities(
+      modelId,
+      constraint
+        ? {
+            contextWindow: constraint.contextWindow,
+            maxTokens: constraint.maxTokens,
+            reasoning: constraint.reasoning,
+            input: constraint.input,
+          }
+        : undefined
+    );
   }
 
   /**
