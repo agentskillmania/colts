@@ -50,6 +50,7 @@ function createMockLLMProvider(summaryText: string): ILLMProvider {
       stopReason: 'stop',
     }),
     stream: vi.fn(),
+    getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
   };
 }
 

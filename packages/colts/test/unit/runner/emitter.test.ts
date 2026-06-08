@@ -231,6 +231,7 @@ describe('AgentRunner EventEmitter', () => {
         stream: vi.fn(async function* () {
           throw new Error('LLM Error');
         }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
       };
 
       const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
