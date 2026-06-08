@@ -160,7 +160,7 @@ export interface AgentState {
 
 // ========== Runner Configuration Interfaces ==========
 
-import type { LLMResponse, StreamEvent } from '@agentskillmania/llm-client';
+import type { LLMResponse, StreamEvent, ModelMeta } from '@agentskillmania/llm-client';
 import type { Message as LLMMessage, Tool as LLMTool } from '@mariozechner/pi-ai';
 import type { ZodTypeAny } from 'zod';
 
@@ -206,6 +206,17 @@ export interface ILLMProvider {
     thinkingEnabled?: boolean;
     signal?: AbortSignal;
   }): AsyncIterable<StreamEvent>;
+
+  /**
+   * Get model metadata (context window size, max output tokens, capabilities).
+   *
+   * Used by runner for context-window-aware features like compression threshold
+   * and by upstream consumers (wrangler, daemon) for diagnostics.
+   *
+   * @param modelId - Model identifier to query
+   * @returns Model metadata, or a default if the model is unknown
+   */
+  getModelMeta(modelId: string): ModelMeta;
 }
 
 /**

@@ -7,7 +7,7 @@
  */
 
 import { vi } from 'vitest';
-import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
+import type { LLMClient, LLMResponse, ModelMeta } from '@agentskillmania/llm-client';
 
 export interface MockLLMOptions {
   /**
@@ -190,6 +190,11 @@ export function createMockLLMClient(
 
       callIndex++;
     }),
+
+    getModelMeta: vi.fn().mockReturnValue({
+      contextWindow: 128000,
+      maxTokens: 4096,
+    } satisfies ModelMeta),
   } as unknown as LLMClient;
 }
 
@@ -209,6 +214,10 @@ export function createNoStreamMockLLMClient(responses: LLMResponse[]): LLMClient
     stream: vi.fn().mockImplementation(async function* () {
       throw new Error('Stream not used in this test');
     }),
+    getModelMeta: vi.fn().mockReturnValue({
+      contextWindow: 128000,
+      maxTokens: 4096,
+    } satisfies ModelMeta),
   } as unknown as LLMClient;
 }
 
@@ -226,5 +235,9 @@ export function createCallOnlyMockLLMClient(responses: LLMResponse[]): LLMClient
       return Promise.resolve(responses[callIndex++]);
     }),
     stream: vi.fn(),
+    getModelMeta: vi.fn().mockReturnValue({
+      contextWindow: 128000,
+      maxTokens: 4096,
+    } satisfies ModelMeta),
   } as unknown as LLMClient;
 }

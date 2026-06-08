@@ -19,6 +19,7 @@ describe('AgentRunner', () => {
     return {
       call: vi.fn(),
       stream: vi.fn(),
+      getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
     } as unknown as LLMClient;
   };
 
@@ -787,6 +788,7 @@ describe('AgentRunner', () => {
           yield { type: 'unknown_event', data: 'test' };
           yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
         }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
       } as unknown as LLMClient;
 
       const runner = new AgentRunner({
