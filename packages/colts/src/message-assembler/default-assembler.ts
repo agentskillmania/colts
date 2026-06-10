@@ -12,7 +12,7 @@
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
 
-import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
+import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
 
 import type { AgentState } from '../types.js';
 import type { BuildMessagesOptions, IMessageAssembler } from './types.js';
@@ -135,7 +135,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
           break;
 
         case 'assistant': {
-          const content: (TextContent | import('@mariozechner/pi-ai').ToolCall)[] = [
+          const content: (TextContent | ToolCall)[] = [
             { type: 'text', text: msg.content },
           ];
           if (msg.toolCalls && msg.toolCalls.length > 0) {
