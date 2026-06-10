@@ -12,6 +12,7 @@ import { EventEmitter } from 'eventemitter3';
 
 import type { RunnerContext } from './advance.js';
 import type { RunnerOptions, StepOptions, RunOptions } from './options.js';
+import type { HumanRequest } from '../hitl/types.js';
 import type {
   StepResult,
   AdvanceResult,
@@ -1047,7 +1048,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         const finalResult = chain.result ?? {
           type: 'error' as const,
           error: new Error('Stopped by middleware'),
-          tokens: { input: 0, output: 0 } as import('@agentskillmania/llm-client').TokenStats,
+          tokens: { input: 0, output: 0 } as TokenStats,
         };
         yield { type: 'step:start', step: stepIdx, state, timestamp: Date.now() };
         this.emit('step:start', { step: stepIdx, state, timestamp: Date.now() });
@@ -1272,7 +1273,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               request: (
                 result as {
                   type: 'waiting-human';
-                  request: import('../hitl/types.js').HumanRequest;
+                  request: HumanRequest;
                 }
               ).request,
               totalSteps,

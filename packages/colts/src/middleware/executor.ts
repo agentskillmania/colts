@@ -5,7 +5,7 @@
  * 以及 override 合并和 stop 信号处理。
  */
 
-import type { ExecutionState, AdvanceResult } from '../execution/index.js';
+import type { ExecutionState, AdvanceResult, StepResult, RunResult } from '../execution/index.js';
 import type { AgentState } from '../types.js';
 import type {
   AgentMiddleware,
@@ -39,7 +39,7 @@ export interface StepChainResult {
   /** 合并后的 state override */
   state?: AgentState;
   /** 受控中断时附带的自定义 result */
-  result?: import('../execution/index.js').StepResult;
+  result?: StepResult;
 }
 
 /** run 级别 hook 链的执行结果 */
@@ -49,7 +49,7 @@ export interface RunChainResult {
   /** 合并后的 state override */
   state?: AgentState;
   /** 受控中断时附带的自定义 result */
-  result?: import('../execution/index.js').RunResult;
+  result?: RunResult;
 }
 
 // ─── Executor ────────────────────────────────────────────────────

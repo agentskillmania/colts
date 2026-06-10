@@ -319,7 +319,7 @@ export interface LLMQuickInit {
 export type ToolQuickInit = Array<{
   name: string;
   description: string;
-  parameters: import('zod').ZodTypeAny;
+  parameters: ZodTypeAny;
   execute: (args: unknown) => Promise<unknown>;
 }>;
 

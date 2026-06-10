@@ -15,7 +15,8 @@ import type {
 } from '../../execution/index.js';
 import { updateExecState, toolCallToAction } from '../../execution/index.js';
 import { getToolsForLLM } from '../../tools/llm-format.js';
-import type { AgentState, IToolRegistry } from '../../types.js';
+import type { AgentState, IToolRegistry, TokenStats } from '../../types.js';
+import type { Message } from '@mariozechner/pi-ai';
 import { estimateTokens } from '../../utils/tokens.js';
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 
@@ -108,7 +109,7 @@ export class CallingLLMHandler implements IPhaseHandler {
     let responseToolCalls:
       | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
       | undefined;
-    let roundTokens: import('../../types.js').TokenStats | undefined;
+    let roundTokens: TokenStats | undefined;
 
     try {
       for await (const event of ctx.llmProvider.stream({
@@ -206,7 +207,7 @@ export class CallingLLMHandler implements IPhaseHandler {
     registry: IToolRegistry
   ): {
     tools: ReturnType<typeof getToolsForLLM>;
-    messages: import('@mariozechner/pi-ai').Message[];
+    messages: Message[];
     estimatedContextSize: number;
   } {
     const tools = getToolsForLLM(registry, ctx.toolSchemaFormatter);
@@ -269,7 +270,7 @@ export class CallingLLMHandler implements IPhaseHandler {
     parsedAction: Action | undefined,
     parsedAllActions: Action[] | undefined,
     estimatedContextSize: number,
-    tokens?: import('../../types.js').TokenStats
+    tokens?: TokenStats
   ): ExecutionState {
     return updateExecState(execState, (draft) => {
       draft.llmResponse = fallbackText;

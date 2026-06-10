@@ -20,7 +20,7 @@ import {
 import pRetry from 'p-retry';
 import pTimeout from 'p-timeout';
 
-import type { CallOptions, LLMResponse, StreamEvent, TokenStats, RetryOptions } from './types.js';
+import type { CallOptions, LLMResponse, StreamEvent, TokenStats, RetryOptions, ModelMeta, ModelCapabilities } from './types.js';
 
 /**
  * Detect pi-ai thinkingFormat from base URL patterns.
@@ -250,7 +250,7 @@ export class PiAiAdapter {
   getModelMeta(
     modelId: string,
     meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean; input?: string[] }
-  ): import('./types.js').ModelMeta {
+  ): ModelMeta {
     const model = this.createModel(modelId, meta);
     return {
       contextWindow: model.contextWindow,
@@ -263,7 +263,7 @@ export class PiAiAdapter {
   getModelCapabilities(
     modelId: string,
     meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean; input?: string[] }
-  ): import('./types.js').ModelCapabilities {
+  ): ModelCapabilities {
     const model = this.createModel(modelId, meta);
     return {
       contextWindow: model.contextWindow,

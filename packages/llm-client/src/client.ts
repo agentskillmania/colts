@@ -18,6 +18,8 @@ import type {
   ClientStats,
   SchedulerEvent,
   LLMClientConfig,
+  ModelMeta,
+  ModelCapabilities,
 } from './types.js';
 
 /**
@@ -422,7 +424,7 @@ export class LLMClient extends EventEmitter {
    * Returns metadata from ModelConstraint registration if available,
    * otherwise returns adapter defaults.
    */
-  getModelMeta(modelId: string): import('./types.js').ModelMeta {
+  getModelMeta(modelId: string): ModelMeta {
     const constraint = this.scheduler.getModelConstraint(modelId);
     return this.adapter.getModelMeta(
       modelId,
@@ -437,7 +439,7 @@ export class LLMClient extends EventEmitter {
     );
   }
 
-  getModelCapabilities(modelId: string): import('./types.js').ModelCapabilities {
+  getModelCapabilities(modelId: string): ModelCapabilities {
     const constraint = this.scheduler.getModelConstraint(modelId);
     return this.adapter.getModelCapabilities(
       modelId,
