@@ -5,6 +5,7 @@
  */
 
 import type { TokenStats } from '@agentskillmania/llm-client';
+import type { Message as PiAiMessage } from '@mariozechner/pi-ai';
 import { produce, type Draft } from 'immer';
 
 import type { HumanRequest } from '../hitl/types.js';
@@ -82,7 +83,7 @@ export type StepResult =
  * Events emitted during step/advance stream
  */
 export type StreamEvent =
-  | { type: 'step:start'; step: number; state: import('../types.js').AgentState; timestamp: number }
+  | { type: 'step:start'; step: number; state: AgentState; timestamp: number }
   | { type: 'step:end'; step: number; result: StepResult; timestamp: number }
   | { type: 'phase-change'; from: Phase; to: Phase; timestamp: number }
   | { type: 'token'; token: string; timestamp: number }
@@ -128,7 +129,7 @@ export interface AdvanceOptions extends PerRequestOptions {
  */
 export interface AdvanceResult {
   /** Updated state */
-  state: import('../types.js').AgentState;
+  state: AgentState;
   /** Updated execution state (immutable) */
   execState: ExecutionState;
   /** Current execution phase (= execState.phase) */
@@ -151,7 +152,7 @@ export interface ExecutionState {
   /** Current phase */
   phase: Phase;
   /** Messages prepared for LLM (pi-ai format) */
-  preparedMessages?: import('@mariozechner/pi-ai').Message[];
+  preparedMessages?: PiAiMessage[];
   /** Raw LLM response content */
   llmResponse?: string;
   /** Native thinking from LLM API (e.g. Claude extended thinking) */
@@ -238,7 +239,7 @@ export type RunResult =
  * Events emitted during runStream()
  */
 export type RunStreamEvent =
-  | { type: 'step:start'; step: number; state: import('../types.js').AgentState; timestamp: number }
+  | { type: 'step:start'; step: number; state: AgentState; timestamp: number }
   | { type: 'step:end'; step: number; result: StepResult; timestamp: number }
   | StreamEvent
   | { type: 'complete'; result: RunResult; timestamp: number };

@@ -15,6 +15,7 @@ import type { IExecutionPolicy } from '../policy/types.js';
 import type { ISkillProvider } from '../skills/types.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
+import type { Message } from '@mariozechner/pi-ai';
 import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 
 /**
@@ -105,7 +106,7 @@ export async function executeAdvance(
 export function buildMessagesFromCtx(
   ctx: RunnerContext,
   state: AgentState
-): import('@mariozechner/pi-ai').Message[] {
+): Message[] {
   return ctx.messageAssembler.build(state, {
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,

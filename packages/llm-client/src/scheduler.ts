@@ -18,6 +18,7 @@ import type {
   TrackedProvider,
   TrackedApiKey,
   LLMClientConfig,
+  ModelConstraint,
 } from './types.js';
 
 /**
@@ -322,7 +323,7 @@ export class RequestScheduler extends EventEmitter {
    * @param modelId - Model identifier
    * @returns The ModelConstraint for the model, or undefined if not found
    */
-  getModelConstraint(modelId: string): import('./types.js').ModelConstraint | undefined {
+  getModelConstraint(modelId: string): ModelConstraint | undefined {
     for (const key of this.apiKeys.values()) {
       const model = key.models.find((m) => m.modelId === modelId);
       if (model) return model;

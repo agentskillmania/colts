@@ -16,9 +16,10 @@ import { WelcomeScreen } from './components/screens/welcome-screen.js';
 import { AskHumanDialog } from './components/interactive/ask-human-dialog.js';
 import { ConfirmDialog } from './components/interactive/confirm-dialog.js';
 import { SetupWizard } from './components/setup/setup-wizard.js';
-import { useAgent } from './hooks/use-agent.js';
+import { useAgent, parseCommand } from './hooks/use-agent.js';
 import { useSession } from './hooks/use-session.js';
 import type { ExecutionMode } from './components/input/mode-badge.js';
+import { saveSetup, loadConfig } from './config.js';
 import type { AppConfig } from './config.js';
 import type { AgentRunner, AgentState } from '@agentskillmania/colts';
 import type { InteractionState } from './types/interaction.js';
@@ -76,7 +77,6 @@ export function App({
    */
   const handleSetupComplete = useCallback(
     async (setup: { provider: string; apiKey: string; model: string }) => {
-      const { saveSetup, loadConfig } = await import('./config.js');
       await saveSetup(setup);
       const newConfig = await loadConfig();
       const newRunner = createRunnerFromConfig(newConfig, callbacksRef.current);
@@ -206,7 +206,6 @@ function MainTUI({
       if (!value.trim() && !isPaused) return;
 
       // Intercept mode-switch commands in handleSubmit (keeps InputBar in sync)
-      const { parseCommand } = await import('./hooks/use-agent.js');
       const cmd = parseCommand(value);
 
       if (cmd.type.startsWith('mode-')) {
