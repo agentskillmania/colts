@@ -8,7 +8,7 @@
 import { z } from 'zod';
 
 import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from './types.js';
-import { DefaultSubAgentFactory } from './types.js';
+import { DefaultSubAgentFactory, DEFAULT_SUBAGENT_MAX_STEPS } from './types.js';
 import { createAgentState, addUserMessage } from '../state/index.js';
 import type { Tool } from '../tools/registry.js';
 import type { ILLMProvider, IToolRegistry } from '../types.js';
@@ -64,7 +64,7 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
     subAgentConfigs,
     llmProvider,
     model,
-    defaultMaxSteps = 500,
+    defaultMaxSteps = DEFAULT_SUBAGENT_MAX_STEPS,
     parentToolRegistry,
     subAgentFactory = new DefaultSubAgentFactory(defaultMaxSteps),
   } = deps;

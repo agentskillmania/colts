@@ -2,8 +2,16 @@
  * LLMClient unit tests
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { LLMClient } from '../../src/client';
+
+vi.mock('@mariozechner/pi-ai', () => ({
+  complete: vi.fn(),
+  stream: vi.fn(),
+  getModel: vi.fn(),
+}));
+
+import { complete as piComplete, stream as piStream } from '@mariozechner/pi-ai';
 
 describe('LLMClient', () => {
   let client: LLMClient;
@@ -107,16 +115,34 @@ describe('LLMClient', () => {
   });
 
   describe('events', () => {
-    it('should emit state events', async () => {
-      const events: string[] = [];
+    it('should emit queued, started, and completed state events during a call', async () => {
+      vi.mocked(piComplete).mockResolvedValue({
+        content: [{ type: 'text', text: 'Hello!' }],
+        usage: { input: 5, output: 2 },
+        stopReason: 'stop',
+      } as never);
 
+      const events: string[] = [];
       client.on('state', (event) => {
         events.push(event.type);
       });
 
-      client.registerProvider({ name: 'test', maxConcurrency: 5 });
+      client.registerProvider({ name: 'openai', maxConcurrency: 5 });
+      client.registerApiKey({
+        key: 'sk-test',
+        provider: 'openai',
+        maxConcurrency: 3,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 2 }],
+      });
 
-      expect(events).toEqual([]);
+      await client.call({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hi' }],
+      });
+
+      expect(events).toContain('queued');
+      expect(events).toContain('started');
+      expect(events).toContain('completed');
     });
   });
 
@@ -181,6 +207,12 @@ describe('LLMClient', () => {
       expect(meta.contextWindow).toBe(128000);
       expect(meta.maxTokens).toBe(16384);
     });
+
+    it('returns fallback when no API key is registered', () => {
+      const meta = client.getModelMeta('unknown-model');
+      expect(meta.contextWindow).toBe(128000);
+      expect(meta.maxTokens).toBe(16384);
+    });
   });
 
   describe('getModelCapabilities', () => {
@@ -223,6 +255,45 @@ describe('LLMClient', () => {
       expect(caps.maxTokens).toBe(16384);
       expect(caps.reasoning).toBe(true);
       expect(caps.input).toEqual(['text']);
+    });
+
+    it('returns fallback when no API key is registered', () => {
+      const caps = client.getModelCapabilities('unknown-model');
+      expect(caps.contextWindow).toBe(128000);
+      expect(caps.maxTokens).toBe(16384);
+      expect(caps.reasoning).toBe(true);
+      expect(caps.input).toEqual(['text']);
+    });
+  });
+
+  describe('stream()', () => {
+    it('yields events from the adapter stream', async () => {
+      async function* mockStream() {
+        yield { type: 'text_delta', delta: 'Hello' } as never;
+        yield { type: 'done', message: { usage: { input: 1, output: 1 } } } as never;
+      }
+      vi.mocked(piStream).mockReturnValue(mockStream());
+
+      client.registerProvider({ name: 'openai', maxConcurrency: 5 });
+      client.registerApiKey({
+        key: 'sk-test',
+        provider: 'openai',
+        maxConcurrency: 3,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 2 }],
+      });
+
+      const events = [];
+      for await (const event of client.stream({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })) {
+        events.push(event);
+      }
+
+      expect(events).toContainEqual({ type: 'text', delta: 'Hello' });
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: 'done', roundTotalTokens: { input: 1, output: 1 } })
+      );
     });
   });
 });

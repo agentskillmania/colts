@@ -65,6 +65,9 @@ export interface ISubAgentFactory {
   ): AgentRunner;
 }
 
+/** Default max steps for a sub-agent when not specified in SubAgentConfig */
+export const DEFAULT_SUBAGENT_MAX_STEPS = 500;
+
 /**
  * Default sub-agent factory: creates a new AgentRunner per delegation
  */
@@ -72,7 +75,7 @@ export class DefaultSubAgentFactory implements ISubAgentFactory {
   /** Default max steps when SubAgentConfig.maxSteps is not set */
   private defaultMaxSteps: number;
 
-  constructor(defaultMaxSteps = 500) {
+  constructor(defaultMaxSteps = DEFAULT_SUBAGENT_MAX_STEPS) {
     this.defaultMaxSteps = defaultMaxSteps;
   }
 

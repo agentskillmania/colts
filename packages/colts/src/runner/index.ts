@@ -11,8 +11,6 @@ import type { Message, Tool } from '@mariozechner/pi-ai';
 import { EventEmitter } from 'eventemitter3';
 
 import type { RunnerContext } from './advance.js';
-import type { RunnerOptions, StepOptions, RunOptions } from './options.js';
-import type { HumanRequest } from '../hitl/types.js';
 import type {
   StepResult,
   AdvanceResult,
@@ -38,9 +36,11 @@ import type {
 } from '../types.js';
 import { executeAdvance, createRouter } from './advance.js';
 import { compressState, maybeCompress } from './compression.js';
+import type { RunnerOptions, StepOptions, RunOptions } from './options.js';
 import { StepRunner } from './step-runner.js';
 import { executeAdvanceStream } from './stream.js';
 import { DefaultContextCompressor } from '../compressor/index.js';
+import type { HumanRequest } from '../hitl/types.js';
 import { DefaultMessageAssembler } from '../message-assembler/index.js';
 import { MiddlewareExecutor } from '../middleware/executor.js';
 import type { AgentMiddleware } from '../middleware/types.js';
@@ -237,8 +237,11 @@ export interface ChatStreamChunk {
  * ```
  */
 
+/** Default max steps for run() / runStream() when not specified */
+export const DEFAULT_RUNNER_MAX_STEPS = 500;
+
 /** Hard ceiling safety net for run() / runStream() to prevent infinite loops */
-const RUN_HARD_LIMIT = 1000;
+export const RUN_HARD_LIMIT = 1000;
 
 export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private llmProvider: ILLMProvider;
@@ -300,8 +303,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Store options with defaults
     this.options = {
       ...options,
-      maxSteps: options.maxSteps ?? 500,
+      maxSteps: options.maxSteps ?? DEFAULT_RUNNER_MAX_STEPS,
       requestTimeout: options.requestTimeout ?? 1800000,
+      runHardLimit: options.runHardLimit ?? RUN_HARD_LIMIT,
     };
 
     // Initialize message assembler (injected or default)
@@ -1169,9 +1173,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     this.emit('run:start', { state: currentState, timestamp: Date.now() });
     const registry = toolRegistry ?? this.toolRegistry;
-    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 500;
+    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? DEFAULT_RUNNER_MAX_STEPS;
     let totalSteps = 0;
     let runTokens: TokenStats = { input: 0, output: 0 };
+    const runHardLimit = this.options.runHardLimit ?? RUN_HARD_LIMIT;
 
     // Helper to emit run:end and run afterRun middleware
     const finalizeRun = async (
@@ -1190,7 +1195,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     };
 
     try {
-      while (totalSteps < RUN_HARD_LIMIT) {
+      while (totalSteps < runHardLimit) {
         if (options?.signal?.aborted) {
           const runResult: RunResult = { type: 'abort', totalSteps, tokens: runTokens };
           this.emit('abort', { totalSteps, timestamp: Date.now() });
@@ -1371,9 +1376,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
     this.emit('run:start', { state: currentState, timestamp: Date.now() });
     const registry = toolRegistry ?? this.toolRegistry;
-    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? 500;
+    const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? DEFAULT_RUNNER_MAX_STEPS;
     let totalSteps = 0;
     let runTokens: TokenStats = { input: 0, output: 0 };
+    const runHardLimit = this.options.runHardLimit ?? RUN_HARD_LIMIT;
 
     // Helper for run:end + afterRun middleware (yields complete event before return)
     const finalizeRunStream = async function* (
@@ -1394,7 +1400,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     }.bind(this);
 
     try {
-      while (totalSteps < RUN_HARD_LIMIT) {
+      while (totalSteps < runHardLimit) {
         if (options?.signal?.aborted) {
           const runResult: RunResult = { type: 'abort', totalSteps, tokens: runTokens };
           this.emit('abort', { totalSteps, timestamp: Date.now() });
