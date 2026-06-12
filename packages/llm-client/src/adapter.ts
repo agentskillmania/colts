@@ -20,7 +20,15 @@ import {
 import pRetry from 'p-retry';
 import pTimeout from 'p-timeout';
 
-import type { CallOptions, LLMResponse, StreamEvent, TokenStats, RetryOptions, ModelMeta, ModelCapabilities } from './types.js';
+import type {
+  CallOptions,
+  LLMResponse,
+  StreamEvent,
+  TokenStats,
+  RetryOptions,
+  ModelMeta,
+  ModelCapabilities,
+} from './types.js';
 
 /**
  * Detect pi-ai thinkingFormat from base URL patterns.

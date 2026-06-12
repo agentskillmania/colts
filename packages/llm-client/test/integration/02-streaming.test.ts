@@ -74,12 +74,10 @@ describe('Integration: Streaming (User Story 2)', () => {
       // Then: Log results
       console.log('Total events received:', events.length);
 
-      // Should have received some events
-      expect(events.length).toBeGreaterThanOrEqual(0);
-
-      // Check for done event
+      // Stream should have terminated with either a done or an error event
       const doneEvent = events.find((e) => e.type === 'done');
       const errorEvent = events.find((e) => e.type === 'error');
+      expect(doneEvent ?? errorEvent).toBeDefined();
 
       if (doneEvent) {
         console.log('Done event received');
@@ -142,6 +140,7 @@ describe('Integration: Streaming (User Story 2)', () => {
     async () => {
       // Given: An invalid request
       const events: Array<{ type: string; error?: string }> = [];
+      let thrownError: Error | undefined;
 
       try {
         for await (const event of client.stream({
@@ -152,8 +151,8 @@ describe('Integration: Streaming (User Story 2)', () => {
           events.push(event);
         }
       } catch (error) {
-        // Expected to throw or return error event
-        console.log('Stream error handled:', (error as Error).message);
+        thrownError = error instanceof Error ? error : new Error(String(error));
+        console.log('Stream error handled:', thrownError.message);
       }
 
       // Either we got an error event or an exception was thrown
@@ -162,8 +161,7 @@ describe('Integration: Streaming (User Story 2)', () => {
         console.log('Error event received:', errorEvent.error);
       }
 
-      // Test passes if we reach here (error was handled)
-      expect(true).toBe(true);
+      expect(errorEvent ?? thrownError).toBeDefined();
     },
     30000
   );

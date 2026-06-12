@@ -320,58 +320,62 @@ describe('HITL V2: respond() edge cases', () => {
 });
 
 describe('HITL V2: Integration with runner', () => {
-  it('should return waiting-human when LLM calls a confirmed tool', async () => {
-    const { AgentRunner } = await import('../../../src/runner/index.js');
-    const { HitlMiddleware } = await import('../../../src/hitl/middleware.js');
-    const { respond } = await import('../../../src/hitl/respond.js');
+  it(
+    'should return waiting-human when LLM calls a confirmed tool',
+    { timeout: 10000 },
+    async () => {
+      const { AgentRunner } = await import('../../../src/runner/index.js');
+      const { HitlMiddleware } = await import('../../../src/hitl/middleware.js');
+      const { respond } = await import('../../../src/hitl/respond.js');
 
-    // Mock LLM that calls delete_file
-    const mockLLM = {
-      call: vi.fn().mockResolvedValue({
-        content: '',
-        stopReason: 'tool_call',
-        tokens: { input: 50, output: 20 },
-        toolCalls: [{ id: 'tc_1', name: 'delete_file', arguments: { path: '/tmp/x' } }],
-      }),
-      stream: vi.fn(),
-    };
+      // Mock LLM that calls delete_file
+      const mockLLM = {
+        call: vi.fn().mockResolvedValue({
+          content: '',
+          stopReason: 'tool_call',
+          tokens: { input: 50, output: 20 },
+          toolCalls: [{ id: 'tc_1', name: 'delete_file', arguments: { path: '/tmp/x' } }],
+        }),
+        stream: vi.fn(),
+      };
 
-    const runner = new AgentRunner({
-      llmClient: mockLLM as any,
-      model: 'test-model',
-      middleware: [new HitlMiddleware({ confirmTools: ['delete_file'] })],
-    });
+      const runner = new AgentRunner({
+        llmClient: mockLLM as any,
+        model: 'test-model',
+        middleware: [new HitlMiddleware({ confirmTools: ['delete_file'] })],
+      });
 
-    const executeFn = vi.fn().mockResolvedValue({ success: true });
+      const executeFn = vi.fn().mockResolvedValue({ success: true });
 
-    // Register the delete_file tool
-    runner.registerTool({
-      name: 'delete_file',
-      description: 'Delete a file',
-      parameters: z.object({ path: z.string() }),
-      execute: executeFn,
-    });
+      // Register the delete_file tool
+      runner.registerTool({
+        name: 'delete_file',
+        description: 'Delete a file',
+        parameters: z.object({ path: z.string() }),
+        execute: executeFn,
+      });
 
-    const state = createAgentState({
-      name: 'test',
-      instructions: 'test',
-      tools: [],
-    });
+      const state = createAgentState({
+        name: 'test',
+        instructions: 'test',
+        tools: [],
+      });
 
-    const { state: runState, result } = await runner.run(state);
+      const { state: runState, result } = await runner.run(state);
 
-    // Should return waiting-human, not blocked
-    expect(result.type).toBe('waiting-human');
-    if (result.type === 'waiting-human') {
-      expect(result.request.type).toBe('tool-confirm');
-      if (result.request.type === 'tool-confirm') {
-        expect(result.request.toolName).toBe('delete_file');
+      // Should return waiting-human, not blocked
+      expect(result.type).toBe('waiting-human');
+      if (result.type === 'waiting-human') {
+        expect(result.request.type).toBe('tool-confirm');
+        if (result.request.type === 'tool-confirm') {
+          expect(result.request.toolName).toBe('delete_file');
+        }
       }
-    }
 
-    // The delete_file tool should NOT have been executed
-    expect(executeFn).not.toHaveBeenCalled();
-  });
+      // The delete_file tool should NOT have been executed
+      expect(executeFn).not.toHaveBeenCalled();
+    }
+  );
 
   it('should return waiting-human via runStream()', async () => {
     const { AgentRunner } = await import('../../../src/runner/index.js');

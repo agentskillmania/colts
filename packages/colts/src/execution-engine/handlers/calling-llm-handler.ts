@@ -6,6 +6,8 @@
  * Extracts tool calls into actions. Transitions to llm-response phase.
  */
 
+import type { Message } from '@mariozechner/pi-ai';
+
 import type {
   ExecutionState,
   AdvanceResult,
@@ -16,7 +18,6 @@ import type {
 import { updateExecState, toolCallToAction } from '../../execution/index.js';
 import { getToolsForLLM } from '../../tools/llm-format.js';
 import type { AgentState, IToolRegistry, TokenStats } from '../../types.js';
-import type { Message } from '@mariozechner/pi-ai';
 import { estimateTokens } from '../../utils/tokens.js';
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
 

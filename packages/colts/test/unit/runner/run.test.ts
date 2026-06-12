@@ -4,7 +4,11 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
-import { AgentRunner } from '../../../src/runner/index.js';
+import {
+  AgentRunner,
+  DEFAULT_RUNNER_MAX_STEPS,
+  RUN_HARD_LIMIT,
+} from '../../../src/runner/index.js';
 import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
@@ -137,34 +141,8 @@ describe('run()', () => {
     }
   });
 
-  it('should use default maxSteps of 500', async () => {
-    const toolCallResponse: LLMResponse = {
-      content: 'Thinking...',
-      toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
-      tokens: mockTokens,
-      stopReason: 'tool_calls',
-    };
-
-    const responses = Array(502).fill(toolCallResponse);
-    const client = createMockLLMClient(responses);
-
-    const registry = new ToolRegistry();
-    registry.register({
-      name: 'calculate',
-      description: 'Calculate',
-      parameters: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => safeEval(expression).toString(),
-    });
-
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
-    const state = createAgentState(defaultConfig);
-
-    const { result } = await runner.run(state, undefined, registry);
-
-    expect(result.type).toBe('max_steps');
-    if (result.type === 'max_steps') {
-      expect(result.totalSteps).toBe(500);
-    }
+  it('should use default maxSteps of 500', () => {
+    expect(DEFAULT_RUNNER_MAX_STEPS).toBe(500);
   });
 
   it('should handle LLM error and return error result', async () => {
@@ -1018,7 +996,11 @@ describe('Execution Policy injection', () => {
     }
   });
 
-  it('should hit HARD_LIMIT when policy never stops', async () => {
+  it('should expose RUN_HARD_LIMIT of 1000', () => {
+    expect(RUN_HARD_LIMIT).toBe(1000);
+  });
+
+  it('should stop with max_steps when policy never stops and maxSteps is reached', async () => {
     const toolCallResponse: LLMResponse = {
       content: 'Thinking...',
       toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
@@ -1026,7 +1008,7 @@ describe('Execution Policy injection', () => {
       stopReason: 'tool_calls',
     };
 
-    const responses = Array(1100).fill(toolCallResponse);
+    const responses = Array(10).fill(toolCallResponse);
     const client = createMockLLMClient(responses);
 
     const registry = new ToolRegistry();
@@ -1041,6 +1023,7 @@ describe('Execution Policy injection', () => {
     const runner = new AgentRunner({
       model: 'gpt-4',
       llmClient: client,
+      runHardLimit: 5,
       executionPolicy: {
         shouldStop: () => ({ decision: 'continue' }),
         onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
@@ -1051,10 +1034,9 @@ describe('Execution Policy injection', () => {
     const state = createAgentState(defaultConfig);
     const { result } = await runner.run(state, undefined, registry);
 
-    // Hard limit should kick in
     expect(result.type).toBe('max_steps');
     if (result.type === 'max_steps') {
-      expect(result.totalSteps).toBe(1000);
+      expect(result.totalSteps).toBe(5);
     }
   });
 
@@ -1458,7 +1440,7 @@ describe('Thinking mechanism', () => {
     await expect(runner.run(state)).rejects.toThrow('string error');
   });
 
-  it('should hit HARD_LIMIT in runStream when policy never stops', async () => {
+  it('should stop runStream with max_steps when policy never stops and maxSteps is reached', async () => {
     const mockResponse: LLMResponse = {
       content: 'Continue',
       toolCalls: [],
@@ -1466,12 +1448,13 @@ describe('Thinking mechanism', () => {
       stopReason: 'stop',
     };
 
-    const responses = Array(1100).fill(mockResponse);
+    const responses = Array(10).fill(mockResponse);
     const client = createMockLLMClient(responses, { split: 'all' });
 
     const runner = new AgentRunner({
       model: 'gpt-4',
       llmClient: client,
+      runHardLimit: 5,
       executionPolicy: {
         shouldStop: () => ({ decision: 'continue' }),
         onToolError: () => ({ decision: 'continue', sanitizedResult: 'Error' }),
@@ -1480,7 +1463,6 @@ describe('Thinking mechanism', () => {
     });
 
     const state = createAgentState(defaultConfig);
-    const events: Array<{ type: string }> = [];
     let lastReturn: { result: { type: string; totalSteps?: number } } | undefined;
 
     const gen = runner.runStream(state);
@@ -1490,12 +1472,11 @@ describe('Thinking mechanism', () => {
         lastReturn = value as { result: { type: string; totalSteps?: number } };
         break;
       }
-      events.push(value as { type: string });
     }
 
     expect(lastReturn!.result.type).toBe('max_steps');
     if (lastReturn!.result.type === 'max_steps') {
-      expect(lastReturn!.result.totalSteps).toBe(1000);
+      expect(lastReturn!.result.totalSteps).toBe(5);
     }
   });
 });

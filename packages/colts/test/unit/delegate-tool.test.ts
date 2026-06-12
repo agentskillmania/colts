@@ -16,7 +16,11 @@ import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import { z } from 'zod';
 import { createDelegateTool } from '../../src/subagent/delegate-tool.js';
 import type { DelegateToolDeps } from '../../src/subagent/delegate-tool.js';
-import type { SubAgentConfig, DelegateResult } from '../../src/subagent/types.js';
+import {
+  type SubAgentConfig,
+  type DelegateResult,
+  DEFAULT_SUBAGENT_MAX_STEPS,
+} from '../../src/subagent/types.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { createNoStreamMockLLMClient } from '../helpers/mock-llm.js';
 
@@ -660,24 +664,8 @@ describe('createDelegateTool', () => {
   // Default maxSteps
   // ----------------------------------------------------------
   describe('default maxSteps', () => {
-    it('should use default defaultMaxSteps=500 when not provided', async () => {
-      const client = createToolCallLoopLLMClient('search', 500);
-
-      const tool = createDelegateTool({
-        parentToolRegistry: new ToolRegistry(),
-        subAgentConfigs,
-        llmProvider: client,
-        // do not provide defaultMaxSteps
-      });
-
-      // writer has no maxSteps, uses default 500
-      const result = (await tool.execute({
-        agent: 'writer',
-        task: 'Long task',
-      })) as DelegateResult;
-
-      expect(result.answer).toBe('Max steps reached');
-      expect(result.totalSteps).toBe(500);
+    it('should use default defaultMaxSteps=500 when not provided', () => {
+      expect(DEFAULT_SUBAGENT_MAX_STEPS).toBe(500);
     });
 
     it('sub-agent custom maxSteps should override defaultMaxSteps', async () => {

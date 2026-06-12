@@ -49,6 +49,12 @@ export interface RunnerOptions {
   /** run() 的默认最大步数（默认 500） */
   maxSteps?: number;
 
+  /**
+   * 内部测试用：覆盖 run() / runStream() 的硬步数上限安全网。
+   * @internal
+   */
+  runHardLimit?: number;
+
   /** 上下文压缩器：传 CompressionConfig 使用内置，传 IContextCompressor 使用自定义 */
   compressor?: CompressionConfig | IContextCompressor;
 

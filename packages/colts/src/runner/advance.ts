@@ -5,6 +5,8 @@
  * The router dispatches to registered IPhaseHandler instances.
  */
 
+import type { Message } from '@mariozechner/pi-ai';
+
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from '../execution/index.js';
 import { updateExecState } from '../execution/index.js';
 import { createDefaultPhaseHandlers } from '../execution-engine/default-registry.js';
@@ -15,7 +17,6 @@ import type { IExecutionPolicy } from '../policy/types.js';
 import type { ISkillProvider } from '../skills/types.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
-import type { Message } from '@mariozechner/pi-ai';
 import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 
 /**
@@ -103,10 +104,7 @@ export async function executeAdvance(
  * @returns Array of messages formatted for pi-ai LLM calls
  * @internal
  */
-export function buildMessagesFromCtx(
-  ctx: RunnerContext,
-  state: AgentState
-): Message[] {
+export function buildMessagesFromCtx(ctx: RunnerContext, state: AgentState): Message[] {
   return ctx.messageAssembler.build(state, {
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,
