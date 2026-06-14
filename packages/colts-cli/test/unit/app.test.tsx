@@ -132,7 +132,7 @@ function createMockRunnerWithEvents(
 const validConfig: AppConfig = {
   hasValidConfig: true,
   configPath: '/tmp/test.yaml',
-  llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
+  providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4o' }] }],
   agent: { name: 'test-agent', instructions: 'Test' },
 };
 

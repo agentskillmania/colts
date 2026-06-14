@@ -50,12 +50,14 @@ export function buildTestConfig(overrides?: Partial<AppConfig>): AppConfig {
   return {
     hasValidConfig: true,
     configPath: '/tmp/test-config.yaml',
-    llm: {
-      provider: testConfig.provider,
-      apiKey: testConfig.apiKey,
-      model: testConfig.testModel,
-      baseUrl: testConfig.baseUrl,
-    },
+    providers: [
+      {
+        name: testConfig.provider,
+        apiKey: testConfig.apiKey,
+        baseUrl: testConfig.baseUrl,
+        models: [{ modelId: testConfig.testModel }],
+      },
+    ],
     agent: {
       name: 'test-agent',
       instructions: 'You are a helpful assistant. Answer concisely.',

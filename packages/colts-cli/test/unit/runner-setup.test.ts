@@ -43,15 +43,23 @@ describe('runner-setup', () => {
   const validConfig: AppConfig = {
     hasValidConfig: true,
     configPath: '/tmp/test.yaml',
-    llm: {
-      provider: 'openai',
-      apiKey: 'sk-test',
-      model: 'gpt-4',
-      baseUrl: 'https://api.openai.com/v1',
-      thinkingEnabled: true,
-      enablePromptThinking: false,
-      maxConcurrency: 10,
-    },
+    providers: [
+      {
+        name: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1',
+        maxConcurrency: 10,
+        models: [
+          {
+            modelId: 'gpt-4',
+            maxConcurrency: 4,
+            contextWindow: 8192,
+            maxTokens: 2048,
+            reasoning: true,
+          },
+        ],
+      },
+    ],
     agent: {
       name: 'test-agent',
       instructions: 'Test instructions',
@@ -84,26 +92,43 @@ describe('runner-setup', () => {
       expect(createRunnerFromConfig(invalidConfig)).toBeNull();
     });
 
-    it('should return null when llm is missing', () => {
-      const noLlmConfig: AppConfig = {
+    it('should return null when providers are missing', () => {
+      const noProvidersConfig: AppConfig = {
         hasValidConfig: true,
         configPath: '/tmp/test.yaml',
       };
-      expect(createRunnerFromConfig(noLlmConfig)).toBeNull();
+      expect(createRunnerFromConfig(noProvidersConfig)).toBeNull();
     });
 
-    it('should pass model to runner options', () => {
+    it('should return null when providers array is empty', () => {
+      const emptyProvidersConfig: AppConfig = {
+        hasValidConfig: true,
+        configPath: '/tmp/test.yaml',
+        providers: [],
+      };
+      expect(createRunnerFromConfig(emptyProvidersConfig)).toBeNull();
+    });
+
+    it('should pass first modelId to runner options', () => {
       createRunnerFromConfig(validConfig);
       expect((capturedOptions as Record<string, unknown>).model).toBe('gpt-4');
     });
 
-    it('should pass llm config with apiKey, provider, baseUrl, maxConcurrency', () => {
+    it('should pass llm quick init with providers array', () => {
       createRunnerFromConfig(validConfig);
       const llm = (capturedOptions as Record<string, unknown>).llm as Record<string, unknown>;
-      expect(llm.apiKey).toBe('sk-test');
-      expect(llm.provider).toBe('openai');
-      expect(llm.baseUrl).toBe('https://api.openai.com/v1');
-      expect(llm.maxConcurrency).toBe(10);
+      const providers = llm.providers as Array<Record<string, unknown>>;
+      expect(providers).toHaveLength(1);
+      expect(providers[0].name).toBe('openai');
+      expect(providers[0].apiKey).toBe('sk-test');
+      expect(providers[0].baseUrl).toBe('https://api.openai.com/v1');
+      expect(providers[0].maxConcurrency).toBe(10);
+      const models = providers[0].models as Array<Record<string, unknown>>;
+      expect(models[0].modelId).toBe('gpt-4');
+      expect(models[0].maxConcurrency).toBe(4);
+      expect(models[0].contextWindow).toBe(8192);
+      expect(models[0].maxTokens).toBe(2048);
+      expect(models[0].reasoning).toBe(true);
     });
 
     it('should pass skillDirs to runner options', () => {
@@ -121,16 +146,6 @@ describe('runner-setup', () => {
       }>;
       expect(subAgents).toHaveLength(1);
       expect(subAgents[0].name).toBe('research-agent');
-    });
-
-    it('should pass thinkingEnabled to runner options', () => {
-      createRunnerFromConfig(validConfig);
-      expect((capturedOptions as Record<string, unknown>).thinkingEnabled).toBe(true);
-    });
-
-    it('should pass enablePromptThinking to runner options', () => {
-      createRunnerFromConfig(validConfig);
-      expect((capturedOptions as Record<string, unknown>).enablePromptThinking).toBe(false);
     });
 
     it('should pass maxSteps and requestTimeout', () => {
@@ -168,18 +183,18 @@ describe('runner-setup', () => {
       const minimalConfig: AppConfig = {
         hasValidConfig: true,
         configPath: '/tmp/test.yaml',
-        llm: {
-          provider: 'openai',
-          apiKey: 'sk-test',
-          model: 'gpt-4',
-        },
+        providers: [
+          {
+            name: 'openai',
+            apiKey: 'sk-test',
+            models: [{ modelId: 'gpt-4' }],
+          },
+        ],
       };
       const runner = createRunnerFromConfig(minimalConfig);
       expect(runner).not.toBeNull();
       expect((capturedOptions as Record<string, unknown>).skillDirs).toBeUndefined();
       expect((capturedOptions as Record<string, unknown>).subAgents).toBeUndefined();
-      expect((capturedOptions as Record<string, unknown>).thinkingEnabled).toBeUndefined();
-      expect((capturedOptions as Record<string, unknown>).enablePromptThinking).toBeUndefined();
     });
   });
 
@@ -192,12 +207,12 @@ describe('runner-setup', () => {
       expect(createInitialStateFromConfig(invalidConfig)).toBeNull();
     });
 
-    it('should return null when llm is missing', () => {
-      const noLlmConfig: AppConfig = {
+    it('should return null when providers are missing', () => {
+      const noProvidersConfig: AppConfig = {
         hasValidConfig: true,
         configPath: '/tmp/test.yaml',
       };
-      expect(createInitialStateFromConfig(noLlmConfig)).toBeNull();
+      expect(createInitialStateFromConfig(noProvidersConfig)).toBeNull();
     });
 
     it('should create state with agent name and instructions', () => {
@@ -210,11 +225,13 @@ describe('runner-setup', () => {
       const noAgentConfig: AppConfig = {
         hasValidConfig: true,
         configPath: '/tmp/test.yaml',
-        llm: {
-          provider: 'openai',
-          apiKey: 'sk-test',
-          model: 'gpt-4',
-        },
+        providers: [
+          {
+            name: 'openai',
+            apiKey: 'sk-test',
+            models: [{ modelId: 'gpt-4' }],
+          },
+        ],
       };
       const state = createInitialStateFromConfig(noAgentConfig);
       expect(state).not.toBeNull();
