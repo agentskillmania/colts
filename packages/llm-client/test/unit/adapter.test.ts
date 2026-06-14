@@ -174,9 +174,13 @@ describe('PiAiAdapter', () => {
         stopReason: 'stop',
       } as never);
 
-      const response = await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      const response = await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       });
 
       expect(response.content).toBe('Hello, world!');
@@ -197,9 +201,13 @@ describe('PiAiAdapter', () => {
         stopReason: 'stop',
       } as never);
 
-      const response = await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      const response = await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       });
 
       expect(response.content).toBe('Hello, world!');
@@ -215,9 +223,13 @@ describe('PiAiAdapter', () => {
         stopReason: 'stop',
       } as never);
 
-      const response = await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'What is the answer?' }],
+      const response = await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'What is the answer?' }],
+        },
       });
 
       expect(response.content).toBe('The answer is 42.');
@@ -238,9 +250,13 @@ describe('PiAiAdapter', () => {
         stopReason: 'tool_calls',
       } as never);
 
-      const response = await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Calculate 2+2' }],
+      const response = await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Calculate 2+2' }],
+        },
       });
 
       expect(response.toolCalls).toEqual([
@@ -255,9 +271,13 @@ describe('PiAiAdapter', () => {
         stopReason: 'stop',
       } as never);
 
-      const response = await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      const response = await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       });
 
       expect(response.tokens).toEqual({ input: 0, output: 0 });
@@ -271,10 +291,14 @@ describe('PiAiAdapter', () => {
       } as never);
 
       const tools = [{ name: 'calc', description: 'Calc', parameters: {} }];
-      await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
-        tools: tools as never,
+      await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          tools: tools as never,
+        },
       });
 
       expect(piComplete).toHaveBeenCalledWith(
@@ -290,10 +314,14 @@ describe('PiAiAdapter', () => {
       );
 
       await expect(
-        adapter.complete('gpt-4', 'sk-test', {
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hi' }],
-          requestTimeout: 50,
+        adapter.complete({
+          modelId: 'gpt-4',
+          apiKey: 'sk-test',
+          options: {
+            model: 'gpt-4',
+            messages: [{ role: 'user', content: 'Hi' }],
+            requestTimeout: 50,
+          },
         })
       ).rejects.toThrow('Request timeout after 50ms');
     });
@@ -304,9 +332,13 @@ describe('PiAiAdapter', () => {
         stopReason: 'stop',
       } as never);
 
-      await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       });
 
       expect(piComplete).toHaveBeenCalledTimes(1);
@@ -319,13 +351,49 @@ describe('PiAiAdapter', () => {
         stopReason: 'stop',
       } as never);
 
-      await customAdapter.complete('custom-model', 'sk-test', {
-        model: 'custom-model',
-        messages: [{ role: 'user', content: 'Hi' }],
+      await customAdapter.complete({
+        modelId: 'custom-model',
+        apiKey: 'sk-test',
+        options: {
+          model: 'custom-model',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       });
 
       const modelArg = vi.mocked(piComplete).mock.calls[0][0] as { baseUrl?: string };
       expect(modelArg.baseUrl).toBe('https://custom.example.com/v1');
+    });
+
+    it('applies modelConstraint metadata to created model', async () => {
+      vi.mocked(piComplete).mockResolvedValue({
+        content: [{ type: 'text', text: 'Ok' }],
+        stopReason: 'stop',
+      } as never);
+
+      await adapter.complete({
+        modelId: 'custom-model',
+        apiKey: 'sk-test',
+        options: {
+          model: 'custom-model',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
+        modelConstraint: {
+          modelId: 'custom-model',
+          maxConcurrency: 2,
+          contextWindow: 64000,
+          maxTokens: 8192,
+          reasoning: false,
+        },
+      });
+
+      const modelArg = vi.mocked(piComplete).mock.calls[0][0] as {
+        contextWindow?: number;
+        maxTokens?: number;
+        reasoning?: boolean;
+      };
+      expect(modelArg.contextWindow).toBe(64000);
+      expect(modelArg.maxTokens).toBe(8192);
+      expect(modelArg.reasoning).toBe(false);
     });
   });
 
@@ -345,9 +413,13 @@ describe('PiAiAdapter', () => {
       );
 
       const events = [];
-      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       })) {
         events.push(event);
       }
@@ -377,10 +449,14 @@ describe('PiAiAdapter', () => {
       );
 
       const events = [];
-      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
-        thinkingEnabled: true,
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          thinkingEnabled: true,
+        },
       })) {
         events.push(event);
       }
@@ -411,9 +487,13 @@ describe('PiAiAdapter', () => {
       );
 
       const events = [];
-      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       })) {
         events.push(event);
       }
@@ -443,9 +523,13 @@ describe('PiAiAdapter', () => {
       );
 
       const events = [];
-      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       })) {
         events.push(event);
       }
@@ -468,9 +552,13 @@ describe('PiAiAdapter', () => {
       vi.mocked(piStream).mockReturnValue(mockAsyncStream([])());
 
       const events = [];
-      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       })) {
         events.push(event);
       }
@@ -497,16 +585,16 @@ describe('PiAiAdapter', () => {
 
       const retryCalls: Array<{ attempt: number; message: string }> = [];
       const events = [];
-      for await (const event of adapter.streamWithRetry(
-        'gpt-4',
-        'sk-test',
-        {
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
           model: 'gpt-4',
           messages: [{ role: 'user', content: 'Hi' }],
           retryOptions: { retries: 3, minTimeout: 1, maxTimeout: 10, factor: 1 },
         },
-        (attempt, error) => retryCalls.push({ attempt, message: error.message })
-      )) {
+        onRetry: (attempt, error) => retryCalls.push({ attempt, message: error.message }),
+      })) {
         events.push(event);
       }
 
@@ -531,10 +619,14 @@ describe('PiAiAdapter', () => {
       });
 
       const events = [];
-      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
-        retryOptions: { retries: 1, minTimeout: 1, maxTimeout: 10, factor: 1 },
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          retryOptions: { retries: 1, minTimeout: 1, maxTimeout: 10, factor: 1 },
+        },
       })) {
         events.push(event);
       }
@@ -554,9 +646,13 @@ describe('PiAiAdapter', () => {
       vi.mocked(piStream).mockReturnValue(throwingStream());
 
       const events = [];
-      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
       })) {
         events.push(event);
       }
@@ -576,10 +672,14 @@ describe('PiAiAdapter', () => {
       controller.abort();
 
       const events = [];
-      for await (const event of adapter.streamWithRetry('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
-        signal: controller.signal,
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          signal: controller.signal,
+        },
       })) {
         events.push(event);
       }
@@ -612,10 +712,14 @@ describe('PiAiAdapter', () => {
         } as never);
       });
 
-      const response = await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
-        retryOptions: { retries: 2, minTimeout: 1, maxTimeout: 10, factor: 1 },
+      const response = await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          retryOptions: { retries: 2, minTimeout: 1, maxTimeout: 10, factor: 1 },
+        },
       });
 
       expect(response.content).toBe('Ok');
@@ -637,10 +741,14 @@ describe('PiAiAdapter', () => {
         } as never);
       });
 
-      const response = await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
-        retryOptions: { retries: 2, minTimeout: 1, maxTimeout: 10, factor: 1 },
+      const response = await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          retryOptions: { retries: 2, minTimeout: 1, maxTimeout: 10, factor: 1 },
+        },
       });
 
       expect(response.content).toBe('Ok');
@@ -659,10 +767,14 @@ describe('PiAiAdapter', () => {
         } as never);
       });
 
-      const response = await adapter.complete('gpt-4', 'sk-test', {
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: 'Hi' }],
-        retryOptions: { retries: 2, minTimeout: 1, maxTimeout: 10, factor: 1 },
+      const response = await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          retryOptions: { retries: 2, minTimeout: 1, maxTimeout: 10, factor: 1 },
+        },
       });
 
       expect(response.content).toBe('Ok');
@@ -676,10 +788,14 @@ describe('PiAiAdapter', () => {
       });
 
       await expect(
-        adapter.complete('gpt-4', 'sk-test', {
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hi' }],
-          retryOptions: { retries: 3, minTimeout: 1, maxTimeout: 10, factor: 1 },
+        adapter.complete({
+          modelId: 'gpt-4',
+          apiKey: 'sk-test',
+          options: {
+            model: 'gpt-4',
+            messages: [{ role: 'user', content: 'Hi' }],
+            retryOptions: { retries: 3, minTimeout: 1, maxTimeout: 10, factor: 1 },
+          },
         })
       ).rejects.toThrow('Bad request');
 
@@ -690,10 +806,14 @@ describe('PiAiAdapter', () => {
       vi.mocked(piComplete).mockRejectedValue('string error');
 
       await expect(
-        adapter.complete('gpt-4', 'sk-test', {
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hi' }],
-          retryOptions: { retries: 3, minTimeout: 1, maxTimeout: 10, factor: 1 },
+        adapter.complete({
+          modelId: 'gpt-4',
+          apiKey: 'sk-test',
+          options: {
+            model: 'gpt-4',
+            messages: [{ role: 'user', content: 'Hi' }],
+            retryOptions: { retries: 3, minTimeout: 1, maxTimeout: 10, factor: 1 },
+          },
         })
       ).rejects.toThrow('string error');
 
@@ -709,21 +829,21 @@ describe('PiAiAdapter', () => {
 
       const retryCalls: Array<{ attempt: number; message: string; status?: number }> = [];
       await expect(
-        adapter.complete(
-          'gpt-4',
-          'sk-test',
-          {
+        adapter.complete({
+          modelId: 'gpt-4',
+          apiKey: 'sk-test',
+          options: {
             model: 'gpt-4',
             messages: [{ role: 'user', content: 'Hi' }],
             retryOptions: { retries: 0, minTimeout: 1, maxTimeout: 10, factor: 1 },
           },
-          (attempt, error) =>
+          onRetry: (attempt, error) =>
             retryCalls.push({
               attempt,
               message: error.message,
               status: (error as { status?: number }).status,
-            })
-        )
+            }),
+        })
       ).rejects.toThrow();
 
       expect(retryCalls.length).toBe(1);
@@ -736,10 +856,14 @@ describe('PiAiAdapter', () => {
       vi.mocked(piComplete).mockRejectedValue(new Error('fail'));
 
       await expect(
-        adapter.complete('gpt-4', 'sk-test', {
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hi' }],
-          retryOptions: { retries: 0 },
+        adapter.complete({
+          modelId: 'gpt-4',
+          apiKey: 'sk-test',
+          options: {
+            model: 'gpt-4',
+            messages: [{ role: 'user', content: 'Hi' }],
+            retryOptions: { retries: 0 },
+          },
         })
       ).rejects.toThrow('fail');
 

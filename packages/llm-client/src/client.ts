@@ -20,6 +20,7 @@ import type {
   LLMClientConfig,
   ModelMeta,
   ModelCapabilities,
+  ModelConstraint,
 } from './types.js';
 
 /**
@@ -241,6 +242,7 @@ export class LLMClient extends EventEmitter {
     const execute = async (ctx: {
       key: { key: string };
       baseUrl?: string;
+      modelConstraint?: ModelConstraint;
     }): Promise<LLMResponse> => {
       // Emit retry through scheduler
       const onRetry = (attempt: number, error: Error) => {
@@ -248,7 +250,14 @@ export class LLMClient extends EventEmitter {
       };
 
       const effectiveBaseUrl = ctx.baseUrl ?? this.baseUrl;
-      return this.adapter.complete(model, ctx.key.key, options, onRetry, effectiveBaseUrl);
+      return this.adapter.complete({
+        modelId: model,
+        apiKey: ctx.key.key,
+        options,
+        onRetry,
+        baseUrl: effectiveBaseUrl,
+        modelConstraint: ctx.modelConstraint,
+      });
     };
 
     const promise = this.scheduler.execute(model, priority, execute, requestId, signal);
@@ -335,6 +344,7 @@ export class LLMClient extends EventEmitter {
         async (ctx: {
           key: { key: string };
           baseUrl?: string;
+          modelConstraint?: ModelConstraint;
         }): Promise<AsyncIterable<StreamEvent>> => {
           const onRetry = (attempt: number, error: Error) => {
             this.scheduler.emitRetry(requestId ?? 'unknown', attempt, error);
@@ -343,13 +353,14 @@ export class LLMClient extends EventEmitter {
           const effectiveBaseUrl = ctx.baseUrl ?? this.baseUrl;
 
           // Return the async iterable directly, wired to the merged signal
-          return this.adapter.streamWithRetry(
-            model,
-            ctx.key.key,
-            { ...options, signal: abortController.signal },
+          return this.adapter.streamWithRetry({
+            modelId: model,
+            apiKey: ctx.key.key,
+            options: { ...options, signal: abortController.signal },
             onRetry,
-            effectiveBaseUrl
-          );
+            baseUrl: effectiveBaseUrl,
+            modelConstraint: ctx.modelConstraint,
+          });
         },
         requestId,
         abortController.signal

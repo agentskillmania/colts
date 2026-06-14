@@ -28,6 +28,7 @@ import type {
   RetryOptions,
   ModelMeta,
   ModelCapabilities,
+  ModelConstraint,
 } from './types.js';
 
 /**
@@ -86,6 +87,24 @@ function isRetryableError(error: unknown): boolean {
 export interface AdapterConfig {
   /** Custom base URL for the API (e.g., for proxy or different provider endpoints) */
   baseUrl?: string;
+}
+
+/**
+ * Request payload for adapter completion methods.
+ */
+export interface AdapterRequest {
+  /** Model identifier to use for this request */
+  modelId: string;
+  /** API key for authentication */
+  apiKey: string;
+  /** Request options including messages, tools, timeouts */
+  options: CallOptions;
+  /** Optional retry callback */
+  onRetry?: (attempt: number, error: Error) => void;
+  /** Optional API base URL override */
+  baseUrl?: string;
+  /** Optional model constraint metadata used to override registry defaults */
+  modelConstraint?: ModelConstraint;
 }
 
 /**
@@ -424,14 +443,9 @@ export class PiAiAdapter {
    * console.log(response.tokens);
    * ```
    */
-  async complete(
-    modelId: string,
-    apiKey: string,
-    options: CallOptions,
-    onRetry?: (attempt: number, error: Error) => void,
-    baseUrl?: string
-  ): Promise<LLMResponse> {
-    const model = this.createModel(modelId, baseUrl);
+  async complete(request: AdapterRequest): Promise<LLMResponse> {
+    const { modelId, apiKey, options, onRetry, baseUrl, modelConstraint } = request;
+    const model = this.createModel(modelId, baseUrl, modelConstraint);
     const context = this.buildContext(options.messages, options.tools);
     const retryOpts = this.mergeRetryOptions(options.retryOptions);
 
@@ -636,14 +650,9 @@ export class PiAiAdapter {
    * }
    * ```
    */
-  async *streamWithRetry(
-    modelId: string,
-    apiKey: string,
-    options: CallOptions,
-    onRetry?: (attempt: number, error: Error) => void,
-    baseUrl?: string
-  ): AsyncIterable<StreamEvent> {
-    const model = this.createModel(modelId, baseUrl);
+  async *streamWithRetry(request: AdapterRequest): AsyncIterable<StreamEvent> {
+    const { modelId, apiKey, options, onRetry, baseUrl, modelConstraint } = request;
+    const model = this.createModel(modelId, baseUrl, modelConstraint);
     const context = this.buildContext(options.messages, options.tools);
     const retryOpts = this.mergeRetryOptions(options.retryOptions);
 

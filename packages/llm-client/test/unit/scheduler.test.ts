@@ -643,4 +643,46 @@ describe('AbortSignal support', () => {
       expect(count).toBe(0);
     }
   });
+
+  describe('model constraint propagation', () => {
+    it('should pass modelConstraint to executor', async () => {
+      scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+      scheduler.registerApiKey({
+        key: 'sk-test',
+        provider: 'openai',
+        maxConcurrency: 5,
+        models: [
+          {
+            modelId: 'gpt-4',
+            maxConcurrency: 2,
+            contextWindow: 128000,
+            maxTokens: 4096,
+            reasoning: true,
+          },
+        ],
+      });
+
+      const executor = async (ctx: {
+        key: { key: string };
+        baseUrl?: string;
+        modelConstraint?: {
+          modelId: string;
+          contextWindow?: number;
+          maxTokens?: number;
+          reasoning?: boolean;
+        };
+      }) => {
+        expect(ctx.modelConstraint).toEqual({
+          modelId: 'gpt-4',
+          maxConcurrency: 2,
+          contextWindow: 128000,
+          maxTokens: 4096,
+          reasoning: true,
+        });
+        return 'result';
+      };
+
+      await scheduler.execute('gpt-4', 0, executor);
+    });
+  });
 });

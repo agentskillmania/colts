@@ -425,7 +425,11 @@ export class RequestScheduler extends EventEmitter {
   async execute<T>(
     modelId: string,
     priority: number,
-    executor: (ctx: { key: TrackedApiKey; baseUrl?: string }) => Promise<T>,
+    executor: (ctx: {
+      key: TrackedApiKey;
+      baseUrl?: string;
+      modelConstraint?: ModelConstraint;
+    }) => Promise<T>,
     requestId?: string,
     signal?: AbortSignal
   ): Promise<T> {
@@ -503,9 +507,11 @@ export class RequestScheduler extends EventEmitter {
 
               // Resolve baseUrl: key-level override > provider-level > none (client applies global default)
               const baseUrl = selectedKey.baseUrl ?? provider.baseUrl;
+              // Resolve model constraint for the requested model
+              const modelConstraint = selectedKey.models.find((m) => m.modelId === modelId);
 
               try {
-                const result = await executor({ key: selectedKey, baseUrl });
+                const result = await executor({ key: selectedKey, baseUrl, modelConstraint });
 
                 // Update stats
                 provider.activeCount--;
