@@ -111,6 +111,9 @@ export class LLMClient extends EventEmitter {
   /** Client configuration with resolved defaults. */
   private config: Required<LLMClientConfig>;
 
+  /** Global default base URL used when a provider/key does not specify one. */
+  private baseUrl?: string;
+
   /**
    * Creates a new LLMClient instance.
    *
@@ -133,6 +136,7 @@ export class LLMClient extends EventEmitter {
       defaultKeyConcurrency: config?.defaultKeyConcurrency ?? 5,
       defaultModelConcurrency: config?.defaultModelConcurrency ?? 3,
     };
+    this.baseUrl = config?.baseUrl;
     this.scheduler = new RequestScheduler(this.config);
     this.adapter = new PiAiAdapter({ baseUrl: config?.baseUrl });
 
@@ -234,13 +238,17 @@ export class LLMClient extends EventEmitter {
   async call(options: CallOptions): Promise<LLMResponse> {
     const { model, priority = 0, totalTimeout, requestId, signal } = options;
 
-    const execute = async (key: { key: string }): Promise<LLMResponse> => {
+    const execute = async (ctx: {
+      key: { key: string };
+      baseUrl?: string;
+    }): Promise<LLMResponse> => {
       // Emit retry through scheduler
       const onRetry = (attempt: number, error: Error) => {
         this.scheduler.emitRetry(requestId ?? 'unknown', attempt, error);
       };
 
-      return this.adapter.complete(model, key.key, options, onRetry);
+      const effectiveBaseUrl = ctx.baseUrl ?? this.baseUrl;
+      return this.adapter.complete(model, ctx.key.key, options, onRetry, effectiveBaseUrl);
     };
 
     const promise = this.scheduler.execute(model, priority, execute, requestId, signal);
@@ -324,17 +332,23 @@ export class LLMClient extends EventEmitter {
       const streamPromise = this.scheduler.execute(
         model,
         priority,
-        async (key: { key: string }): Promise<AsyncIterable<StreamEvent>> => {
+        async (ctx: {
+          key: { key: string };
+          baseUrl?: string;
+        }): Promise<AsyncIterable<StreamEvent>> => {
           const onRetry = (attempt: number, error: Error) => {
             this.scheduler.emitRetry(requestId ?? 'unknown', attempt, error);
           };
 
+          const effectiveBaseUrl = ctx.baseUrl ?? this.baseUrl;
+
           // Return the async iterable directly, wired to the merged signal
           return this.adapter.streamWithRetry(
             model,
-            key.key,
+            ctx.key.key,
             { ...options, signal: abortController.signal },
-            onRetry
+            onRetry,
+            effectiveBaseUrl
           );
         },
         requestId,

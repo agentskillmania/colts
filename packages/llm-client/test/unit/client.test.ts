@@ -296,4 +296,91 @@ describe('LLMClient', () => {
       );
     });
   });
+
+  describe('multi-provider baseUrl routing', () => {
+    beforeEach(() => {
+      vi.mocked(piComplete).mockClear();
+      vi.mocked(piComplete).mockResolvedValue({
+        content: [{ type: 'text', text: 'Ok' }],
+        usage: { input: 1, output: 1 },
+        stopReason: 'stop',
+      } as never);
+    });
+
+    it('routes model to provider-specific baseUrl', async () => {
+      client.registerProvider({
+        name: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        maxConcurrency: 5,
+      });
+      client.registerProvider({
+        name: 'zhipu',
+        baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+        maxConcurrency: 5,
+      });
+
+      client.registerApiKey({
+        key: 'sk-openai',
+        provider: 'openai',
+        maxConcurrency: 3,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 2 }],
+      });
+      client.registerApiKey({
+        key: 'sk-zhipu',
+        provider: 'zhipu',
+        maxConcurrency: 3,
+        models: [{ modelId: 'GLM-4.7', maxConcurrency: 2 }],
+      });
+
+      await client.call({ model: 'gpt-4', messages: [{ role: 'user', content: 'Hi' }] });
+      await client.call({ model: 'GLM-4.7', messages: [{ role: 'user', content: 'Hi' }] });
+
+      const calls = vi.mocked(piComplete).mock.calls;
+      expect(calls).toHaveLength(2);
+
+      const baseUrls = calls.map((call) => (call[0] as { baseUrl?: string }).baseUrl);
+      expect(baseUrls).toContain('https://api.openai.com/v1');
+      expect(baseUrls).toContain('https://open.bigmodel.cn/api/coding/paas/v4');
+    });
+
+    it('uses API-key-level baseUrl override', async () => {
+      client.registerProvider({
+        name: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        maxConcurrency: 5,
+      });
+      client.registerApiKey({
+        key: 'sk-proxy',
+        provider: 'openai',
+        baseUrl: 'https://proxy.example.com/v1',
+        maxConcurrency: 3,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 2 }],
+      });
+
+      await client.call({ model: 'gpt-4', messages: [{ role: 'user', content: 'Hi' }] });
+
+      const calls = vi.mocked(piComplete).mock.calls;
+      const modelArg = calls[calls.length - 1][0] as { baseUrl?: string };
+      expect(modelArg.baseUrl).toBe('https://proxy.example.com/v1');
+    });
+
+    it('falls back to LLMClient-level baseUrl when provider has none', async () => {
+      const defaultClient = new LLMClient({
+        baseUrl: 'https://global-fallback.example.com/v1',
+      });
+      defaultClient.registerProvider({ name: 'openai', maxConcurrency: 5 });
+      defaultClient.registerApiKey({
+        key: 'sk-test',
+        provider: 'openai',
+        maxConcurrency: 3,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 2 }],
+      });
+
+      await defaultClient.call({ model: 'gpt-4', messages: [{ role: 'user', content: 'Hi' }] });
+
+      const calls = vi.mocked(piComplete).mock.calls;
+      const modelArg = calls[calls.length - 1][0] as { baseUrl?: string };
+      expect(modelArg.baseUrl).toBe('https://global-fallback.example.com/v1');
+    });
+  });
 });
