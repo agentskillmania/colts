@@ -41,10 +41,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: {
-        provider: 'openai',
-        apiKey: 'test-key',
-      },
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
       middleware: [middleware],
     });
 
@@ -79,10 +76,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: {
-        provider: 'openai',
-        apiKey: 'test-key',
-      },
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
       middleware: [middleware],
     });
 
@@ -176,10 +170,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: {
-        provider: 'openai',
-        apiKey: 'test-key',
-      },
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
       middleware: [middleware],
     });
 
@@ -205,10 +196,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: {
-        provider: 'openai',
-        apiKey: 'test-key',
-      },
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
       middleware: [middleware],
     });
 
@@ -243,10 +231,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: {
-        provider: 'openai',
-        apiKey: 'test-key',
-      },
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
       middleware: [middleware],
     });
 
@@ -281,10 +266,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: {
-        provider: 'openai',
-        apiKey: 'test-key',
-      },
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
       middleware: [middleware],
     });
 
@@ -319,10 +301,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: {
-        provider: 'openai',
-        apiKey: 'test-key',
-      },
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
       middleware: [middleware],
     });
 
@@ -357,10 +336,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: {
-        provider: 'openai',
-        apiKey: 'test-key',
-      },
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
       middleware: [middleware],
     });
 

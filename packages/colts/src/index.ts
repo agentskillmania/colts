@@ -22,6 +22,8 @@ export type {
   ILLMProvider,
   IToolRegistry,
   LLMQuickInit,
+  LLMProviderEntry,
+  ModelEntry,
   ToolQuickInit,
   // Context Compression
   CompressionMeta,
