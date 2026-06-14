@@ -97,8 +97,6 @@
  */
 
 export { LLMClient, type LLMClientOptions } from './client.js';
-export { RequestScheduler } from './scheduler.js';
-export { PiAiAdapter, type AdapterConfig } from './adapter.js';
 
 // Re-export all types
 export type {
