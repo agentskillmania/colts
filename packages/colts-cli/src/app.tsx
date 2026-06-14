@@ -234,7 +234,7 @@ function MainTUI({
     [sendMessage, setMode, clearEntries, isPaused]
   );
 
-  const model = config.llm?.model ?? 'unknown';
+  const model = config.providers?.[0]?.models?.[0]?.modelId ?? 'unknown';
   const hasEntries = entries.length > 0;
   const isInteracting = interaction.type !== 'none';
 

@@ -50,7 +50,7 @@ export function createRunnerFromConfig(
   config: AppConfig,
   callbacks: InteractionCallbacks = interactionCallbacks
 ): AgentRunner | null {
-  if (!config.hasValidConfig || !config.llm) return null;
+  if (!config.hasValidConfig || !config.providers || config.providers.length === 0) return null;
 
   // Create internal registry
   const innerRegistry = new ToolRegistry();
@@ -66,19 +66,12 @@ export function createRunnerFromConfig(
   });
 
   const runnerOptions: RunnerOptions = {
-    model: config.llm.model,
-    llm: {
-      apiKey: config.llm.apiKey,
-      provider: config.llm.provider,
-      baseUrl: config.llm.baseUrl,
-      maxConcurrency: config.llm.maxConcurrency,
-    },
+    model: config.providers[0].models[0].modelId,
+    llm: { providers: config.providers },
     maxSteps: config.maxSteps,
     requestTimeout: config.requestTimeout,
     skillDirs: config.skillDirs,
     toolRegistry: registry,
-    thinkingEnabled: config.llm.thinkingEnabled,
-    enablePromptThinking: config.llm.enablePromptThinking,
     subAgents: config.subAgents,
   };
 
@@ -108,7 +101,7 @@ export function createRunnerFromConfig(
  * @returns AgentState instance, or null if config is invalid
  */
 export function createInitialStateFromConfig(config: AppConfig): AgentState | null {
-  if (!config.hasValidConfig || !config.llm) return null;
+  if (!config.hasValidConfig || !config.providers || config.providers.length === 0) return null;
 
   return createAgentState({
     name: config.agent?.name ?? 'colts-agent',

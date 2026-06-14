@@ -8,7 +8,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import type { SubAgentConfig } from '@agentskillmania/colts';
+import type { SubAgentConfig, ModelEntry, LLMProviderEntry } from '@agentskillmania/colts';
 import { Settings } from '@agentskillmania/settings-yaml';
 
 /** Default configuration directory */
@@ -18,24 +18,13 @@ const CONFIG_FILE = 'config.yaml';
 /**
  * colts.yaml configuration structure
  */
+export type ProviderConfig = LLMProviderEntry;
+
+export type { ModelEntry };
+
 export interface ColtsConfig extends Record<string, unknown> {
-  /** LLM provider settings */
-  llm?: {
-    /** Provider name (e.g., openai) */
-    provider?: string;
-    /** API key for the provider */
-    apiKey?: string;
-    /** Model identifier */
-    model?: string;
-    /** Custom base URL for the provider API */
-    baseUrl?: string;
-    /** Enable native thinking/reasoning mode */
-    thinkingEnabled?: boolean;
-    /** Enable prompt-level thinking guidance (for models without native thinking) */
-    enablePromptThinking?: boolean;
-    /** Concurrency limit: max concurrent LLM requests */
-    maxConcurrency?: number;
-  };
+  /** LLM provider list */
+  providers?: ProviderConfig[];
   /** Agent character settings */
   agent?: {
     /** Agent name */
@@ -59,20 +48,12 @@ export interface ColtsConfig extends Record<string, unknown> {
  * Application configuration (validated structure)
  */
 export interface AppConfig {
-  /** Whether the configuration is valid (provider + apiKey) */
+  /** Whether the configuration is valid */
   hasValidConfig: boolean;
   /** Configuration file path */
   configPath?: string;
-  /** LLM configuration */
-  llm?: {
-    provider: string;
-    apiKey: string;
-    model: string;
-    baseUrl?: string;
-    thinkingEnabled?: boolean;
-    enablePromptThinking?: boolean;
-    maxConcurrency?: number;
-  };
+  /** LLM providers */
+  providers?: ProviderConfig[];
   /** Agent configuration */
   agent?: {
     name: string;
@@ -97,12 +78,11 @@ const DEFAULT_MAX_STEPS = 500;
 const DEFAULT_REQUEST_TIMEOUT = 1_800_000;
 
 /** Default configuration YAML */
-const DEFAULT_CONFIG_YAML = `llm:
-  provider: openai
-  model: gpt-4
-  thinkingEnabled: false
-  enablePromptThinking: false
-  maxConcurrency: 5
+const DEFAULT_CONFIG_YAML = `providers:
+  - name: openai
+    apiKey: ''
+    models:
+      - modelId: gpt-4
 
 agent:
   name: colts-agent
@@ -177,7 +157,8 @@ function getGlobalConfigPath(globalDir?: string): string {
  * @returns True if both provider and apiKey are present
  */
 function isValidConfig(config: ColtsConfig): boolean {
-  return !!(config.llm?.apiKey && config.llm?.provider);
+  const first = config.providers?.[0];
+  return !!(first?.name && first?.apiKey && first?.models && first.models.length > 0);
 }
 
 /**
@@ -206,15 +187,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
     return {
       hasValidConfig: true,
       configPath,
-      llm: {
-        provider: config.llm!.provider!,
-        apiKey: config.llm!.apiKey!,
-        model: config.llm!.model ?? 'gpt-4',
-        baseUrl: config.llm!.baseUrl,
-        thinkingEnabled: config.llm!.thinkingEnabled,
-        enablePromptThinking: config.llm!.enablePromptThinking,
-        maxConcurrency: config.llm!.maxConcurrency,
-      },
+      providers: config.providers,
       agent: {
         name: config.agent?.name ?? 'colts-agent',
         instructions: config.agent?.instructions ?? '',
@@ -241,7 +214,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
  */
 export async function saveConfig(
   keyPath: string,
-  value: string,
+  value: unknown,
   options?: { globalDir?: string }
 ): Promise<void> {
   const configPath = getGlobalConfigPath(options?.globalDir);
@@ -260,7 +233,7 @@ export async function saveConfig(
  * @param options - Save options
  */
 export async function saveSetup(
-  setup: { provider: string; apiKey: string; model: string },
+  setup: { provider: string; apiKey: string; model: string; baseUrl?: string },
   options?: { globalDir?: string }
 ): Promise<void> {
   const configPath = getGlobalConfigPath(options?.globalDir);
@@ -268,9 +241,14 @@ export async function saveSetup(
 
   const settings = new Settings<ColtsConfig>(configPath);
   await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
-  settings.set('llm.provider', setup.provider);
-  settings.set('llm.apiKey', setup.apiKey);
-  settings.set('llm.model', setup.model);
+  settings.set('providers', [
+    {
+      name: setup.provider,
+      apiKey: setup.apiKey,
+      baseUrl: setup.baseUrl,
+      models: [{ modelId: setup.model }],
+    },
+  ]);
   await settings.save();
 }
 
@@ -281,7 +259,11 @@ export async function saveSetup(
  * @param keyPath - Dot-separated key path
  * @param value - Value to set
  */
-export function setNestedValue(obj: Record<string, unknown>, keyPath: string, value: string): void {
+export function setNestedValue(
+  obj: Record<string, unknown>,
+  keyPath: string,
+  value: unknown
+): void {
   const keys = keyPath.split('.');
   let current: Record<string, unknown> = obj;
 
