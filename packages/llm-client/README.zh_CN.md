@@ -111,19 +111,58 @@ for await (const event of client.stream({
 
 ## 自定义 Base URL
 
-适用于 OpenAI 兼容端点（智谱 AI、DeepSeek、Ollama 等）：
+适用于 OpenAI 兼容端点（智谱 AI、DeepSeek、Ollama 等），请在 provider 上配置 `baseUrl`。也可以在 client 上设置全局默认 `baseUrl`，供未配置 provider 使用：
 
 ```typescript
-const client = new LLMClient({
+const client = new LLMClient();
+
+client.registerProvider({
+  name: 'zhipu',
   baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+  maxConcurrency: 10,
 });
 
-client.registerProvider({ name: 'openai', maxConcurrency: 10 });
 client.registerApiKey({
   key: 'your-api-key',
-  provider: 'openai',
+  provider: 'zhipu',
   models: [{ modelId: 'glm-4', maxConcurrency: 2 }],
 });
+```
+
+### 一个 Client 管理多个供应商
+
+由于每个 provider 都可以独立设置 `baseUrl`，单个 `LLMClient` 就能将不同模型路由到不同端点：
+
+```typescript
+const client = new LLMClient();
+
+client.registerProvider({
+  name: 'openai',
+  baseUrl: 'https://api.openai.com/v1',
+  maxConcurrency: 10,
+});
+client.registerApiKey({
+  key: process.env.OPENAI_API_KEY!,
+  provider: 'openai',
+  models: [{ modelId: 'gpt-4o', maxConcurrency: 2 }],
+});
+
+client.registerProvider({
+  name: 'zhipu',
+  baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+  maxConcurrency: 10,
+});
+client.registerApiKey({
+  key: process.env.ZHIPU_API_KEY!,
+  provider: 'zhipu',
+  models: [{ modelId: 'glm-4', maxConcurrency: 2 }],
+});
+
+// 自动路由到 OpenAI 端点
+await client.call({ model: 'gpt-4o', messages: [{ role: 'user', content: 'Hi' }] });
+
+// 自动路由到智谱端点
+await client.call({ model: 'glm-4', messages: [{ role: 'user', content: 'Hi' }] });
 ```
 
 ## 多 Key 负载均衡
@@ -189,8 +228,8 @@ new LLMClient(options?: { baseUrl?, defaultProviderConcurrency?, defaultKeyConcu
 ```
 
 方法：
-- `registerProvider(config)` — 注册提供商并设置并发限制
-- `registerApiKey(config)` — 注册 API Key 并设置模型级并发限制
+- `registerProvider(config)` — 注册提供商，设置并发限制和可选的 `baseUrl`
+- `registerApiKey(config)` — 注册 API Key，设置模型级并发限制和可选的 per-key `baseUrl` 覆盖
 - `call(options): Promise<LLMResponse>` — 非流式补全
 - `stream(options): AsyncIterable<StreamEvent>` — 流式补全
 - `getStats(): ClientStats` — 实时队列和健康统计
