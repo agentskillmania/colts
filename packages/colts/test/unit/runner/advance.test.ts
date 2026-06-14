@@ -85,11 +85,35 @@ describe('advance()', () => {
     // but we can verify the runner accepts the config
     const r = new AgentRunner({
       model: 'gpt-4',
+      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
+    });
+    expect(r.getLLMProvider()).toBeDefined();
+    expect(r.getToolRegistry()).toBeInstanceOf(ToolRegistry);
+  });
+
+  it('should accept multiple providers via quick init', async () => {
+    const r = new AgentRunner({
+      model: 'gpt-4o',
       llm: {
-        apiKey: 'test-key',
-        // Not providing provider and maxConcurrency to test defaults
+        providers: [
+          {
+            name: 'openai',
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: 'sk-openai',
+            maxConcurrency: 10,
+            models: [{ modelId: 'gpt-4o', maxConcurrency: 2, contextWindow: 128000 }],
+          },
+          {
+            name: 'deepseek',
+            baseUrl: 'https://api.deepseek.com/v1',
+            apiKey: 'sk-deepseek',
+            maxConcurrency: 5,
+            models: [{ modelId: 'deepseek-chat', maxConcurrency: 3, contextWindow: 64000 }],
+          },
+        ],
       },
     });
+
     expect(r.getLLMProvider()).toBeDefined();
     expect(r.getToolRegistry()).toBeInstanceOf(ToolRegistry);
   });

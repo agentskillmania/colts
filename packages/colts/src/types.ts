@@ -298,18 +298,46 @@ export interface IToolRegistry {
 }
 
 /**
+ * Model entry for quick initialization.
+ */
+export interface ModelEntry {
+  /** Model identifier */
+  modelId: string;
+  /** Max concurrent requests for this model under its API key */
+  maxConcurrency?: number;
+  /** Context window size in tokens (overrides adapter defaults) */
+  contextWindow?: number;
+  /** Max output tokens per request (overrides adapter defaults) */
+  maxTokens?: number;
+  /** Whether the model supports native reasoning */
+  reasoning?: boolean;
+  /** Supported input modalities */
+  input?: string[];
+}
+
+/**
+ * Provider entry for quick initialization.
+ */
+export interface LLMProviderEntry {
+  /** Provider name */
+  name: string;
+  /** Custom base URL for this provider (optional) */
+  baseUrl?: string;
+  /** API key for this provider */
+  apiKey: string;
+  /** Max concurrent requests for this provider (default 5) */
+  maxConcurrency?: number;
+  /** Models available under this provider's API key */
+  models: ModelEntry[];
+}
+
+/**
  * LLM Quick Initialization Configuration
  * When passed, Runner internally creates LLMClient instance
  */
 export interface LLMQuickInit {
-  /** API Key */
-  apiKey: string;
-  /** Provider name (default 'openai') */
-  provider?: string;
-  /** Custom Base URL (optional) */
-  baseUrl?: string;
-  /** Concurrency limit: max concurrent requests (default 5, applied to provider/key/model levels) */
-  maxConcurrency?: number;
+  /** Multiple LLM provider configurations */
+  providers: LLMProviderEntry[];
 }
 
 /**

@@ -82,10 +82,15 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
           llm: {
-            apiKey: testConfig.apiKey,
-            provider: testConfig.provider,
-            baseUrl: testConfig.baseUrl,
-            maxConcurrency: 3,
+            providers: [
+              {
+                name: testConfig.provider,
+                apiKey: testConfig.apiKey,
+                baseUrl: testConfig.baseUrl,
+                maxConcurrency: 3,
+                models: [{ modelId: testConfig.testModel }],
+              },
+            ],
           },
         });
 
@@ -124,9 +129,14 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
           llm: {
-            apiKey: testConfig.apiKey,
-            provider: testConfig.provider,
-            baseUrl: testConfig.baseUrl,
+            providers: [
+              {
+                name: testConfig.provider,
+                apiKey: testConfig.apiKey,
+                baseUrl: testConfig.baseUrl,
+                models: [{ modelId: testConfig.testModel }],
+              },
+            ],
           },
           tools: [calculatorTool],
         });

@@ -54,14 +54,13 @@ describe('AgentRunner', () => {
 
     it('should throw ConfigurationError when both llmClient and llm are provided', () => {
       const client = createMockClient();
+      const providers = [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }];
 
       expect(() => {
         new AgentRunner({
           model: 'gpt-4',
           llmClient: client,
-          llm: {
-            apiKey: 'test-key',
-          },
+          llm: { providers },
         });
       }).toThrow();
 
@@ -69,9 +68,7 @@ describe('AgentRunner', () => {
         new AgentRunner({
           model: 'gpt-4',
           llmClient: client,
-          llm: {
-            apiKey: 'test-key',
-          },
+          llm: { providers },
         });
       }).toThrow('Cannot specify both llmClient and llm');
     });

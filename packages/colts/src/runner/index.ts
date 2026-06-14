@@ -285,7 +285,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     if (options.llmClient) {
       this.llmProvider = options.llmClient;
     } else if (options.llm) {
-      this.llmProvider = this.createLLMFromQuickInit(options.llm, options.model);
+      this.llmProvider = this.createLLMFromQuickInit(options.llm);
       /* c8 ignore next 3 */
     } else {
       throw new ConfigurationError('No LLM provider configured.');
@@ -379,18 +379,30 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   /**
    * Create LLMClient from quick initialization config
    */
-  private createLLMFromQuickInit(llm: LLMQuickInit, model: string): LLMClient {
-    const concurrency = llm.maxConcurrency ?? 5;
-    const provider = llm.provider ?? 'openai';
-
+  private createLLMFromQuickInit(llm: LLMQuickInit): LLMClient {
     const client = new LLMClient();
-    client.registerProvider({ name: provider, baseUrl: llm.baseUrl, maxConcurrency: concurrency });
-    client.registerApiKey({
-      key: llm.apiKey,
-      provider,
-      maxConcurrency: concurrency,
-      models: [{ modelId: model, maxConcurrency: concurrency }],
-    });
+
+    for (const provider of llm.providers) {
+      const providerConcurrency = provider.maxConcurrency ?? 5;
+      client.registerProvider({
+        name: provider.name,
+        baseUrl: provider.baseUrl,
+        maxConcurrency: providerConcurrency,
+      });
+      client.registerApiKey({
+        key: provider.apiKey,
+        provider: provider.name,
+        maxConcurrency: providerConcurrency,
+        models: provider.models.map((model) => ({
+          modelId: model.modelId,
+          maxConcurrency: model.maxConcurrency ?? 3,
+          contextWindow: model.contextWindow,
+          maxTokens: model.maxTokens,
+          reasoning: model.reasoning,
+          input: model.input,
+        })),
+      });
+    }
 
     return client;
   }
