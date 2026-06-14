@@ -181,9 +181,9 @@ class Semaphore {
  * const result = await scheduler.execute(
  *   'gpt-4',
  *   1, // priority
- *   async (key) => {
- *     // Make the actual API call
- *     return await callOpenAI(key.key, messages);
+ *   async ({ key, baseUrl }) => {
+ *     // Make the actual API call using the selected key and its resolved baseUrl
+ *     return await callOpenAI(key.key, baseUrl, messages);
  *   },
  *   'request-123' // optional request ID
  * );
@@ -415,8 +415,8 @@ export class RequestScheduler extends EventEmitter {
    * const result = await scheduler.execute(
    *   'gpt-4',
    *   1,
-   *   async (key) => {
-   *     return await callOpenAI(key.key, messages);
+   *   async ({ key, baseUrl }) => {
+   *     return await callOpenAI(key.key, baseUrl, messages);
    *   },
    *   'my-request-id'
    * );
@@ -425,7 +425,7 @@ export class RequestScheduler extends EventEmitter {
   async execute<T>(
     modelId: string,
     priority: number,
-    executor: (key: TrackedApiKey) => Promise<T>,
+    executor: (ctx: { key: TrackedApiKey; baseUrl?: string }) => Promise<T>,
     requestId?: string,
     signal?: AbortSignal
   ): Promise<T> {
@@ -501,8 +501,11 @@ export class RequestScheduler extends EventEmitter {
 
               const startTime = Date.now();
 
+              // Resolve baseUrl: key-level override > provider-level > none (client applies global default)
+              const baseUrl = selectedKey.baseUrl ?? provider.baseUrl;
+
               try {
-                const result = await executor(selectedKey);
+                const result = await executor({ key: selectedKey, baseUrl });
 
                 // Update stats
                 provider.activeCount--;

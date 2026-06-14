@@ -80,6 +80,19 @@ export interface ProviderConfig {
    * and models registered under this provider.
    */
   maxConcurrency: number;
+
+  /**
+   * Base URL for this provider's API endpoint.
+   *
+   * @remarks
+   * When set, requests routed to this provider use this endpoint instead
+   * of the global LLMClient baseUrl. This allows a single LLMClient to
+   * talk to multiple providers (e.g. OpenAI, ZhiPu, DeepSeek) at their
+   * respective endpoints.
+   *
+   * @example 'https://api.openai.com/v1'
+   */
+  baseUrl?: string;
 }
 
 /**
@@ -244,6 +257,18 @@ export interface ApiKeyConfig {
    * The scheduler filters available keys based on model support.
    */
   models: ModelConstraint[];
+
+  /**
+   * Custom base URL for this specific API key.
+   *
+   * @remarks
+   * When set, it overrides the provider's baseUrl. Useful for proxies,
+   * dedicated endpoints, or multi-region keys. If omitted, the provider's
+   * baseUrl or the global LLMClient baseUrl is used.
+   *
+   * @example 'https://proxy.example.com/v1'
+   */
+  baseUrl?: string;
 }
 
 /**

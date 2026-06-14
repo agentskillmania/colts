@@ -183,6 +183,7 @@ export class PiAiAdapter {
    * Create a Model instance for the pi-ai library.
    *
    * @param modelId - Model identifier (e.g., 'gpt-4', 'gpt-3.5-turbo')
+   * @param baseUrl - Optional API base URL for this request; falls back to the adapter default
    * @param meta - Optional model metadata
    * @returns Model instance configured for the identifier
    *
@@ -191,8 +192,8 @@ export class PiAiAdapter {
    * If not found, creates a custom Model configuration with reasonable defaults
    * for OpenAI-compatible APIs.
    *
-   * If a custom baseUrl was provided in the constructor, it will be used
-   * instead of the default OpenAI endpoint.
+   * If a custom baseUrl was provided (per-request or in the constructor), it will
+   * be used instead of the default OpenAI endpoint.
    *
    * The fallback configuration uses 'openai-completions' as the API type
    * which is supported by pi-ai for OpenAI-compatible endpoints.
@@ -201,8 +202,11 @@ export class PiAiAdapter {
    */
   private createModel(
     modelId: string,
+    baseUrl?: string,
     meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean; input?: string[] }
   ): Model<string> {
+    const effectiveBaseUrl = baseUrl ?? this.customBaseUrl;
+
     // Try to get model from pi-ai registry across known providers
     const providers = ['openai', 'opencode', 'opencode-go', 'anthropic', 'google'] as const;
     for (const provider of providers) {
@@ -210,8 +214,8 @@ export class PiAiAdapter {
       const model = getModel(provider, modelId as never);
       if (model) {
         // Apply metadata overrides when provided
-        const baseModel = this.customBaseUrl
-          ? ({ ...model, baseUrl: this.customBaseUrl } as Model<string>)
+        const baseModel = effectiveBaseUrl
+          ? ({ ...model, baseUrl: effectiveBaseUrl } as Model<string>)
           : (model as Model<string>);
 
         // If metadata is provided, override the registry values
@@ -231,14 +235,14 @@ export class PiAiAdapter {
 
     // Fallback: create a custom model for OpenAI-compatible APIs
     // Use 'openai-completions' which is the correct API type in pi-ai
-    const thinkingFormat = detectThinkingFormat(this.customBaseUrl ?? '');
+    const thinkingFormat = detectThinkingFormat(effectiveBaseUrl ?? '');
 
     return {
       id: modelId,
       name: modelId,
       api: 'openai-completions',
       provider: 'openai',
-      baseUrl: this.customBaseUrl ?? 'https://api.openai.com/v1',
+      baseUrl: effectiveBaseUrl ?? 'https://api.openai.com/v1',
       reasoning: meta?.reasoning ?? true,
       input: meta?.input ?? ['text'],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -259,7 +263,7 @@ export class PiAiAdapter {
     modelId: string,
     meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean; input?: string[] }
   ): ModelMeta {
-    const model = this.createModel(modelId, meta);
+    const model = this.createModel(modelId, undefined, meta);
     return {
       contextWindow: model.contextWindow,
       maxTokens: model.maxTokens,
@@ -272,7 +276,7 @@ export class PiAiAdapter {
     modelId: string,
     meta?: { contextWindow?: number; maxTokens?: number; reasoning?: boolean; input?: string[] }
   ): ModelCapabilities {
-    const model = this.createModel(modelId, meta);
+    const model = this.createModel(modelId, undefined, meta);
     return {
       contextWindow: model.contextWindow,
       maxTokens: model.maxTokens,
@@ -424,9 +428,10 @@ export class PiAiAdapter {
     modelId: string,
     apiKey: string,
     options: CallOptions,
-    onRetry?: (attempt: number, error: Error) => void
+    onRetry?: (attempt: number, error: Error) => void,
+    baseUrl?: string
   ): Promise<LLMResponse> {
-    const model = this.createModel(modelId);
+    const model = this.createModel(modelId, baseUrl);
     const context = this.buildContext(options.messages, options.tools);
     const retryOpts = this.mergeRetryOptions(options.retryOptions);
 
@@ -635,9 +640,10 @@ export class PiAiAdapter {
     modelId: string,
     apiKey: string,
     options: CallOptions,
-    onRetry?: (attempt: number, error: Error) => void
+    onRetry?: (attempt: number, error: Error) => void,
+    baseUrl?: string
   ): AsyncIterable<StreamEvent> {
-    const model = this.createModel(modelId);
+    const model = this.createModel(modelId, baseUrl);
     const context = this.buildContext(options.messages, options.tools);
     const retryOpts = this.mergeRetryOptions(options.retryOptions);
 

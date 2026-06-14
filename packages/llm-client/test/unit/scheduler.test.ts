@@ -79,8 +79,8 @@ describe('RequestScheduler', () => {
       });
 
       // Execute multiple requests and track which key was used
-      const executor = async (key: { key: string }) => {
-        usedKeys.push(key.key);
+      const executor = async (ctx: { key: { key: string }; baseUrl?: string }) => {
+        usedKeys.push(ctx.key.key);
         return 'result';
       };
 
