@@ -383,8 +383,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     const concurrency = llm.maxConcurrency ?? 5;
     const provider = llm.provider ?? 'openai';
 
-    const client = new LLMClient({ baseUrl: llm.baseUrl });
-    client.registerProvider({ name: provider, maxConcurrency: concurrency });
+    const client = new LLMClient();
+    client.registerProvider({ name: provider, baseUrl: llm.baseUrl, maxConcurrency: concurrency });
     client.registerApiKey({
       key: llm.apiKey,
       provider,
