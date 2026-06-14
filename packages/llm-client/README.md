@@ -109,19 +109,58 @@ for await (const event of client.stream({
 
 ## Custom Base URL
 
-For OpenAI-compatible endpoints (ZhiPu AI, DeepSeek, Ollama, etc.):
+For OpenAI-compatible endpoints (ZhiPu AI, DeepSeek, Ollama, etc.), configure the `baseUrl` on the provider. You can also set a global default `baseUrl` on the client for providers that do not specify one.
 
 ```typescript
-const client = new LLMClient({
+const client = new LLMClient();
+
+client.registerProvider({
+  name: 'zhipu',
   baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+  maxConcurrency: 10,
 });
 
-client.registerProvider({ name: 'openai', maxConcurrency: 10 });
 client.registerApiKey({
   key: 'your-api-key',
-  provider: 'openai',
+  provider: 'zhipu',
   models: [{ modelId: 'glm-4', maxConcurrency: 2 }],
 });
+```
+
+### Multiple Providers in One Client
+
+Because each provider carries its own `baseUrl`, a single `LLMClient` can route different models to different endpoints:
+
+```typescript
+const client = new LLMClient();
+
+client.registerProvider({
+  name: 'openai',
+  baseUrl: 'https://api.openai.com/v1',
+  maxConcurrency: 10,
+});
+client.registerApiKey({
+  key: process.env.OPENAI_API_KEY!,
+  provider: 'openai',
+  models: [{ modelId: 'gpt-4o', maxConcurrency: 2 }],
+});
+
+client.registerProvider({
+  name: 'zhipu',
+  baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+  maxConcurrency: 10,
+});
+client.registerApiKey({
+  key: process.env.ZHIPU_API_KEY!,
+  provider: 'zhipu',
+  models: [{ modelId: 'glm-4', maxConcurrency: 2 }],
+});
+
+// Automatically routed to the OpenAI endpoint
+await client.call({ model: 'gpt-4o', messages: [{ role: 'user', content: 'Hi' }] });
+
+// Automatically routed to the ZhiPu endpoint
+await client.call({ model: 'glm-4', messages: [{ role: 'user', content: 'Hi' }] });
 ```
 
 ## Multi-Key Load Balancing
@@ -187,8 +226,8 @@ new LLMClient(options?: { baseUrl?, defaultProviderConcurrency?, defaultKeyConcu
 ```
 
 Methods:
-- `registerProvider(config)` — Register a provider with concurrency limits
-- `registerApiKey(config)` — Register an API key with model-level concurrency limits
+- `registerProvider(config)` — Register a provider with concurrency limits and optional `baseUrl`
+- `registerApiKey(config)` — Register an API key with model-level concurrency limits and optional per-key `baseUrl` override
 - `call(options): Promise<LLMResponse>` — Non-streaming completion
 - `stream(options): AsyncIterable<StreamEvent>` — Streaming completion
 - `getStats(): ClientStats` — Real-time queue and health statistics

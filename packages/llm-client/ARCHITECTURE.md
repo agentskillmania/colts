@@ -146,4 +146,5 @@ LLM API ──▶ pi-ai ──▶ AssistantMessageEvent ──▶ mapEvent() ─
 3. **优先级队列**: 使用 p-queue,支持 0-N 优先级
 4. **重试策略**: 仅对 429/5xx/网络错误重试,业务错误不重试
 5. **Token 统计**: 复用 pi-ai 的 usage 事件,不自己估算
+6. **Provider 级 baseUrl 路由**: Provider 和 API Key 可配置 `baseUrl`; RequestScheduler 将解析后的 `baseUrl` 随所选 Key 一起交给 PiAiAdapter,实现一个 Client 同时连接多个供应商端点
 
