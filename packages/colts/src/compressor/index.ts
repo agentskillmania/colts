@@ -157,7 +157,14 @@ export class DefaultContextCompressor {
     }
 
     // Step 3: Truncate (set anchor)
-    const anchor = Math.max(existingAnchor, messages.length - this.keepRecent);
+    let anchor = Math.max(existingAnchor, messages.length - this.keepRecent);
+    // Skill instructions must stay visible: never let anchor skip past a load_skill tool result.
+    for (let i = existingAnchor; i < anchor; i++) {
+      if (messages[i].role === 'tool' && messages[i].toolName === 'load_skill') {
+        anchor = i;
+        break;
+      }
+    }
 
     // Nothing to compress
     if (anchor <= existingAnchor) {
@@ -207,6 +214,9 @@ export class DefaultContextCompressor {
 
       // Only process tool role messages
       if (msg.role !== 'tool') continue;
+
+      // Skill instructions live in load_skill tool results and must persist — never prune.
+      if (msg.toolName === 'load_skill') continue;
 
       // Skip already-pruned stubs
       if (msg.content.includes(', pruned]')) continue;
