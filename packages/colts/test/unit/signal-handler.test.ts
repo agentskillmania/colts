@@ -48,7 +48,6 @@ describe('applySkillSignal', () => {
       expect(result.action).toBe('loaded');
       if (result.action === 'loaded') {
         expect(result.skillName).toBe('greeting');
-        expect(result.parentPushed).toBe(false);
       }
 
       const ss = newState.context.skillState!;
@@ -70,7 +69,6 @@ describe('applySkillSignal', () => {
       expect(result.action).toBe('loaded');
       if (result.action === 'loaded') {
         expect(result.skillName).toBe('greeting');
-        expect(result.parentPushed).toBe(false);
       }
       expect(newState.context.skillState!.current).toBe('greeting');
     });
@@ -91,8 +89,6 @@ describe('applySkillSignal', () => {
       expect(result.action).toBe('loaded');
       if (result.action === 'loaded') {
         expect(result.skillName).toBe('tell-time');
-        // No stack now — parentPushed is always false
-        expect(result.parentPushed).toBe(false);
       }
 
       const ss = newState.context.skillState!;
