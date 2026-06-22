@@ -286,27 +286,26 @@ describe('Step 0: AgentState', () => {
   });
 
   describe('loadSkill', () => {
-    it('should initialize and set current and loadedInstructions when no skillState exists', () => {
+    it('should initialize and set current when no skillState exists', () => {
       const state = createAgentState(baseConfig);
       const newState = loadSkill(state, 'tell-time', 'Report current time');
 
       expect(newState.context.skillState).toEqual(expect.any(Object));
       expect(newState.context.skillState!.current).toBe('tell-time');
-      expect(newState.context.skillState!.loadedInstructions).toBe('Report current time');
-      expect(newState.context.skillState!.stack).toEqual([]);
+      // Instructions are no longer stored in state (persisted via tool results instead)
+      expect((newState.context.skillState as any).loadedInstructions).toBeUndefined();
+      expect((newState.context.skillState as any).stack).toBeUndefined();
     });
 
-    it('should push existing active skill onto stack (supports nesting)', () => {
+    it('should overwrite current without any stack', () => {
       let state = createAgentState(baseConfig);
       state = loadSkill(state, 'tell-time', 'Report time');
       state = loadSkill(state, 'greeting', 'Say hello');
 
       expect(state.context.skillState!.current).toBe('greeting');
-      expect(state.context.skillState!.loadedInstructions).toBe('Say hello');
-      expect(state.context.skillState!.stack).toHaveLength(1);
-      expect(state.context.skillState!.stack[0].skillName).toBe('tell-time');
-      // Parent skill instructions should be saved in stack frame
-      expect(state.context.skillState!.stack[0].savedInstructions).toBe('Report time');
+      // No stack field anymore
+      expect((state.context.skillState as any).stack).toBeUndefined();
+      expect((state.context.skillState as any).loadedInstructions).toBeUndefined();
     });
 
     it('should not modify original state (immutability)', () => {

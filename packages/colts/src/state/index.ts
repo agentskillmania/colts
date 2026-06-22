@@ -170,30 +170,23 @@ export function setLastToolResult(state: AgentState, result: unknown): AgentStat
 /**
  * Proactively load a Skill into the state.
  *
- * Simulates the SWITCH_SKILL signal effect of the load_skill tool:
- * pushes the currently active skill onto the stack and sets the new skill as active.
- * buildMessages automatically injects loadedInstructions into the LLM system prompt.
+ * Only sets the currently active skill (for UI display). Skill instructions are
+ * NOT stored here — they persist in conversation history as `load_skill` tool
+ * results, so they survive context switches and nested skill calls. The
+ * `instructions` parameter is retained in the signature for caller compatibility
+ * but is intentionally not persisted into state.
  *
  * @param state - Current AgentState
  * @param skillName - Skill name
- * @param instructions - Skill instruction content (SKILL.md body)
- * @returns New AgentState (skillState updated)
+ * @param instructions - Skill instruction content (unused at the state layer; persisted via tool results)
+ * @returns New AgentState (skillState.current updated)
  */
 export function loadSkill(state: AgentState, skillName: string, instructions: string): AgentState {
   return updateState(state, (draft) => {
     if (!draft.context.skillState) {
-      draft.context.skillState = { stack: [], current: null };
-    }
-    // If there is already an active skill, push it onto the stack (supports nesting)
-    if (draft.context.skillState.current) {
-      draft.context.skillState.stack.push({
-        skillName: draft.context.skillState.current,
-        loadedAt: Date.now(),
-        savedInstructions: draft.context.skillState.loadedInstructions,
-      });
+      draft.context.skillState = { current: null };
     }
     draft.context.skillState.current = skillName;
-    draft.context.skillState.loadedInstructions = instructions;
   });
 }
 

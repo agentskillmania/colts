@@ -89,30 +89,13 @@ export interface CompressionMeta {
 }
 
 /**
- * Skill stack frame for nested skill calling
- */
-export interface SkillStackFrame {
-  /** Name of the skill in this frame */
-  skillName: string;
-  /** Timestamp when this skill was loaded */
-  loadedAt: number;
-  /** Optional task context passed to the skill */
-  taskContext?: unknown;
-  /** Saved parent skill instructions, restored on return_skill */
-  savedInstructions?: string;
-}
-
-/**
- * Skill state for nested skill calling
- * Stored in AgentContext to persist across steps and sessions
+ * Skill state — tracks the currently active skill for UI display.
+ * Instructions live in conversation history (as load_skill tool results),
+ * NOT here, so they persist across turns and survive context switches.
  */
 export interface SkillState {
-  /** Stack of parent skills (for return navigation) */
-  stack: SkillStackFrame[];
-  /** Currently active skill name */
+  /** Currently active skill name (for upper-layer display only) */
   current: string | null;
-  /** Cached instructions of current skill (to avoid re-loading) */
-  loadedInstructions?: string;
 }
 
 /**
