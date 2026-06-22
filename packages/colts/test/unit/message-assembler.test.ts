@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { DefaultMessageAssembler } from '../../src/message-assembler/default-assembler.js';
-import type { AgentState, SkillState } from '../../src/types.js';
+import type { AgentState, Message, SkillState } from '../../src/types.js';
 
 function createMockState(skillState?: SkillState): AgentState {
   return {
@@ -24,180 +24,37 @@ function createMockState(skillState?: SkillState): AgentState {
   };
 }
 
+/** Replace the empty message history on a mock state with typed messages. */
+function withMessages(state: AgentState, messages: Message[]): void {
+  state.context.messages = messages;
+}
+
 describe('DefaultMessageAssembler', () => {
   const assembler = new DefaultMessageAssembler();
 
-  describe('Dynamic content extraction', () => {
-    it('should NOT include skill loadedInstructions in static system prefix', () => {
-      const state = createMockState({
-        stack: [],
-        current: 'greeting',
-        loadedInstructions: 'Greet the user warmly.',
-      });
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const systemMessage = messages.find(
-        (m) =>
-          m.role === 'user' &&
-          typeof m.content === 'string' &&
-          m.content.includes('[System Instructions]')
-      );
-
-      // Static prefix should NOT contain skill instructions
-      expect(systemMessage?.content).not.toContain('Greet the user warmly.');
-    });
-
-    it('should NOT include SKILL MODE guide in static system prefix', () => {
-      const state = createMockState({
-        stack: [],
-        current: 'greeting',
-      });
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const systemMessage = messages.find(
-        (m) =>
-          m.role === 'user' &&
-          typeof m.content === 'string' &&
-          m.content.includes('[System Instructions]')
-      );
-
-      expect(systemMessage?.content).not.toContain('SKILL MODE');
-    });
-
-    it('should include skill instructions in system-reminder of last user message', () => {
-      const state = createMockState({
-        stack: [],
-        current: 'greeting',
-        loadedInstructions: 'Greet the user warmly.',
-      });
-      // Add a user message so there's a "last user message" to inject into
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-
-      // Find the last user message
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
-
-      expect(content).toContain('<system-reminder>');
-      expect(content).toContain('## Active Skill: greeting');
-      expect(content).toContain('Greet the user warmly.');
-      expect(content).toContain('</system-reminder>');
-    });
-
-    it('should include skill mode guide in system-reminder', () => {
-      const state = createMockState({
-        stack: [],
-        current: 'greeting',
-      });
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
-
-      expect(content).toContain("'greeting' skill");
-      expect(content).toContain('return_skill');
-    });
-
-    it('should NOT include system-reminder when no dynamic content exists', () => {
-      const state = createMockState(undefined);
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
-
-      expect(content).not.toContain('<system-reminder>');
-    });
-
-    it('should inject system-reminder as new user message when last message is not user', () => {
-      const state = createMockState({
-        stack: [],
-        current: 'greeting',
-      });
-      (state.context as any).messages = [
-        { role: 'assistant', id: '1', content: 'Hi', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const last = messages[messages.length - 1];
-
-      // Should have added a new user message with the system-reminder
-      expect(last.role).toBe('user');
-      const content = typeof last.content === 'string' ? last.content : '';
-      expect(content).toContain('<system-reminder>');
-    });
-  });
-
   describe('Skill mode guides', () => {
-    it('should include skill guide in system-reminder when a skill is active', () => {
-      const state = createMockState({
-        stack: [],
-        current: 'greeting',
-        loadedInstructions: 'Greet the user warmly.',
-      });
-      // Need a user message for system-reminder injection target
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
-
-      expect(content).toContain('<system-reminder>');
-      expect(content).toContain("'greeting' skill");
-      expect(content).toContain('return_skill');
-      expect(content).toContain('load_skill');
-    });
-
-    it('should include skill guide for nested skill (sub-skill) in system-reminder', () => {
-      const state = createMockState({
-        stack: [{ skillName: 'data-analysis', loadedAt: Date.now() }],
-        current: 'data-cleaning',
-        loadedInstructions: '# Data Cleaning Skill\n\nClean data properly.',
-      });
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
-
-      expect(content).toContain('## Active Skill: data-cleaning');
-      expect(content).toContain('Data Cleaning Skill');
-      expect(content).toContain("'data-cleaning' skill");
-    });
-
     it('should not include system-reminder when no skillState', () => {
       const state = createMockState(undefined);
-      (state.context as any).messages = [
+      withMessages(state, [
         { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
+      ]);
 
       const messages = assembler.build(state, { model: 'gpt-4' });
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
+      // Active skill instructions now live in history; the default assembler
+      // injects no dynamic <system-reminder>.
       expect(content).not.toContain('<system-reminder>');
     });
 
     it('should not include system-reminder when skillState has no current', () => {
       const state = createMockState({
-        stack: [],
         current: null,
       });
-      (state.context as any).messages = [
+      withMessages(state, [
         { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
+      ]);
 
       const messages = assembler.build(state, { model: 'gpt-4' });
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
@@ -206,85 +63,22 @@ describe('DefaultMessageAssembler', () => {
       expect(content).not.toContain('<system-reminder>');
     });
 
-    it('should show active skill name for deeply nested skills', () => {
-      const state = createMockState({
-        stack: [
-          { skillName: 'grandparent', loadedAt: Date.now() - 2000 },
-          { skillName: 'parent', loadedAt: Date.now() - 1000 },
-        ],
-        current: 'child',
-      });
-      (state.context as any).messages = [
+    it('should not inject dynamic skill reminder even when a skill is current', () => {
+      // Skill instructions now persist in history (as load_skill tool results),
+      // so an active skill must NOT trigger a <system-reminder> in the default
+      // assembler.
+      const state = createMockState({ current: 'greeting' });
+      withMessages(state, [
         { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
+      ]);
 
       const messages = assembler.build(state, { model: 'gpt-4' });
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
-      expect(content).toContain("'child' skill");
-    });
-  });
-
-  describe('Prompt contract', () => {
-    it('must instruct return_skill and not contain contradictory instructions', () => {
-      const state = createMockState({
-        stack: [],
-        current: 'poet',
-      });
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
-
-      expect(content).toContain('return_skill');
-      expect(content).not.toContain('do NOT call return_skill');
-      expect(content).toContain('load_skill');
-    });
-  });
-
-  describe('Skill instructions loading', () => {
-    it('should include loadedInstructions in system-reminder', () => {
-      const state = createMockState({
-        stack: [{ skillName: 'parent', loadedAt: Date.now() }],
-        current: 'child',
-        loadedInstructions: '# Child Skill\n\nDo child things.',
-      });
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
-
-      expect(content).toContain('# Child Skill');
-      expect(content).toContain('Do child things.');
-    });
-
-    it('should keep skill instructions out of static prefix', () => {
-      const state = createMockState({
-        stack: [{ skillName: 'parent', loadedAt: Date.now() }],
-        current: 'child',
-        loadedInstructions: '# Child Skill',
-      });
-      (state.context as any).messages = [
-        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
-      ];
-
-      const messages = assembler.build(state, { model: 'gpt-4' });
-      // Static prefix is messages[0]
-      const systemMsg = messages.find(
-        (m) =>
-          m.role === 'user' &&
-          typeof m.content === 'string' &&
-          m.content.includes('[System Instructions]')
-      );
-
-      expect(systemMsg?.content).not.toContain('# Child Skill');
+      expect(content).not.toContain('<system-reminder>');
+      expect(content).not.toContain('## Active Skill');
+      expect(content).not.toContain('return_skill');
     });
   });
 

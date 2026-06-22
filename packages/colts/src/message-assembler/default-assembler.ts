@@ -2,13 +2,13 @@
  * @fileoverview Default Message Assembler
  *
  * Migrated from runner-message-builder.ts. Converts internal AgentState
- * messages to pi-ai Message format. Handles system prompts, skill guides,
+ * messages to pi-ai Message format. Handles system prompts, skill catalog,
  * compression summaries, and conversation history.
  *
  * KV-cache design:
  * - Static prefix: system prompt + instructions + skill catalog + sub-agents + thinking guidance
- * - Dynamic content (active skill): injected as <system-reminder>
- *   into the last user message, keeping the static prefix stable for caching
+ * - Active skill instructions persist in history as `load_skill` tool results,
+ *   so no dynamic reminder is injected — the static prefix stays stable for caching
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
 
@@ -180,8 +180,11 @@ export class DefaultMessageAssembler implements IMessageAssembler {
     }
 
     // ── Dynamic context injection ──
-    // Inject active skill as <system-reminder> into the last user message.
-    // This keeps the static prefix stable for KV-cache.
+    // Active skill instructions now persist in conversation history (as load_skill
+    // tool results) and are surfaced naturally via the history loop above, so no
+    // dynamic <system-reminder> is injected here. buildDynamicReminder() always
+    // returns null for the default assembler; it is retained as a no-op hook in
+    // case a subclass wants to add dynamic content.
     const reminder = this.buildDynamicReminder(state);
     if (reminder && messages.length > 0) {
       const lastIdx = messages.length - 1;
@@ -249,28 +252,17 @@ export class DefaultMessageAssembler implements IMessageAssembler {
   /**
    * Build <system-reminder> content from dynamic state
    *
-   * Reads active skill from state.context.skillState.
-   * Todolist is a wrangler concern and handled by MarkdownMessageAssembler.
+   * The default assembler injects no dynamic reminder: active skill instructions
+   * now persist in conversation history (as `load_skill` tool results) and are
+   * surfaced naturally via the history loop in {@link build}. Todolist is a
+   * wrangler concern, handled by MarkdownMessageAssembler.
    *
-   * @returns Formatted reminder text, or null if no dynamic content exists
+   * Retained as a no-op extension hook: subclasses may override this to inject
+   * their own dynamic `<system-reminder>` content.
+   *
+   * @returns Always null for the default assembler
    */
-  private buildDynamicReminder(state: AgentState): string | null {
-    const parts: string[] = [];
-
-    // Active skill — from colts core
-    const skillState = state.context.skillState;
-    if (skillState?.current) {
-      parts.push('## Active Skill: ' + skillState.current);
-      if (skillState.loadedInstructions) {
-        parts.push(skillState.loadedInstructions);
-      }
-      parts.push(
-        `You are currently executing the '${skillState.current}' skill.\n\n` +
-          'You may switch to another skill at any time using the `load_skill` tool.\n' +
-          'When you COMPLETE your task, you MUST call the `return_skill` tool.'
-      );
-    }
-
-    return parts.length > 0 ? parts.join('\n\n') : null;
+  protected buildDynamicReminder(_state: AgentState): string | null {
+    return null;
   }
 }
