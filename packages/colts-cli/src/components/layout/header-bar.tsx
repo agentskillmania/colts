@@ -35,16 +35,15 @@ const STATUS_CONFIG: Record<RunStatus, { color: 'gray' | 'yellow' | 'red'; label
 /**
  * Build skill breadcrumb from current skill state
  *
- * Format: "parent › child › current" (using stack + current)
+ * SkillState only carries the active skill name (`current`); the historical
+ * nesting stack was removed, so the breadcrumb is just the current skill.
  *
  * @param skillState - Current skill state
  * @returns Breadcrumb string or null
  */
 function buildBreadcrumb(skillState: SkillState | undefined): string | null {
   if (!skillState || !skillState.current) return null;
-  const parts = skillState.stack.map((f) => f.skillName);
-  parts.push(skillState.current);
-  return parts.join(' › ');
+  return skillState.current;
 }
 
 /**
