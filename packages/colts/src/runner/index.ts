@@ -46,7 +46,7 @@ import { MiddlewareExecutor } from '../middleware/executor.js';
 import type { AgentMiddleware } from '../middleware/types.js';
 import { DefaultExecutionPolicy } from '../policy/default-policy.js';
 import { FilesystemSkillProvider } from '../skills/filesystem-provider.js';
-import { createLoadSkillTool, createReturnSkillTool } from '../skills/index.js';
+import { createLoadSkillTool } from '../skills/index.js';
 import type { ISkillProvider } from '../skills/types.js';
 import {
   addUserMessage,
@@ -132,7 +132,7 @@ export interface RunnerEventMap {
   'llm:request': {
     messages: Array<{ role: string; content: string }>;
     tools: string[];
-    skill: { current: string | null; stack: string[] } | null;
+    skill: { current: string | null } | null;
     timestamp: number;
   };
   /** After LLM response is received */
@@ -351,8 +351,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     if (this._skillProvider) {
       const loadSkillTool = createLoadSkillTool(this._skillProvider);
       this.toolRegistry.register(loadSkillTool);
-      // Register return_skill for nested skill calling
-      this.toolRegistry.register(createReturnSkillTool());
     }
 
     // Initialize sub-agent configs and register delegate tool
@@ -742,7 +740,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     }
     return updateState(state, (draft) => {
       draft.context.skillState = {
-        stack: [],
         current: null,
       };
     });
@@ -1254,7 +1251,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           let runResult: RunResult;
 
           if (decision.runResultType === 'success') {
-            // Defensive cleanup: clear skillState when top-level skill replies directly (without return_skill)
+            // Defensive cleanup: clear the active-skill marker when a skill replies directly
             currentState = this.cleanupStaleSkillState(currentState);
             runResult = {
               type: 'success',
@@ -1499,7 +1496,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           let runResult: RunResult;
 
           if (decision.runResultType === 'success') {
-            // Defensive cleanup: clear skillState when top-level skill replies directly (without return_skill)
+            // Defensive cleanup: clear the active-skill marker when a skill replies directly
             currentState = this.cleanupStaleSkillState(currentState);
             runResult = {
               type: 'success',
@@ -1570,8 +1567,11 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   }
 
   /**
-   * Defensive cleanup: when a run ends successfully, if the top-level skill is still active
-   * (return_skill was not called), automatically clear skillState to prevent stale breadcrumbs.
+   * Defensive cleanup: when a run ends successfully, if a skill is still marked
+   * active (the LLM replied directly without an explicit return path), clear the
+   * current-skill marker so stale breadcrumbs do not leak into the next run.
+   *
+   * Note: the skill stack was removed, so only `current` needs clearing.
    *
    * @param state - Current AgentState
    * @returns Cleaned AgentState (if cleanup was needed)
@@ -1579,11 +1579,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private cleanupStaleSkillState(state: AgentState): AgentState {
     const ss = state.context.skillState;
     if (!ss || !ss.current) return state;
-    // Only clean up top-level skill (empty stack); nested skill cleanup is handled by return_skill
-    if (ss.stack.length > 0) return state;
     return updateState(state, (draft) => {
       draft.context.skillState!.current = null;
-      draft.context.skillState!.loadedInstructions = undefined;
     });
   }
 }

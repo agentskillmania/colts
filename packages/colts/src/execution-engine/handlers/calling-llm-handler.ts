@@ -99,7 +99,6 @@ export class CallingLLMHandler implements IPhaseHandler {
       skill: state.context.skillState
         ? {
             current: state.context.skillState.current,
-            stack: state.context.skillState.stack.map((f) => f.skillName),
           }
         : null,
       timestamp: Date.now(),

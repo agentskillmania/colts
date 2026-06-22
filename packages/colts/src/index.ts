@@ -17,7 +17,6 @@ export type {
 
   // Skill state
   SkillState,
-  SkillStackFrame,
   // Configuration interfaces
   ILLMProvider,
   IToolRegistry,

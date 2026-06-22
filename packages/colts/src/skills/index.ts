@@ -2,7 +2,8 @@
  * @fileoverview Skills module
  *
  * Exports skill type definitions, the filesystem skill provider,
- * and built-in tools for loading and returning from skills.
+ * and the built-in load_skill tool. (return_skill was removed: skill
+ * instructions now persist as the load_skill tool result content.)
  */
 
 export {
@@ -13,12 +14,11 @@ export {
 } from './types.js';
 
 // Re-export from main types.ts for convenience
-export type { SkillStackFrame, SkillState } from '../types.js';
+export type { SkillState } from '../types.js';
 
 export { FilesystemSkillProvider } from './filesystem-provider.js';
 
 export { createLoadSkillTool } from './load-skill-tool.js';
-export { createReturnSkillTool } from './return-skill-tool.js';
 
 export {
   applySkillSignal,

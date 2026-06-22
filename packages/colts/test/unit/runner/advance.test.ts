@@ -482,65 +482,17 @@ describe('advance()', () => {
     result = await runner.advance(result.state, result.execState, registry); // parsed -> executing-tool
     result = await runner.advance(result.state, result.execState, registry); // executing-tool -> tool-result
 
-    // Verify tool result message is LLM-friendly, not raw JSON
+    // Verify tool result message persists the skill instructions (redesigned
+    // persistence model: instructions live in the tool result content).
     const messages = result.state.context.messages;
     // After skill switch, a task user message is injected, so the tool message is second-to-last
     const toolMsg = messages[messages.length - 2];
     expect(toolMsg.role).toBe('tool');
-    expect(toolMsg.content).toBe("Skill 'tell-time' loaded. Follow its instructions.");
+    expect(toolMsg.content).toBe('Report current time');
     // The last message is the injected task user message
     const taskMsg = messages[messages.length - 1];
     expect(taskMsg.role).toBe('user');
     expect(taskMsg.content).toBe('Get time');
-  });
-
-  it('should format RETURN_SKILL signal with actual result text', async () => {
-    const mockResponse: LLMResponse = {
-      content: 'Returning',
-      toolCalls: [
-        {
-          id: 'call-return-1',
-          name: 'return_skill',
-          arguments: { result: 'It is 2:30 PM' },
-        },
-      ],
-      tokens: mockTokens,
-      stopReason: 'tool_calls',
-    };
-
-    const client = createMockLLMClient([mockResponse]);
-    const runner = new AgentRunner({
-      model: 'gpt-4',
-      llmClient: client,
-    });
-
-    const registry = runner.getToolRegistry();
-    registry.register({
-      name: 'return_skill',
-      description: 'Return from skill',
-      parameters: z.object({ result: z.string() }),
-      execute: async () => ({
-        type: 'RETURN_SKILL',
-        result: 'It is 2:30 PM',
-        status: 'success',
-      }),
-    });
-
-    const state = createAgentState(defaultConfig);
-    const execState = createExecutionState();
-
-    let result = await runner.advance(state, execState);
-    result = await runner.advance(result.state, result.execState);
-    result = await runner.advance(result.state, result.execState, registry);
-    result = await runner.advance(result.state, result.execState);
-    result = await runner.advance(result.state, result.execState);
-    result = await runner.advance(result.state, result.execState, registry);
-    result = await runner.advance(result.state, result.execState, registry);
-
-    // Verify tool result message contains the actual result text
-    const lastMsg = result.state.context.messages[result.state.context.messages.length - 1];
-    expect(lastMsg.role).toBe('tool');
-    expect(lastMsg.content).toBe('It is 2:30 PM');
   });
 
   it('should allow intervention at parsed phase', async () => {
@@ -811,7 +763,6 @@ describe('advance() skillState regression (CR P0-1)', () => {
     // skillState.current should be updated to 'test-skill' by applySkillSignal
     const skillState = result.state.context.skillState;
     expect(skillState?.current).toBe('test-skill');
-    expect(skillState?.loadedInstructions).toBe('Test skill instructions');
   });
 });
 

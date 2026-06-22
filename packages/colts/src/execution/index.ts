@@ -104,7 +104,7 @@ export type StreamEvent =
       type: 'llm:request';
       messages: Array<{ role: string; content: string }>;
       tools: string[];
-      skill: { current: string | null; stack: string[] } | null;
+      skill: { current: string | null } | null;
       timestamp: number;
     }
   | {
