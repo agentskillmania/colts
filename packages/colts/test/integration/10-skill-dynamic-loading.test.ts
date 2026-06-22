@@ -62,7 +62,11 @@ Keep your response to exactly 3 lines. Do not add explanations.`,
       'utf-8'
     );
 
-    // Critic skill: analyzes text (sub-skill, must return_skill)
+    // Critic skill: analyzes text. NOTE: the previous "nested skill return" model
+    // (return_skill tool + RETURN_SKILL signal) was removed in the skill persistence
+    // redesign — skill instructions now persist in history as load_skill tool results,
+    // so a sub-skill no longer needs to explicitly "return" to its caller. The critic
+    // simply answers; the coordinator sees the answer in the shared history.
     const criticDir = path.join(skillDir, 'critic');
     await fs.mkdir(criticDir, { recursive: true });
     await fs.writeFile(
@@ -71,9 +75,7 @@ Keep your response to exactly 3 lines. Do not add explanations.`,
 name: critic
 description: A literary critic who analyzes poems in one sentence.
 ---
-You are a literary critic. Analyze the given poem in one brief sentence.
-After your analysis, you MUST call the return_skill tool with your analysis as the result.
-Do NOT just say you are done — always use return_skill.`,
+You are a literary critic. Analyze the given poem in one brief sentence.`,
       'utf-8'
     );
   });
@@ -189,41 +191,11 @@ Do NOT just say you are done — always use return_skill.`,
     );
   });
 
-  // Scenario 4: Nested skill calling and return
-  describe('Scenario 4: Nested Skill with return_skill', () => {
-    itif(testConfig.enabled)(
-      'should delegate to critic sub-skill and return result to parent',
-      async () => {
-        const skillProvider = new FilesystemSkillProvider([skillDir]);
-        const runner = new AgentRunner({
-          model: testConfig.testModel,
-          llmClient: client,
-          skillProvider,
-          systemPrompt:
-            'You are a coordinator with access to poet and critic skills. Delegate using load_skill.',
-        });
-
-        const state = createAgentState(defaultConfig);
-        const skillEvents: string[] = [];
-
-        runner.on('skill:loaded', (e) => skillEvents.push(`loaded:${e.name}`));
-        runner.on('skill:start', (e) => skillEvents.push(`start:${e.name}`));
-        runner.on('skill:end', (e) => skillEvents.push(`end:${e.name}`));
-
-        // Ask for analysis — coordinator should load critic
-        const { result } = await runner.run(state, { maxSteps: 5 });
-
-        expect(result.type).toBe('success');
-        if (result.type === 'success') {
-          expect(result.answer.length).toBeGreaterThan(0);
-        }
-
-        // EXPLORATORY: Real LLM may or may not load critic sub-skill
-        if (skillEvents.includes('start:critic')) {
-          expect(skillEvents).toContain('end:critic');
-        }
-      },
-      180000
-    );
-  });
+  // Scenario 4 (Nested Skill with return_skill) was removed in the skill persistence
+  // redesign. The return_skill tool / RETURN_SKILL signal no longer exist: skill
+  // instructions now persist in conversation history as load_skill tool results, so
+  // the explicit "return from sub-skill" mechanism that this scenario exercised is
+  // gone by design. Multi-step skill chaining is still exercised by Scenario 1
+  // (autonomous load_skill) and the coordinator's delegation remains covered by the
+  // coordinator skill fixture above.
 });
