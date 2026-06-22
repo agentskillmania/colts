@@ -93,4 +93,57 @@ describe('compressor skill exemption', () => {
     // Anchor must be <= 3 so the load_skill result (index 3) stays after anchor (visible).
     expect(result.anchor).toBeLessThanOrEqual(3);
   });
+
+  it('anchor freezes at the load_skill result across repeated compressions', async () => {
+    // Once the load_skill result is pinned at the anchor, the anchor must NOT advance
+    // past it on subsequent compressions — summarize/truncate are frozen there; only
+    // prune (on other tool outputs) continues. This is the by-design freeze noted
+    // in the compressor source comment.
+    const state = makeState([
+      { id: '1', role: 'user', content: 'hi', type: 'text', timestamp: 0, tokenCount: 1 },
+      {
+        id: '2',
+        role: 'assistant',
+        content: '',
+        type: 'text',
+        timestamp: 0,
+        toolCalls: [{ id: 'c1', name: 'load_skill', arguments: { name: 'x' } }],
+      },
+      {
+        id: '3',
+        role: 'tool',
+        content: 'instructions',
+        type: 'tool-result',
+        timestamp: 0,
+        tokenCount: 1,
+        toolCallId: 'c1',
+        toolName: 'load_skill',
+      },
+      // Heavy padding after the load_skill result.
+      ...Array.from({ length: 15 }, (_, i) => ({
+        id: `${i + 4}`,
+        role: (i % 2 ? 'user' : 'assistant') as Message['role'],
+        content: 'x',
+        type: 'text' as const,
+        timestamp: 0,
+        tokenCount: 1,
+      })),
+    ]);
+    const c = new DefaultContextCompressor({ strategy: 'truncate', keepRecent: 5, threshold: 1 });
+
+    // First compression pins the anchor at or before the load_skill result (index 3).
+    const first = await c.compress(state);
+    expect(first.anchor).toBeLessThanOrEqual(3);
+
+    // Simulate a second compression pass: seed compression meta with the first anchor
+    // and re-run. The anchor must not advance past index 3.
+    const recompressed = await c.compress({
+      ...state,
+      context: {
+        ...state.context,
+        compression: { summary: first.summary, anchor: first.anchor },
+      },
+    });
+    expect(recompressed.anchor).toBeLessThanOrEqual(3);
+  });
 });

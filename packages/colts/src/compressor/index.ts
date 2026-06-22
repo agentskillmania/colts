@@ -159,6 +159,10 @@ export class DefaultContextCompressor {
     // Step 3: Truncate (set anchor)
     let anchor = Math.max(existingAnchor, messages.length - this.keepRecent);
     // Skill instructions must stay visible: never let anchor skip past a load_skill tool result.
+    // CONSEQUENCE (by-design): once a load_skill result lands at the anchor, the anchor
+    // is pinned there forever — summarize/truncate can no longer advance past it, so only
+    // prune (on non-skill tool outputs) continues to reclaim tokens. This is intentional:
+    // skill instructions must persist for the agent's lifetime (skill persistence redesign).
     for (let i = existingAnchor; i < anchor; i++) {
       if (messages[i].role === 'tool' && messages[i].toolName === 'load_skill') {
         anchor = i;
