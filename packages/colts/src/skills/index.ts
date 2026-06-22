@@ -23,6 +23,5 @@ export { createReturnSkillTool } from './return-skill-tool.js';
 export {
   applySkillSignal,
   formatSkillToolResult,
-  formatSkillAnswer,
   type SkillSignalResult,
 } from './signal-handler.js';

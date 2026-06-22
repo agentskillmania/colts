@@ -1,5 +1,7 @@
 /**
  * @fileoverview Skill Signal type tests
+ *
+ * Note: RETURN_SKILL was removed from the SkillSignal union.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -13,15 +15,6 @@ describe('Skill Signal', () => {
         to: 'data-cleaning',
         instructions: '# Instructions',
         task: 'Clean the data',
-      };
-      expect(isSkillSignal(signal)).toBe(true);
-    });
-
-    it('should return true for RETURN_SKILL signal', () => {
-      const signal: SkillSignal = {
-        type: 'RETURN_SKILL',
-        result: 'Cleaned 100 records',
-        status: 'success',
       };
       expect(isSkillSignal(signal)).toBe(true);
     });

@@ -2,8 +2,12 @@
  * @fileoverview Centralized Skill Signal Handler
  *
  * Single entry point for all skillState mutations triggered by SkillSignal.
- * Ensures consistent guards (auto-create, same-skill, cyclic) and structured
+ * Ensures consistent guards (auto-create, same-skill) and structured
  * results so the caller only decides which events to yield.
+ *
+ * Note: RETURN_SKILL handling was removed. Skill instructions now persist
+ * as the load_skill tool result content in conversation history, so there
+ * is no explicit return path.
  */
 
 import type { AgentState } from '../types.js';
@@ -15,17 +19,16 @@ import { updateState } from '../state/index.js';
  * Result of processing a SkillSignal
  *
  * Each action maps to a specific state transition scenario:
- * - loaded:           first load or nested load (parentPushed distinguishes)
- * - returned:         sub-skill finished, returned to parent
- * - top-level-return: top-level skill finished (skillName for skill:end event)
- * - same-skill:       target skill is already active (ignore)
- * - cyclic:           target skill is already in the stack (prevent loops)
- * - not-found:        requested skill does not exist
+ * - loaded:     skill was activated (current updated)
+ * - same-skill: target skill is already active (ignore)
+ * - cyclic:     target skill is already the current (legacy alias of same-skill guard)
+ * - not-found:  requested skill does not exist
+ *
+ * Note: `parentPushed` is always `false` now — the skill stack was removed.
+ * It remains in the type for backward-compat with callers that read it.
  */
 export type SkillSignalResult =
   | { action: 'loaded'; skillName: string; parentPushed: boolean }
-  | { action: 'returned'; completedSkill: string; parentName: string }
-  | { action: 'top-level-return'; skillName: string }
   | { action: 'same-skill'; currentSkill: string }
   | { action: 'cyclic'; currentSkill: string }
   | { action: 'not-found'; error: Error };
@@ -35,8 +38,8 @@ export type SkillSignalResult =
  *
  * All skillState mutations must go through this function. It:
  * 1. Auto-creates skillState if missing
- * 2. Validates transitions (prevents self-reference and cycles)
- * 3. Executes state changes (push/pop stack, set current)
+ * 2. Validates transitions (prevents self-reference)
+ * 3. Executes state changes (set current)
  * 4. Returns a structured result (caller decides which events to yield)
  *
  * @param state - Current AgentState
@@ -64,10 +67,6 @@ export function applySkillSignal(
     return applySwitchSkill(state, signal);
   }
 
-  if (signal.type === 'RETURN_SKILL') {
-    return applyReturnSkill(state, signal);
-  }
-
   // Exhaustive check — should never reach here
   return [
     state,
@@ -83,9 +82,10 @@ export function applySkillSignal(
  *
  * - Auto-creates skillState if missing
  * - Prevents self-reference (target === current)
- * - Prevents cyclic loading (target already in stack)
- * - First load: sets current without pushing parent
- * - Nested load: pushes current onto stack, then sets new current
+ * - Sets the new current skill
+ *
+ * Note: the skill stack was removed, so there is no parent-push and no
+ * cyclic-across-stack guard. `parentPushed` is always `false`.
  */
 function applySwitchSkill(
   state: AgentState,
@@ -97,7 +97,7 @@ function applySwitchSkill(
   let currentState = state;
   if (!currentState.context.skillState) {
     currentState = updateState(currentState, (draft) => {
-      draft.context.skillState = { stack: [], current: null };
+      draft.context.skillState = { current: null };
     });
   }
 
@@ -108,80 +108,22 @@ function applySwitchSkill(
     return [currentState, { action: 'same-skill', currentSkill: targetName }];
   }
 
-  // Guard: cyclic — target is already in the stack
-  if (skillState.stack.some((frame) => frame.skillName === targetName)) {
-    return [currentState, { action: 'cyclic', currentSkill: targetName }];
-  }
-
-  // Determine whether to push current onto stack
-  const hasCurrent = skillState.current !== null;
-
   const newState = updateState(currentState, (draft) => {
-    const ss = draft.context.skillState!;
-    if (hasCurrent) {
-      // Nested load: push current onto stack with saved instructions
-      ss.stack.push({
-        skillName: ss.current!,
-        loadedAt: Date.now(),
-        savedInstructions: ss.loadedInstructions,
-      });
-    }
-    ss.current = targetName;
-    ss.loadedInstructions = signal.instructions;
+    draft.context.skillState!.current = targetName;
   });
 
-  return [newState, { action: 'loaded', skillName: targetName, parentPushed: hasCurrent }];
+  return [newState, { action: 'loaded', skillName: targetName, parentPushed: false }];
 }
 
 /**
- * Handle RETURN_SKILL signal
+ * Convert a SkillSignal to a tool result string
  *
- * - Empty stack + current skill: top-level return (step should end)
- * - Non-empty stack: pop parent, restore instructions, continue
- */
-function applyReturnSkill(
-  state: AgentState,
-  _signal: SkillSignal & { type: 'RETURN_SKILL' }
-): [AgentState, SkillSignalResult] {
-  const skillState = state.context.skillState;
-
-  // No skillState at all — treat as top-level return with no active skill
-  if (!skillState || !skillState.current) {
-    return [state, { action: 'top-level-return', skillName: skillState?.current ?? '' }];
-  }
-
-  // Empty stack: top-level skill is returning
-  if (skillState.stack.length === 0) {
-    // Clear current skill but keep skillState for potential future loads
-    const newState = updateState(state, (draft) => {
-      const ss = draft.context.skillState!;
-      ss.current = null;
-      ss.loadedInstructions = undefined;
-    });
-    return [newState, { action: 'top-level-return', skillName: skillState.current }];
-  }
-
-  // Non-empty stack: pop parent and restore
-  const completedSkill = skillState.current;
-  let parentSkillName: string;
-  const newState = updateState(state, (draft) => {
-    const ss = draft.context.skillState!;
-    const parent = ss.stack.pop()!;
-    parentSkillName = parent.skillName;
-    ss.current = parentSkillName;
-    ss.loadedInstructions = parent.savedInstructions;
-  });
-
-  return [newState, { action: 'returned', completedSkill, parentName: parentSkillName! }];
-}
-
-/**
- * Convert a SkillSignal to a CLI-friendly tool result string
- *
- * tool:end events should never carry internal protocol objects.
+ * For SWITCH_SKILL, the instructions become the tool result content so the
+ * skill text persists in conversation history (the redesigned persistence
+ * model). Non-string instructions are JSON-stringified.
  *
  * @param result - Raw tool result (may or may not be a SkillSignal)
- * @returns Human-readable string representation
+ * @returns String representation suitable as a tool result
  */
 export function formatSkillToolResult(result: unknown): string {
   if (!isSkillSignal(result)) {
@@ -190,23 +132,11 @@ export function formatSkillToolResult(result: unknown): string {
   const sig = result as SkillSignal;
   switch (sig.type) {
     case 'SWITCH_SKILL':
-      return `Skill '${sig.to}' loaded`;
-    case 'RETURN_SKILL':
-      return typeof sig.result === 'string' ? sig.result : JSON.stringify(sig.result);
+      // Instructions become the tool result content, persisting in history.
+      return typeof sig.instructions === 'string'
+        ? sig.instructions
+        : JSON.stringify(sig.instructions);
     case 'SKILL_NOT_FOUND':
       return `Skill '${sig.requested}' not found`;
   }
-}
-
-/**
- * Extract final answer text from a RETURN_SKILL signal
- *
- * Used when a top-level skill finishes via return_skill.
- *
- * @param result - Tool result expected to be a RETURN_SKILL signal
- * @returns Answer string for the StepResult
- */
-export function formatSkillAnswer(result: unknown): string {
-  const sig = result as { result?: unknown };
-  return typeof sig.result === 'string' ? sig.result : JSON.stringify(sig.result);
 }
