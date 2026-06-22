@@ -178,10 +178,10 @@ export function setLastToolResult(state: AgentState, result: unknown): AgentStat
  *
  * @param state - Current AgentState
  * @param skillName - Skill name
- * @param instructions - Skill instruction content (unused at the state layer; persisted via tool results)
+ * @param _instructions - Skill instruction content (unused at the state layer; persisted via tool results)
  * @returns New AgentState (skillState.current updated)
  */
-export function loadSkill(state: AgentState, skillName: string, instructions: string): AgentState {
+export function loadSkill(state: AgentState, skillName: string, _instructions: string): AgentState {
   return updateState(state, (draft) => {
     if (!draft.context.skillState) {
       draft.context.skillState = { current: null };

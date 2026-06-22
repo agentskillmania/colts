@@ -65,7 +65,7 @@ type TraceRecord =
       elapsed: number;
       msgCount: number;
       tools: string[];
-      skill: { current: string | null; stack: string[] } | null;
+      skill: { current: string | null } | null;
     }
   | {
       event: 'llm.response';

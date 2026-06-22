@@ -229,7 +229,7 @@ describe('TraceWriter', () => {
           { role: 'user', content: 'Hello' },
         ],
         tools: ['calculator', 'read_file'],
-        skill: { current: 'math', stack: [] },
+        skill: { current: 'math' },
       });
       await tracer.flush();
 
@@ -241,7 +241,7 @@ describe('TraceWriter', () => {
         elapsed: expect.any(Number),
         msgCount: 2,
         tools: ['calculator', 'read_file'],
-        skill: { current: 'math', stack: [] },
+        skill: { current: 'math' },
       });
       // Should NOT have messages field
       expect(record).not.toHaveProperty('messages');

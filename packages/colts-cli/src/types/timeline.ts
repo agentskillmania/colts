@@ -142,7 +142,7 @@ export type TimelineEntry =
       /** Available tool list */
       tools: string[];
       /** Current skill context */
-      skill: { current: string | null; stack: string[] } | null;
+      skill: { current: string | null } | null;
       timestamp: number;
     }
   | {

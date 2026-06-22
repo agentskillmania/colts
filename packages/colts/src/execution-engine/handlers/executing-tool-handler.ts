@@ -7,8 +7,8 @@
 
 import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
-import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
 import { formatSkillToolResult } from '../../skills/signal-handler.js';
+import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
 import { addToolMessage, addUserMessage, incrementStepCount } from '../../state/index.js';
 import type { AgentState, IToolRegistry } from '../../types.js';
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';

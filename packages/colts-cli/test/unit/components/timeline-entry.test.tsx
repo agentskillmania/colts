@@ -632,7 +632,7 @@ describe('TimelineEntry — llm-request', () => {
         entry={makeLlmRequest({
           messageCount: 3,
           tools: [],
-          skill: { current: 'code-review', stack: ['root'] },
+          skill: { current: 'code-review' },
         })}
       />
     );
