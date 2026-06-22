@@ -2,17 +2,21 @@
  * @fileoverview Naughty LLM / misbehavior tests
  *
  * Tests edge cases where the LLM does not follow expected tool-calling
- * conventions: ignoring return_skill, calling return_skill without an
- * active skill, triple-nested skill loads, etc.
+ * conventions: replying directly instead of following a loaded skill,
+ * cyclic (same-skill) re-loads, delegate events, etc.
  *
  * These go through the full step() / run() pipeline (not just
  * processToolResult directly) to verify end-to-end behavior.
+ *
+ * Note: the return_skill tool and the skill stack were removed. Skill
+ * instructions now persist as the load_skill tool result content, so there
+ * is no explicit return path. These tests cover the remaining misbehavior
+ * scenarios (stale-skill cleanup, same-skill rejection, delegate events).
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
+import { describe, it, expect } from 'vitest';
 import { AgentRunner } from '../../../src/runner/index.js';
-import { createAgentState, updateState } from '../../../src/state/index.js';
+import { createAgentState } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import { ToolRegistry } from '../../../src/tools/registry.js';
 import { z } from 'zod';
@@ -31,8 +35,8 @@ const defaultConfig: AgentConfig = {
 };
 
 /**
- * Create a registry with load_skill + return_skill tools that produce
- * real SkillSignals (bypassing the filesystem skill provider).
+ * Create a registry with a load_skill tool that produces a real SWITCH_SKILL
+ * signal (bypassing the filesystem skill provider).
  */
 function createSkillToolRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
@@ -49,20 +53,6 @@ function createSkillToolRegistry(): ToolRegistry {
       to: name,
       instructions: `Instructions for ${name}`,
       task: task || 'Execute as instructed',
-    }),
-  });
-
-  registry.register({
-    name: 'return_skill',
-    description: 'Return from a skill',
-    parameters: z.object({
-      result: z.string(),
-      status: z.enum(['success', 'partial', 'failed']).default('success'),
-    }),
-    execute: async ({ result, status }) => ({
-      type: 'RETURN_SKILL',
-      result,
-      status: status ?? 'success',
     }),
   });
 
@@ -97,9 +87,9 @@ function createDelegateToolRegistry(): ToolRegistry {
 // ---------------------------------------------------------------------------
 
 describe('Naughty LLM - misbehavior edge cases', () => {
-  it('should clear stale skillState when LLM ignores return_skill and replies directly', async () => {
+  it('should clear stale skillState when LLM replies directly after loading a skill', async () => {
     // Step 1: LLM calls load_skill → skill loaded
-    // Step 2: LLM replies directly instead of calling return_skill
+    // Step 2: LLM replies directly (no further skill interaction)
     const registry = createSkillToolRegistry();
     const client = createMockLLMClient([
       {
@@ -132,63 +122,6 @@ describe('Naughty LLM - misbehavior edge cases', () => {
     expect(finalState.context.skillState?.current).toBeNull();
   });
 
-  it('should emit skill:end with correct sub-skill name via runStream', async () => {
-    const registry = createSkillToolRegistry();
-    const client = createMockLLMClient([
-      {
-        content: '',
-        toolCalls: [
-          { id: 'tc1', name: 'load_skill', arguments: { name: 'child', task: 'Do child work' } },
-        ],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      {
-        content: '',
-        toolCalls: [{ id: 'tc2', name: 'return_skill', arguments: { result: 'Child work done' } }],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      { content: 'All done', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
-    ]);
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, toolRegistry: registry });
-    const state = createAgentState(defaultConfig);
-
-    const events: Array<{ type: string; [key: string]: unknown }> = [];
-    for await (const event of runner.runStream(state)) {
-      events.push(event as { type: string; [key: string]: unknown });
-    }
-
-    // Find the skill:end event — it should carry the correct name
-    const skillEnd = events.find((e) => e.type === 'skill:end');
-    expect(skillEnd).toBeDefined();
-    expect((skillEnd as { type: string; name: string }).name).toBe('child');
-  });
-
-  it('should recover when return_skill is called without an active skill', async () => {
-    // return_skill called with no active skill → top-level-return, does not end directly
-    // Requires a second LLM output round to complete the task
-    const registry = createSkillToolRegistry();
-    const client = createMockLLMClient([
-      {
-        content: '',
-        toolCalls: [
-          { id: 'tc1', name: 'return_skill', arguments: { result: 'Nothing to return from' } },
-        ],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      { content: 'Nothing to return from', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
-    ]);
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, toolRegistry: registry });
-    const state = createAgentState(defaultConfig);
-
-    const { result } = await runner.run(state);
-
-    // After top-level-return, LLM continues outputting text, run completes
-    expect(result.type).toBe('success');
-  });
-
   it('should emit subagent:start and subagent:end for delegate tool via blocking run', async () => {
     const registry = createDelegateToolRegistry();
     const client = createMockLLMClient([
@@ -213,92 +146,6 @@ describe('Naughty LLM - misbehavior edge cases', () => {
 
     expect(events).toContain('subagent:start');
     expect(events).toContain('subagent:end');
-  });
-
-  it('should handle triple-nested skill loading and returning', async () => {
-    // Three skill loads (outer → middle → inner), then three returns (inner → middle → outer)
-    const registry = createSkillToolRegistry();
-    const client = createMockLLMClient([
-      // Step 1: load outer
-      {
-        content: '',
-        toolCalls: [
-          { id: 'tc1', name: 'load_skill', arguments: { name: 'outer', task: 'Start outer' } },
-        ],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      // Step 2: load middle (nested under outer)
-      {
-        content: '',
-        toolCalls: [
-          { id: 'tc2', name: 'load_skill', arguments: { name: 'middle', task: 'Start middle' } },
-        ],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      // Step 3: load inner (nested under middle)
-      {
-        content: '',
-        toolCalls: [
-          { id: 'tc3', name: 'load_skill', arguments: { name: 'inner', task: 'Start inner' } },
-        ],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      // Step 4: return from inner
-      {
-        content: '',
-        toolCalls: [{ id: 'tc4', name: 'return_skill', arguments: { result: 'Inner done' } }],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      // Step 5: return from middle
-      {
-        content: '',
-        toolCalls: [{ id: 'tc5', name: 'return_skill', arguments: { result: 'Middle done' } }],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      // Step 6: return from outer (top-level return, does not end directly)
-      {
-        content: '',
-        toolCalls: [{ id: 'tc6', name: 'return_skill', arguments: { result: 'Outer done' } }],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      // Step 7: LLM outputs final text
-      { content: 'All skills completed', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
-    ]);
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, toolRegistry: registry });
-    const state = createAgentState(defaultConfig);
-
-    // Collect all lifecycle events
-    const skillEvents: Array<{ type: string; name: string }> = [];
-    runner.on('skill:start', (evt: unknown) => {
-      const e = evt as { name: string };
-      skillEvents.push({ type: 'skill:start', name: e.name });
-    });
-    runner.on('skill:end', (evt: unknown) => {
-      const e = evt as { name: string };
-      skillEvents.push({ type: 'skill:end', name: e.name });
-    });
-
-    const { result, state: finalState } = await runner.run(state);
-
-    // Verify all 3 skills loaded in order
-    const starts = skillEvents.filter((e) => e.type === 'skill:start');
-    expect(starts.map((e) => e.name)).toEqual(['outer', 'middle', 'inner']);
-
-    // Verify returns in correct order (inner first, then middle, then outer)
-    const ends = skillEvents.filter((e) => e.type === 'skill:end');
-    expect(ends.map((e) => e.name)).toEqual(['inner', 'middle', 'outer']);
-
-    // Run completes
-    expect(result.type).toBe('success');
-
-    // Stack should be empty after all returns
-    expect(finalState.context.skillState?.current).toBeNull();
   });
 
   it('should reject cyclic skill loading during a run', async () => {

@@ -8,6 +8,7 @@
 import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
 import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
+import { formatSkillToolResult } from '../../skills/signal-handler.js';
 import { addToolMessage, addUserMessage, incrementStepCount } from '../../state/index.js';
 import type { AgentState, IToolRegistry } from '../../types.js';
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
@@ -68,10 +69,14 @@ export class ExecutingToolHandler implements IPhaseHandler {
 
     const toolResult = results[0]?.result;
 
-    // Write individual tool messages for each action
+    // Write individual tool messages for each action.
+    // For skill signals the persisted tool-result content is produced by
+    // formatSkillToolResult (the single source of truth): for SWITCH_SKILL it
+    // is the skill instructions, so the skill text persists in conversation
+    // history across turns and context switches.
     let newState = state;
     for (const { action, result } of results) {
-      const toolResultContent = formatToolResult(result);
+      const toolResultContent = formatSkillToolResult(result);
       newState = addToolMessage(newState, toolResultContent, {
         toolCallId: action.id,
         toolName: action.tool,
@@ -103,25 +108,4 @@ export class ExecutingToolHandler implements IPhaseHandler {
 
     return { state: newState, execState: nextExec, phase: nextExec.phase, done: false };
   }
-}
-
-/**
- * Format tool result as string.
- * Skill signals get special formatting; plain results are serialized directly.
- */
-function formatToolResult(result: unknown): string {
-  if (isSkillSignal(result)) {
-    const sig = result as SkillSignal;
-    switch (sig.type) {
-      case 'SWITCH_SKILL':
-        return `Skill '${sig.to}' loaded. Follow its instructions.`;
-      case 'RETURN_SKILL':
-        return typeof sig.result === 'string' ? sig.result : JSON.stringify(sig.result);
-      case 'SKILL_NOT_FOUND':
-        return `Skill '${sig.requested}' not found. Available: ${sig.available.join(', ')}`;
-      default:
-        return JSON.stringify(result);
-    }
-  }
-  return typeof result === 'string' ? result : JSON.stringify(result);
 }

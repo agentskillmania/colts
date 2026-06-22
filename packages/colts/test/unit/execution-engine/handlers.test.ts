@@ -546,7 +546,8 @@ describe('ExecutingToolHandler', () => {
     const result = await handler.execute(ctx, state, execState, registry);
 
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toBe("Skill 'my-skill' loaded. Follow its instructions.");
+    // SWITCH_SKILL persists the skill instructions as the tool result content.
+    expect(toolMsg?.content).toBe('Do stuff');
     // Should also inject task user message
     const taskMsg = result.state.context.messages[result.state.context.messages.length - 1];
     expect(taskMsg.role).toBe('user');
@@ -558,7 +559,6 @@ describe('ExecutingToolHandler', () => {
     // Set skillState with current = 'my-skill'
     state.context.skillState = {
       current: 'my-skill',
-      stack: [],
     };
     const execState = createExecutionState();
     execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
@@ -575,67 +575,7 @@ describe('ExecutingToolHandler', () => {
 
     // Handler formats SWITCH_SKILL generically; same-skill detection is in processToolResult
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toBe("Skill 'my-skill' loaded. Follow its instructions.");
-  });
-
-  it('should handle SWITCH_SKILL to skill already in stack', async () => {
-    const state = createMockState();
-    state.context.skillState = {
-      current: 'parent-skill',
-      stack: [{ skillName: 'my-skill', loadedAt: Date.now() }],
-    };
-    const execState = createExecutionState();
-    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
-    const switchSignal = {
-      type: 'SWITCH_SKILL' as const,
-      to: 'my-skill',
-      instructions: 'Do stuff',
-      task: 'Stack skill',
-    };
-    const registry = createMockToolRegistry(switchSignal);
-    const ctx = createMockCtx();
-
-    const result = await handler.execute(ctx, state, execState, registry);
-
-    // Handler formats SWITCH_SKILL generically; cyclic detection is in processToolResult
-    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toBe("Skill 'my-skill' loaded. Follow its instructions.");
-  });
-
-  it('should format RETURN_SKILL signal', async () => {
-    const state = createMockState();
-    const execState = createExecutionState();
-    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'return_skill' })] };
-    const returnSignal = {
-      type: 'RETURN_SKILL' as const,
-      result: 'Task completed',
-      status: 'success' as const,
-    };
-    const registry = createMockToolRegistry(returnSignal);
-    const ctx = createMockCtx();
-
-    const result = await handler.execute(ctx, state, execState, registry);
-
-    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toBe('Task completed');
-  });
-
-  it('should format RETURN_SKILL with non-string result as JSON', async () => {
-    const state = createMockState();
-    const execState = createExecutionState();
-    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'return_skill' })] };
-    const returnSignal = {
-      type: 'RETURN_SKILL' as const,
-      result: { key: 'value' },
-      status: 'success' as const,
-    };
-    const registry = createMockToolRegistry(returnSignal);
-    const ctx = createMockCtx();
-
-    const result = await handler.execute(ctx, state, execState, registry);
-
-    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toBe('{"key":"value"}');
+    expect(toolMsg?.content).toBe('Do stuff');
   });
 
   it('should format SKILL_NOT_FOUND signal', async () => {
@@ -653,7 +593,7 @@ describe('ExecutingToolHandler', () => {
     const result = await handler.execute(ctx, state, execState, registry);
 
     const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
-    expect(toolMsg?.content).toBe("Skill 'missing-skill' not found. Available: skill-a, skill-b");
+    expect(toolMsg?.content).toBe("Skill 'missing-skill' not found");
   });
 
   it('should format non-signal result as JSON when not a string', async () => {

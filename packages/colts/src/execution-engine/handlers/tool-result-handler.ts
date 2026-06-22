@@ -7,8 +7,7 @@
  * - Plain tool results
  *
  * Produces AdvanceResult with effects array; control flow is determined by phase + done:
- * - loaded/returned → phase=idle, done=false (continue loop)
- * - top-level return → phase=completed, done=true
+ * - loaded → phase=idle, done=false (continue loop)
  * - same-skill/cyclic/plain → phase=tool-result, done=false
  * - not-found → phase=error, done=true
  */
@@ -97,73 +96,6 @@ export class ToolResultHandler implements IPhaseHandler {
               result,
             });
           }
-          const nextExec = updateExecState(execState, (draft) => {
-            draft.phase = { type: 'idle' };
-          });
-          return {
-            state: currentState,
-            execState: nextExec,
-            phase: nextExec.phase,
-            done: false,
-            effects,
-          };
-        }
-
-        case 'returned': {
-          effects.push({
-            type: 'skill:end',
-            timestamp: Date.now(),
-            name: sigResult.completedSkill,
-            result: (result as SkillSignal & { result: string }).result,
-            state: currentState,
-          });
-          effects.push({
-            type: 'tool:end',
-            timestamp: Date.now(),
-            result: formatSkillToolResult(result),
-          });
-          if (delegateAction) {
-            effects.push({
-              type: 'subagent:end',
-              timestamp: Date.now(),
-              name: String(delegateAction.arguments.agent ?? ''),
-              result,
-            });
-          }
-          const nextExec = updateExecState(execState, (draft) => {
-            draft.phase = { type: 'idle' };
-          });
-          return {
-            state: currentState,
-            execState: nextExec,
-            phase: nextExec.phase,
-            done: false,
-            effects,
-          };
-        }
-
-        case 'top-level-return': {
-          effects.push({
-            type: 'skill:end',
-            timestamp: Date.now(),
-            name: sigResult.skillName,
-            result: (result as SkillSignal & { result: string }).result,
-            state: currentState,
-          });
-          effects.push({
-            type: 'tool:end',
-            timestamp: Date.now(),
-            result: formatSkillToolResult(result),
-          });
-          if (delegateAction) {
-            effects.push({
-              type: 'subagent:end',
-              timestamp: Date.now(),
-              name: String(delegateAction.arguments.agent ?? ''),
-              result,
-            });
-          }
-          // Top-level skill return does not end directly; let LLM output results to user
           const nextExec = updateExecState(execState, (draft) => {
             draft.phase = { type: 'idle' };
           });

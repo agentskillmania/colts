@@ -140,7 +140,7 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     expect(skillStart.state.context.skillState?.current).toBe('research');
 
     const toolEnd = result.effects![3] as { type: 'tool:end'; result: unknown };
-    expect(toolEnd.result).toBe("Skill 'research' loaded");
+    expect(toolEnd.result).toBe('Research thoroughly');
 
     // skill:loaded should include token count
     const skillLoaded = result.effects![1] as {
@@ -155,13 +155,11 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     expect(result.execState.phase.type).toBe('idle');
   });
 
-  it('should produce skill:start with parent pushed for nested load', async () => {
+  it('should produce skill:start with current updated for a second load', async () => {
     let state = createAgentState(defaultConfig);
     state = updateState(state, (draft) => {
       draft.context.skillState = {
-        stack: [],
         current: 'writer',
-        loadedInstructions: 'Write well',
       };
     });
 
@@ -191,18 +189,15 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
       state: AgentState;
     };
     expect(skillStart.name).toBe('editor');
+    // The skill stack was removed; loading a second skill just replaces current.
     expect(skillStart.state.context.skillState?.current).toBe('editor');
-    expect(skillStart.state.context.skillState?.stack.length).toBe(1);
-    expect(skillStart.state.context.skillState?.stack[0].skillName).toBe('writer');
   });
 
   it('should produce tool:end + keep phase=tool-result for same-skill', async () => {
     let state = createAgentState(defaultConfig);
     state = updateState(state, (draft) => {
       draft.context.skillState = {
-        stack: [],
         current: 'research',
-        loadedInstructions: 'Research thoroughly',
       };
     });
 
@@ -233,148 +228,8 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     expect(toolEnd.result).toBe("Skill 'research' is already active");
   });
 
-  it('should produce tool:end + keep phase=tool-result for cyclic load', async () => {
-    let state = createAgentState(defaultConfig);
-    state = updateState(state, (draft) => {
-      draft.context.skillState = {
-        stack: [{ skillName: 'research', loadedAt: Date.now(), savedInstructions: 'Research' }],
-        current: 'writer',
-        loadedInstructions: 'Write well',
-      };
-    });
-
-    const switchSignal = {
-      type: 'SWITCH_SKILL',
-      to: 'research', // already in stack
-      instructions: 'Research thoroughly',
-      task: 'Cycle attempt',
-    };
-    const execState = createToolResultExecState(
-      { tc4: switchSignal },
-      {
-        action: {
-          id: 'tc4',
-          tool: 'load_skill',
-          arguments: { name: 'research', task: 'Cycle attempt' },
-        },
-      }
-    );
-
-    const result = await handler.execute(createMockCtx(), state, execState);
-
-    expect(result.done).toBe(false);
-    expect(result.phase.type).toBe('tool-result');
-    expect(result.effects!.map((e) => e.type)).toEqual(['tool:end']);
-
-    const toolEnd = result.effects![0] as { type: 'tool:end'; result: unknown };
-    expect(toolEnd.result).toBe("Cannot load Skill 'research': already in the call stack");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// RETURN_SKILL
-// ---------------------------------------------------------------------------
-
-describe('ToolResultHandler — RETURN_SKILL', () => {
-  it('should produce skill:end + tool:end + phase=completed for top-level return', async () => {
-    let state = createAgentState(defaultConfig);
-    state = updateState(state, (draft) => {
-      draft.context.skillState = {
-        stack: [],
-        current: 'research',
-        loadedInstructions: 'Research thoroughly',
-      };
-    });
-
-    const returnSignal = {
-      type: 'RETURN_SKILL',
-      result: 'Found 3 relevant papers',
-      status: 'success' as const,
-    };
-    const execState = createToolResultExecState(
-      { tc5: returnSignal },
-      {
-        action: {
-          id: 'tc5',
-          tool: 'return_skill',
-          arguments: { result: 'Found 3 relevant papers' },
-        },
-      }
-    );
-
-    const result = await handler.execute(createMockCtx(), state, execState);
-
-    // Top-level skill return does not end directly; let LLM output results to user
-    expect(result.done).toBe(false);
-    expect(result.phase.type).toBe('idle');
-    expect(result.effects!.map((e) => e.type)).toEqual(['skill:end', 'tool:end']);
-
-    const skillEnd = result.effects![0] as {
-      type: 'skill:end';
-      name: string;
-      result: string;
-    };
-    expect(skillEnd.name).toBe('research');
-    expect(skillEnd.result).toBe('Found 3 relevant papers');
-
-    const toolEnd = result.effects![1] as { type: 'tool:end'; result: unknown };
-    expect(toolEnd.result).toBe('Found 3 relevant papers');
-
-    // result.execState.phase should be reset to idle
-    expect(result.execState.phase.type).toBe('idle');
-  });
-
-  it('should produce skill:end + tool:end + phase=idle for nested return', async () => {
-    let state = createAgentState(defaultConfig);
-    state = updateState(state, (draft) => {
-      draft.context.skillState = {
-        stack: [
-          {
-            skillName: 'research',
-            loadedAt: Date.now(),
-            savedInstructions: 'Research thoroughly',
-          },
-        ],
-        current: 'writer',
-        loadedInstructions: 'Write well',
-      };
-    });
-
-    const returnSignal = {
-      type: 'RETURN_SKILL',
-      result: 'Draft completed',
-      status: 'success' as const,
-    };
-    const execState = createToolResultExecState(
-      { tc6: returnSignal },
-      {
-        action: {
-          id: 'tc6',
-          tool: 'return_skill',
-          arguments: { result: 'Draft completed' },
-        },
-      }
-    );
-
-    const result = await handler.execute(createMockCtx(), state, execState);
-
-    expect(result.done).toBe(false);
-    expect(result.phase.type).toBe('idle');
-    expect(result.effects!.map((e) => e.type)).toEqual(['skill:end', 'tool:end']);
-
-    const skillEnd = result.effects![0] as {
-      type: 'skill:end';
-      name: string;
-    };
-    expect(skillEnd.name).toBe('writer');
-
-    // Verify parent was restored
-    expect(result.state.context.skillState?.current).toBe('research');
-    expect(result.state.context.skillState?.stack.length).toBe(0);
-
-    // result.execState.phase should be reset to idle
-    expect(result.execState.phase.type).toBe('idle');
-  });
+  // Note: the cyclic-load case was removed together with the skill stack.
+  // With only `current`, there is no call-stack to detect cycles against.
 });
 
 // ---------------------------------------------------------------------------
@@ -499,96 +354,11 @@ describe('ToolResultHandler — delegate tools', () => {
     expect(subEnd.name).toBe('research-agent');
   });
 
-  it('should produce subagent:start/end for delegate + RETURN_SKILL nested return', async () => {
-    let state = createAgentState(defaultConfig);
-    state = updateState(state, (draft) => {
-      draft.context.skillState = {
-        stack: [
-          {
-            skillName: 'research',
-            loadedAt: Date.now(),
-            savedInstructions: 'Research thoroughly',
-          },
-        ],
-        current: 'writer',
-        loadedInstructions: 'Write well',
-      };
-    });
-
-    const returnSignal = {
-      type: 'RETURN_SKILL',
-      result: 'Draft completed',
-      status: 'success' as const,
-    };
-    const execState = createToolResultExecState(
-      { tc13: returnSignal },
-      {
-        action: {
-          id: 'tc13',
-          tool: 'delegate',
-          arguments: { agent: 'writer-agent', task: 'Write draft' },
-        },
-      }
-    );
-
-    const result = await handler.execute(createMockCtx(), state, execState);
-
-    expect(result.done).toBe(false);
-    expect(result.phase.type).toBe('idle');
-    expect(result.effects!.map((e) => e.type)).toEqual([
-      'subagent:start',
-      'skill:end',
-      'tool:end',
-      'subagent:end',
-    ]);
-  });
-
-  it('should produce subagent:start/end for delegate + RETURN_SKILL top-level return', async () => {
-    let state = createAgentState(defaultConfig);
-    state = updateState(state, (draft) => {
-      draft.context.skillState = {
-        stack: [],
-        current: 'research',
-        loadedInstructions: 'Research thoroughly',
-      };
-    });
-
-    const returnSignal = {
-      type: 'RETURN_SKILL',
-      result: 'Found 3 relevant papers',
-      status: 'success' as const,
-    };
-    const execState = createToolResultExecState(
-      { tc14: returnSignal },
-      {
-        action: {
-          id: 'tc14',
-          tool: 'delegate',
-          arguments: { agent: 'research-agent', task: 'Find papers' },
-        },
-      }
-    );
-
-    const result = await handler.execute(createMockCtx(), state, execState);
-
-    // Top-level skill return does not end directly
-    expect(result.done).toBe(false);
-    expect(result.phase.type).toBe('idle');
-    expect(result.effects!.map((e) => e.type)).toEqual([
-      'subagent:start',
-      'skill:end',
-      'tool:end',
-      'subagent:end',
-    ]);
-  });
-
   it('should produce subagent:start/end for delegate + same-skill', async () => {
     let state = createAgentState(defaultConfig);
     state = updateState(state, (draft) => {
       draft.context.skillState = {
-        stack: [],
         current: 'research',
-        loadedInstructions: 'Research thoroughly',
       };
     });
 
@@ -619,42 +389,8 @@ describe('ToolResultHandler — delegate tools', () => {
     ]);
   });
 
-  it('should produce subagent:start/end for delegate + cyclic load', async () => {
-    let state = createAgentState(defaultConfig);
-    state = updateState(state, (draft) => {
-      draft.context.skillState = {
-        stack: [{ skillName: 'research', loadedAt: Date.now(), savedInstructions: 'Research' }],
-        current: 'writer',
-        loadedInstructions: 'Write well',
-      };
-    });
-
-    const switchSignal = {
-      type: 'SWITCH_SKILL',
-      to: 'research', // already in stack
-      instructions: 'Research thoroughly',
-      task: 'Cycle attempt',
-    };
-    const execState = createToolResultExecState(
-      { tc11: switchSignal },
-      {
-        action: {
-          id: 'tc11',
-          tool: 'delegate',
-          arguments: { agent: 'cycle-agent', task: 'Cycle attempt' },
-        },
-      }
-    );
-
-    const result = await handler.execute(createMockCtx(), state, execState);
-
-    expect(result.phase.type).toBe('tool-result');
-    expect(result.effects!.map((e) => e.type)).toEqual([
-      'subagent:start',
-      'tool:end',
-      'subagent:end',
-    ]);
-  });
+  // Note: the delegate + cyclic-load and delegate + RETURN_SKILL cases were
+  // removed together with the skill stack and the RETURN_SKILL signal.
 
   it('should produce subagent:start/end for delegate + SKILL_NOT_FOUND', async () => {
     const state = createAgentState(defaultConfig);
