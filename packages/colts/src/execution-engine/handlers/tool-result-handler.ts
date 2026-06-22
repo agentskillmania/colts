@@ -125,23 +125,6 @@ export class ToolResultHandler implements IPhaseHandler {
           return { state: currentState, execState, phase: execState.phase, done: false, effects };
         }
 
-        case 'cyclic': {
-          effects.push({
-            type: 'tool:end',
-            timestamp: Date.now(),
-            result: `Cannot load Skill '${sigResult.currentSkill}': already in the call stack`,
-          });
-          if (delegateAction) {
-            effects.push({
-              type: 'subagent:end',
-              timestamp: Date.now(),
-              name: String(delegateAction.arguments.agent ?? ''),
-              result,
-            });
-          }
-          return { state: currentState, execState, phase: execState.phase, done: false, effects };
-        }
-
         case 'not-found': {
           effects.push({
             type: 'error',

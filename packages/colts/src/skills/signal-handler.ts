@@ -21,16 +21,15 @@ import { updateState } from '../state/index.js';
  * Each action maps to a specific state transition scenario:
  * - loaded:     skill was activated (current updated)
  * - same-skill: target skill is already active (ignore)
- * - cyclic:     target skill is already the current (legacy alias of same-skill guard)
  * - not-found:  requested skill does not exist
  *
- * Note: `parentPushed` is always `false` now — the skill stack was removed.
- * It remains in the type for backward-compat with callers that read it.
+ * Note: the skill stack was removed, so there is no parent-push and no
+ * cyclic-across-stack guard. The legacy `parentPushed` field and `cyclic`
+ * action were dropped as dead code.
  */
 export type SkillSignalResult =
-  | { action: 'loaded'; skillName: string; parentPushed: boolean }
+  | { action: 'loaded'; skillName: string }
   | { action: 'same-skill'; currentSkill: string }
-  | { action: 'cyclic'; currentSkill: string }
   | { action: 'not-found'; error: Error };
 
 /**
@@ -83,9 +82,6 @@ export function applySkillSignal(
  * - Auto-creates skillState if missing
  * - Prevents self-reference (target === current)
  * - Sets the new current skill
- *
- * Note: the skill stack was removed, so there is no parent-push and no
- * cyclic-across-stack guard. `parentPushed` is always `false`.
  */
 function applySwitchSkill(
   state: AgentState,
@@ -112,7 +108,7 @@ function applySwitchSkill(
     draft.context.skillState!.current = targetName;
   });
 
-  return [newState, { action: 'loaded', skillName: targetName, parentPushed: false }];
+  return [newState, { action: 'loaded', skillName: targetName }];
 }
 
 /**
