@@ -72,10 +72,12 @@ export interface ISkillProvider {
 /**
  * Skill tool signal types
  * Used for communication between skill tools and the Runner
+ *
+ * Note: RETURN_SKILL was removed — skill instructions now persist as the
+ * load_skill tool result content in conversation history.
  */
 export type SkillSignal =
   | { type: 'SWITCH_SKILL'; to: string; instructions: string; task: string }
-  | { type: 'RETURN_SKILL'; result: string; status: 'success' | 'partial' | 'failed' }
   | { type: 'SKILL_NOT_FOUND'; requested: string; available: string[] };
 
 /**
@@ -86,5 +88,5 @@ export type SkillSignal =
 export function isSkillSignal(value: unknown): value is SkillSignal {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  return ['SWITCH_SKILL', 'RETURN_SKILL', 'SKILL_NOT_FOUND'].includes(v.type as string);
+  return ['SWITCH_SKILL', 'SKILL_NOT_FOUND'].includes(v.type as string);
 }

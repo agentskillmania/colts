@@ -2,8 +2,11 @@
  * @fileoverview Skill signal handler branch coverage tests
  *
  * Covers:
- * - Unknown signal type fallback (L72-79)
- * - formatSkillToolResult with non-string RETURN_SKILL result (L195)
+ * - Unknown signal type fallback (exhaustive check)
+ * - formatSkillToolResult with non-string SWITCH_SKILL instructions
+ *
+ * Note: RETURN_SKILL handling was removed — instructions now persist as
+ * the load_skill tool result content.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -38,19 +41,23 @@ describe('applySkillSignal', () => {
 });
 
 describe('formatSkillToolResult', () => {
-  it('should format RETURN_SKILL with non-string result as JSON', () => {
+  it('should format SWITCH_SKILL with non-string instructions as JSON', () => {
     const result = formatSkillToolResult({
-      type: 'RETURN_SKILL',
-      result: { answer: '42', status: 'success' },
+      type: 'SWITCH_SKILL',
+      to: 'summarize',
+      instructions: { answer: '42', status: 'success' } as unknown as string,
+      task: 'Summarize',
     });
 
     expect(result).toBe('{"answer":"42","status":"success"}');
   });
 
-  it('should format RETURN_SKILL with string result directly', () => {
+  it('should format SWITCH_SKILL with string instructions directly', () => {
     const result = formatSkillToolResult({
-      type: 'RETURN_SKILL',
-      result: 'It is 2:30 PM',
+      type: 'SWITCH_SKILL',
+      to: 'tell-time',
+      instructions: 'It is 2:30 PM',
+      task: 'Get time',
     });
 
     expect(result).toBe('It is 2:30 PM');
