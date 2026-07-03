@@ -237,7 +237,7 @@ database:
       });
     });
 
-    it('should merge arrays element by element, keeping extra defaults', async () => {
+    it('BUG6: user array replaces default entirely (no tail padding)', async () => {
       const configPath = path.join(tempDir, 'config.yaml');
       const userYaml = `
 items:
@@ -257,7 +257,7 @@ items:
 
       const values = settings.getValues();
       expect(values).toEqual({
-        items: ['a', 'b', 'z'], // target overrides by index, extra defaults kept
+        items: ['a', 'b'], // user array wins, default tail NOT kept
       });
     });
 

@@ -98,16 +98,19 @@ describe('deepMerge', () => {
   });
 
   describe('array handling', () => {
-    it('should merge arrays element by element, keeping extra default elements', () => {
+    // BUG6 fix: arrays are replaced wholesale, not merged by index.
+    // The old behavior padded short user arrays with default tail elements.
+    it('BUG6: target array replaces default entirely (no tail padding)', () => {
       const target = { items: ['a', 'b'] };
       const defaultValue = { items: ['x', 'y', 'z'] };
 
       const result = deepMerge(target, defaultValue);
 
-      expect(result).toEqual({ items: ['a', 'b', 'z'] });
+      // User array wins completely — default tail 'z' is NOT appended
+      expect(result).toEqual({ items: ['a', 'b'] });
     });
 
-    it('should merge object array elements by index', () => {
+    it('BUG6: target array with objects replaces default entirely', () => {
       const target = {
         servers: [{ host: 'a.com' }],
       };
@@ -120,12 +123,19 @@ describe('deepMerge', () => {
 
       const result = deepMerge(target, defaultValue);
 
+      // User array wins completely — default's backup.com is NOT kept
       expect(result).toEqual({
-        servers: [
-          { host: 'a.com', port: 80 },
-          { host: 'backup.com', port: 8080 },
-        ],
+        servers: [{ host: 'a.com' }],
       });
+    });
+
+    it('uses default array when target has no array at that key', () => {
+      const target = { name: 'test' };
+      const defaultValue = { items: ['x', 'y'] };
+
+      const result = deepMerge(target, defaultValue);
+
+      expect(result).toEqual({ name: 'test', items: ['x', 'y'] });
     });
 
     it('should deep copy target arrays — no shared references', () => {
@@ -172,7 +182,7 @@ describe('deepMerge', () => {
       expect((result as { matrix: number[][] }).matrix[0]).toEqual([1, 2, 99]);
     });
 
-    it('should merge nested arrays when both target and default have them', () => {
+    it('BUG6: nested arrays in target replace default entirely', () => {
       const target = {
         matrix: [
           [1, 2],
@@ -189,10 +199,11 @@ describe('deepMerge', () => {
 
       const result = deepMerge(target, defaultValue);
 
-      // Each nested array pair is merged index-by-index
-      expect((result as { matrix: number[][] }).matrix[0]).toEqual([1, 2, 7]);
-      expect((result as { matrix: number[][] }).matrix[1]).toEqual([3, 4]);
-      expect((result as { matrix: number[][] }).matrix[2]).toEqual([10, 11]);
+      // Target array wins — default's extra elements/rows are NOT kept
+      expect((result as { matrix: number[][] }).matrix).toEqual([
+        [1, 2],
+        [3, 4],
+      ]);
 
       // No shared references
       (result as { matrix: number[][] }).matrix[0].push(99);
@@ -350,17 +361,15 @@ describe('deepMerge', () => {
 
   // T6: Regression test — undefined in arrays falls back to default (CR SY-2)
   describe('undefined semantics in arrays vs objects (CR SY-2)', () => {
-    it('should use default value for undefined array elements', () => {
+    it('BUG6: target array replaces default, undefined elements stay as-is', () => {
       const target = { items: [undefined, 'b'] } as unknown as Record<string, unknown>;
       const defaultValue = { items: ['a', 'x', 'c'] };
 
       const result = deepMerge(target, defaultValue);
 
-      // Undefined array elements should fall back to default
-      expect((result as { items: string[] }).items[0]).toBe('a');
-      expect((result as { items: string[] }).items[1]).toBe('b');
-      // Missing tail elements of short arrays are filled from default
-      expect((result as { items: string[] }).items[2]).toBe('c');
+      // Target array wins entirely — default is NOT consulted for padding
+      expect((result as { items: unknown[] }).items).toEqual([undefined, 'b']);
+      expect((result as { items: unknown[] }).items).toHaveLength(2);
     });
 
     it('should preserve undefined in object keys (target overrides default)', () => {
