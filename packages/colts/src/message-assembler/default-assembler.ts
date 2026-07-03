@@ -63,8 +63,8 @@ export class DefaultMessageAssembler implements IMessageAssembler {
     // Prompt-level thinking guidance
     if (opts.enablePromptThinking) {
       systemParts.push(
-        'Before answering or using tools, please think step by step inside <think...</think (closing)> tags. ' +
-          'After the closing </think (closing)> tag, provide your final response or tool calls.'
+        'Before answering or using tools, please think step by step inside <think></think> tags. ' +
+          'After the closing </think> tag, provide your final response or tool calls.'
       );
     }
 
