@@ -155,13 +155,12 @@ function deepMergeInternal<T extends Record<string, unknown>>(
         result[key] = deepMergeInternal(targetValue as Record<string, unknown>, {}, visited);
       }
     } else if (Array.isArray(targetValue)) {
-      if (Array.isArray(defaultValueFieldValue)) {
-        // Both are arrays → merge element by element
-        result[key] = deepMergeArrays(targetValue, defaultValueFieldValue, visited);
-      } else {
-        // Only target has an array → deep copy it
-        result[key] = deepMergeArrays(targetValue, [], visited);
-      }
+      // BUG6 fix: arrays are replaced wholesale (not merged by index).
+      // The old behavior (deepMergeArrays) padded short user arrays with
+      // default tail elements, making it impossible to shrink an array
+      // via config. For config semantics, if the user provides an array,
+      // they mean THAT array — don't mix in defaults.
+      result[key] = deepMergeArrays(targetValue, [], visited);
     } else {
       // Primitives, null → direct assignment (immutable)
       result[key] = targetValue;
