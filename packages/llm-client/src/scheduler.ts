@@ -368,10 +368,16 @@ export class RequestScheduler extends EventEmitter {
       return null;
     }
 
-    // Round-robin selection
-    const index = this.keyIndex % keys.length;
-    this.keyIndex = (this.keyIndex + 1) % keys.length;
-    return keys[index];
+    // CONC1 fix: prefer keys with available capacity. The old round-robin
+    // would mechanically pick a key that's at maxConcurrency, blocking the
+    // request while other keys had spare capacity.
+    const available = keys.filter((k) => k.activeCount < k.maxConcurrency);
+    const pool = available.length > 0 ? available : keys;
+
+    // Round-robin within the selected pool
+    const index = this.keyIndex % pool.length;
+    this.keyIndex = (this.keyIndex + 1) % pool.length;
+    return pool[index];
   }
 
   /**

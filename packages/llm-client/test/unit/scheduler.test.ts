@@ -685,4 +685,115 @@ describe('AbortSignal support', () => {
       await scheduler.execute('gpt-4', 0, executor);
     });
   });
+
+  describe('CONC1: selectKey prefers available keys over full ones', () => {
+    it('routes to a key with available capacity instead of blocking on a full key', async () => {
+      // keyA: maxConcurrency=1 (fills immediately)
+      // keyB: maxConcurrency=3 (has spare capacity)
+      scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+      scheduler.registerApiKey({
+        key: 'sk-keyA',
+        provider: 'openai',
+        maxConcurrency: 1,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 5 }],
+      });
+      scheduler.registerApiKey({
+        key: 'sk-keyB',
+        provider: 'openai',
+        maxConcurrency: 3,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 5 }],
+      });
+
+      const usedKeys: string[] = [];
+
+      // Create a gate to hold keyA's first request open
+      let releaseKeyA: () => void = () => {};
+      const keyAHeld = new Promise<void>((resolve) => {
+        releaseKeyA = resolve;
+      });
+
+      // req1: selectKey round-robins to keyA (index 0), acquires it (now full)
+      const req1 = scheduler.execute('gpt-4', 0, async (ctx) => {
+        usedKeys.push(ctx.key.key);
+        await keyAHeld; // hold this request open so keyA stays full
+        return 'result1';
+      });
+      // Let req1 start and acquire keyA
+      await new Promise((r) => setTimeout(r, 50));
+
+      // req2: round-robin goes to keyB (index 1), acquires it
+      await scheduler.execute('gpt-4', 0, async (ctx) => {
+        usedKeys.push(ctx.key.key);
+        return 'result2';
+      });
+
+      // req3: round-robin goes BACK to keyA (index 0 again).
+      // CONC1: keyA is full (activeCount=1=maxConcurrency), keyB has capacity.
+      // The fix should route req3 to keyB, NOT block on keyA.
+      const req3Promise = scheduler.execute('gpt-4', 0, async (ctx) => {
+        usedKeys.push(ctx.key.key);
+        return 'result3';
+      });
+      // Give it time to execute — if it blocked on keyA, this timeout would fail
+      const req3Result = await Promise.race([
+        req3Promise.then(() => 'completed'),
+        new Promise<string>((r) => setTimeout(() => r('timeout'), 1000)),
+      ]);
+
+      // Cleanup: release keyA
+      releaseKeyA();
+      await req1;
+
+      // req3 must have completed (not blocked on keyA)
+      expect(req3Result).toBe('completed');
+      // req3 should have used keyB (the one with spare capacity)
+      expect(usedKeys[2]).toBe('sk-keyB');
+    });
+
+    it('falls back to round-robin when ALL keys are full (request queues)', async () => {
+      scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
+      scheduler.registerApiKey({
+        key: 'sk-keyA',
+        provider: 'openai',
+        maxConcurrency: 1,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 5 }],
+      });
+      scheduler.registerApiKey({
+        key: 'sk-keyB',
+        provider: 'openai',
+        maxConcurrency: 1,
+        models: [{ modelId: 'gpt-4', maxConcurrency: 5 }],
+      });
+
+      let releaseAll: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        releaseAll = resolve;
+      });
+
+      // Fill both keys
+      const req1 = scheduler.execute('gpt-4', 0, async () => {
+        await gate;
+        return 'r1';
+      });
+      const req2 = scheduler.execute('gpt-4', 0, async () => {
+        await gate;
+        return 'r2';
+      });
+      await new Promise((r) => setTimeout(r, 50)); // let them acquire
+
+      // req3: both keys full — should queue (not crash, not busy-loop)
+      const req3 = scheduler.execute('gpt-4', 0, async () => 'r3');
+
+      // req3 should be pending (not completed yet)
+      const req3State = await Promise.race([
+        req3.then(() => 'completed'),
+        new Promise<string>((r) => setTimeout(() => r('pending'), 500)),
+      ]);
+      expect(req3State).toBe('pending');
+
+      // Release → req3 should complete
+      releaseAll();
+      await Promise.all([req1, req2, req3]);
+    });
+  });
 });

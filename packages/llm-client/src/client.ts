@@ -371,23 +371,25 @@ export class LLMClient extends EventEmitter {
       // Yield from the returned iterable, respecting abort signal
       const iterator = iterable[Symbol.asyncIterator]();
 
+      // CONC2 fix: create the abort Promise ONCE (not per loop iteration).
+      // The old code created a new Promise + addEventListener inside the
+      // while loop, accumulating listeners that were never removed on normal
+      // completion — a memory leak proportional to the number of stream chunks.
+      const abortPromise = new Promise<never>((_, reject) => {
+        if (abortController.signal.aborted) {
+          reject(abortController.signal.reason);
+          return;
+        }
+        abortController.signal.addEventListener(
+          'abort',
+          () => reject(abortController.signal.reason),
+          { once: true }
+        );
+      });
+
       try {
         while (true) {
-          if (abortController.signal.aborted) {
-            throw abortController.signal.reason;
-          }
-          const result = await Promise.race([
-            iterator.next(),
-            new Promise<never>((_, reject) => {
-              abortController.signal.addEventListener(
-                'abort',
-                () => {
-                  reject(abortController.signal.reason);
-                },
-                { once: true }
-              );
-            }),
-          ]);
+          const result = await Promise.race([iterator.next(), abortPromise]);
           if (result.done) break;
           yield result.value;
         }
