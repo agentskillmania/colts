@@ -14,6 +14,27 @@ import * as yaml from 'js-yaml';
 import { deepMerge, SettingsError } from './deepMerge.js';
 
 /**
+ * Recursively freeze an object and all its nested objects/arrays.
+ *
+ * BUG5 fix: Object.freeze is shallow — nested properties remain mutable,
+ * violating the "frozen configuration" contract. This function walks the
+ * entire object tree and freezes every plain object and array encountered.
+ */
+function deepFreeze<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') return obj;
+  // Freeze arrays element-by-element
+  if (Array.isArray(obj)) {
+    for (const el of obj) deepFreeze(el);
+  } else {
+    // Freeze plain objects' values
+    for (const val of Object.values(obj as Record<string, unknown>)) {
+      deepFreeze(val);
+    }
+  }
+  return Object.freeze(obj);
+}
+
+/**
  * Initialization options for the {@link Settings} class.
  */
 export interface InitializeOptions<T extends Record<string, unknown>> {
@@ -117,7 +138,7 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
       if (override) {
         result = deepMerge(override as Record<string, unknown>, defaultValue);
       }
-      this.values = Object.freeze(result) as T;
+      this.values = deepFreeze(result) as T;
     } else {
       // Read existing config
       const content = await fs.readFile(this.configPath, 'utf-8');
@@ -136,7 +157,7 @@ export class Settings<T extends Record<string, unknown> = Record<string, unknown
       if (override) {
         result = deepMerge(override as Record<string, unknown>, result);
       }
-      this.values = Object.freeze(result) as T;
+      this.values = deepFreeze(result) as T;
     }
   }
 

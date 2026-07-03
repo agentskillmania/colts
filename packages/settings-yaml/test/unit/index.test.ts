@@ -327,6 +327,32 @@ extraField: extraValue
       expect(Object.isFrozen(values)).toBe(true);
     });
 
+    // BUG5: nested objects/arrays must also be frozen (deep freeze)
+    it('BUG5: nested objects are deeply frozen', async () => {
+      const configPath = path.join(tempDir, 'config.yaml');
+      const defaultYaml = `
+server:
+  host: localhost
+  port: 3100
+providers:
+  - name: openai
+    key: sk-test
+`;
+      const settings = new Settings(configPath);
+      await settings.initialize({ defaultYaml });
+
+      const values = settings.getValues() as Record<string, unknown>;
+      // Top level frozen
+      expect(Object.isFrozen(values)).toBe(true);
+      // Nested object frozen
+      expect(Object.isFrozen(values.server)).toBe(true);
+      // Array frozen
+      expect(Object.isFrozen(values.providers)).toBe(true);
+      // Array element (object inside array) frozen
+      const firstProvider = (values.providers as unknown[])[0] as Record<string, unknown>;
+      expect(Object.isFrozen(firstProvider)).toBe(true);
+    });
+
     it('should handle null values correctly', async () => {
       const configPath = path.join(tempDir, 'config.yaml');
       const userYaml = `
