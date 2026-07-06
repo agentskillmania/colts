@@ -254,6 +254,9 @@ describe('HITL V2: respond()', () => {
     );
     expect(toolMsg).toBeDefined();
     expect(toolMsg!.content).toContain('rejected');
+    // ERR2: rejected tool result must carry isError so the LLM can tell a
+    // rejection apart from a successful tool call.
+    expect(toolMsg!.isError).toBe(true);
     // No approval marker
     expect(newState.context.hitlApprovals).toBeUndefined();
   });

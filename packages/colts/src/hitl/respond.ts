@@ -87,6 +87,7 @@ function rejectTool(state: AgentState, request: HumanRequest): AgentState {
       toolCallId,
       toolName,
       type: 'tool-result',
+      isError: true, // ERR2: flag rejection so LLM can tell it apart from success
       timestamp: Date.now(),
       tokenCount: estimateTokens(content),
     });
