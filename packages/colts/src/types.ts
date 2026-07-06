@@ -36,6 +36,13 @@ export interface Message {
   toolCallId?: string;
   /** Tool name (identifies source tool when role='tool') */
   toolName?: string;
+  /**
+   * Marks a tool-result message as an error (ERR2).
+   * When true, the message assembler flags it as isError so the LLM can
+   * distinguish a failed/rejected tool call from a successful one.
+   * Defaults to false (undefined treated as false) for backward compat.
+   */
+  isError?: boolean;
   /** Tool call metadata (carries LLM-initiated tool calls when role='assistant') */
   toolCalls?: Array<{
     id: string;

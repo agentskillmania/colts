@@ -172,7 +172,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
             toolCallId: msg.toolCallId ?? 'unknown',
             toolName: msg.toolName ?? 'unknown',
             content: [{ type: 'text', text: msg.content }],
-            isError: false,
+            isError: msg.isError ?? false, // ERR2: propagate rejection/error flag
             timestamp: msg.timestamp,
           });
           break;
