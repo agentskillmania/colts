@@ -284,11 +284,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Initialize LLM provider
     if (options.llmClient) {
       this.llmProvider = options.llmClient;
-    } else if (options.llm) {
-      this.llmProvider = this.createLLMFromQuickInit(options.llm);
-      /* c8 ignore next 3 */
     } else {
-      throw new ConfigurationError('No LLM provider configured.');
+      // The validation above guarantees exactly one of llmClient/llm is set;
+      // reaching this branch means options.llm is present (quick-init path).
+      this.llmProvider = this.createLLMFromQuickInit(options.llm!);
     }
 
     // Initialize tool registry (merge injection and quick init)

@@ -13,13 +13,6 @@ import type { AgentState, AgentConfig, Message, TokenStats } from '../types.js';
 import { generateId } from '../utils/id.js';
 import { estimateTokens, addTokenStats } from '../utils/tokens.js';
 
-/**
- * Create initial AgentState
- *
- * @param config - Agent configuration
- * @returns New AgentState (immutable)
- */
-
 /** Add token usage to AgentContext.totalTokens */
 export function updateTotalTokens(state: AgentState, usage: TokenStats): AgentState {
   return updateState(state, (draft) => {
@@ -27,6 +20,12 @@ export function updateTotalTokens(state: AgentState, usage: TokenStats): AgentSt
   });
 }
 
+/**
+ * Create initial AgentState
+ *
+ * @param config - Agent configuration
+ * @returns New AgentState (immutable)
+ */
 export function createAgentState(config: AgentConfig): AgentState {
   const now = Date.now();
   return {
