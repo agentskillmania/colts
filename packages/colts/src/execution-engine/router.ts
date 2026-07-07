@@ -17,6 +17,24 @@ import { updateExecState } from '../execution/index.js';
 import type { AgentState, IToolRegistry } from '../types.js';
 
 /**
+ * Build an AdvanceResult for an unknown phase, transitioning to the error phase.
+ *
+ * Used by both execute() and executeStream() when no handler is registered
+ * for the current phase type.
+ *
+ * @param state - Current agent state
+ * @param execState - Current execution state
+ * @returns AdvanceResult pointing at the new error phase
+ */
+function buildUnknownPhaseResult(state: AgentState, execState: ExecutionState): AdvanceResult {
+  const error = new Error(`Unknown phase: ${JSON.stringify(execState.phase)}`);
+  const nextExec = updateExecState(execState, (draft) => {
+    draft.phase = { type: 'error', error };
+  });
+  return { state, execState: nextExec, phase: nextExec.phase, done: true };
+}
+
+/**
  * Phase router that dispatches to registered handlers
  *
  * Maintains a map of phase type → IPhaseHandler. On each advance,
@@ -102,11 +120,7 @@ export class PhaseRouter {
   ): Promise<AdvanceResult> {
     const handler = this.handlers.get(execState.phase.type);
     if (!handler) {
-      const error = new Error(`Unknown phase: ${JSON.stringify(execState.phase)}`);
-      const nextExec = updateExecState(execState, (draft) => {
-        draft.phase = { type: 'error', error };
-      });
-      return { state, execState: nextExec, phase: nextExec.phase, done: true };
+      return buildUnknownPhaseResult(state, execState);
     }
     return await handler.execute(ctx, state, execState, toolRegistry, options);
   }
@@ -136,11 +150,7 @@ export class PhaseRouter {
     const handler = this.handlers.get(execState.phase.type);
 
     if (!handler) {
-      const error = new Error(`Unknown phase: ${JSON.stringify(execState.phase)}`);
-      const nextExec = updateExecState(execState, (draft) => {
-        draft.phase = { type: 'error', error };
-      });
-      return { state, execState: nextExec, phase: nextExec.phase, done: true };
+      return buildUnknownPhaseResult(state, execState);
     }
 
     if (handler.streamExecute) {
