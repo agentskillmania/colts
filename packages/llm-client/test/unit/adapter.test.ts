@@ -870,4 +870,77 @@ describe('PiAiAdapter', () => {
       expect(piComplete).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ============================================================
+  // temperature passthrough
+  // ============================================================
+  describe('temperature passthrough', () => {
+    it('complete() forwards temperature to piComplete', async () => {
+      vi.mocked(piComplete).mockResolvedValue({
+        content: [{ type: 'text', text: 'Ok' }],
+        usage: { input: 1, output: 1 },
+        stopReason: 'stop',
+      } as never);
+
+      await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          temperature: 0.7,
+        },
+      });
+
+      expect(piComplete).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Object),
+        expect.objectContaining({ temperature: 0.7 })
+      );
+    });
+
+    it('streamWithRetry() forwards temperature to piStream', async () => {
+      vi.mocked(piStream).mockReturnValue(
+        mockAsyncStream([event('done', { message: { usage: { input: 1, output: 1 } } })])()
+      );
+
+      const events = [];
+      for await (const event of adapter.streamWithRetry({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+          temperature: 0.3,
+        },
+      })) {
+        events.push(event);
+      }
+
+      expect(piStream).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Object),
+        expect.objectContaining({ temperature: 0.3 })
+      );
+    });
+
+    it('complete() omits temperature when not specified', async () => {
+      vi.mocked(piComplete).mockResolvedValue({
+        content: [{ type: 'text', text: 'Ok' }],
+        stopReason: 'stop',
+      } as never);
+
+      await adapter.complete({
+        modelId: 'gpt-4',
+        apiKey: 'sk-test',
+        options: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hi' }],
+        },
+      });
+
+      const callOpts = vi.mocked(piComplete).mock.calls[0][2] as Record<string, unknown>;
+      expect(callOpts).not.toHaveProperty('temperature');
+    });
+  });
 });

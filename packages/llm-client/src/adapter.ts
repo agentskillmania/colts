@@ -454,6 +454,7 @@ export class PiAiAdapter {
         apiKey,
         thinkingEnabled: options.thinkingEnabled,
         reasoningEffort: options.thinkingEnabled && model.reasoning ? 'high' : undefined,
+        ...(options.temperature !== undefined && { temperature: options.temperature }),
         signal: options.signal,
       } as Record<string, unknown>);
 
@@ -673,6 +674,7 @@ export class PiAiAdapter {
             apiKey,
             thinkingEnabled: options.thinkingEnabled,
             reasoningEffort,
+            ...(options.temperature !== undefined && { temperature: options.temperature }),
             signal: options.signal,
           } as Record<string, unknown>);
           const iter = stream[Symbol.asyncIterator]();

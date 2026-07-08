@@ -486,6 +486,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         maxSteps: this.options.maxSteps,
         thinkingEnabled: this.options.thinkingEnabled,
         enablePromptThinking: this.options.enablePromptThinking,
+        temperature: this.options.temperature,
       },
     };
   }
@@ -1215,6 +1216,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           ? {
               thinkingEnabled: options.thinkingEnabled,
               model: options.model,
+              temperature: options.temperature,
               signal: options.signal,
             }
           : undefined;
@@ -1420,6 +1422,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           ? {
               thinkingEnabled: options.thinkingEnabled,
               model: options.model,
+              temperature: options.temperature,
               signal: options.signal,
             }
           : undefined;

@@ -435,6 +435,16 @@ export interface CallOptions {
   tools?: Tool[];
 
   /**
+   * Sampling temperature for this request.
+   *
+   * @remarks
+   * Controls randomness: lower values are more focused/deterministic,
+   * higher values more creative. Range typically 0–2. If omitted, the
+   * provider's default is used.
+   */
+  temperature?: number;
+
+  /**
    * Abort signal for request cancellation.
    *
    * @remarks

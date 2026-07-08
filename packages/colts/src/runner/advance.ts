@@ -43,6 +43,7 @@ export interface RunnerContext {
     maxSteps?: number;
     thinkingEnabled?: boolean;
     enablePromptThinking?: boolean;
+    temperature?: number;
   };
 }
 

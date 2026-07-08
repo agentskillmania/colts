@@ -48,6 +48,7 @@ export interface PhaseHandlerContext {
     maxSteps?: number;
     thinkingEnabled?: boolean;
     enablePromptThinking?: boolean;
+    temperature?: number;
   };
 }
 

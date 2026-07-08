@@ -487,3 +487,125 @@ describe('PerRequestOptions — negative paths', () => {
     expect(lastCall!.thinkingEnabled).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// temperature passthrough (mirrors thinkingEnabled pattern)
+// ---------------------------------------------------------------------------
+
+describe('PerRequestOptions — temperature', () => {
+  it('run() passes temperature from RunOptions to LLM call', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'ok',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+    const { client, getLastCallArg } = createCapturingClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'test-model',
+      llmClient: client,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'You are a test assistant.',
+      tools: [],
+    });
+
+    const opts: RunOptions = { temperature: 0.7, maxSteps: 1 };
+    await runner.run(state, opts);
+
+    const lastCall = getLastCallArg();
+    expect(lastCall).toBeDefined();
+    expect(lastCall!.temperature).toBe(0.7);
+  });
+
+  it('run() uses runner default temperature when per-request is undefined', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'ok',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+    const { client, getLastCallArg } = createCapturingClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'test-model',
+      llmClient: client,
+      temperature: 0.3,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'You are a test assistant.',
+      tools: [],
+    });
+
+    const opts: RunOptions = { maxSteps: 1 };
+    await runner.run(state, opts);
+
+    const lastCall = getLastCallArg();
+    expect(lastCall).toBeDefined();
+    expect(lastCall!.temperature).toBe(0.3);
+  });
+
+  it('run() per-request temperature overrides runner default', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'ok',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+    const { client, getLastCallArg } = createCapturingClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'test-model',
+      llmClient: client,
+      temperature: 0.3,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'You are a test assistant.',
+      tools: [],
+    });
+
+    const opts: RunOptions = { temperature: 0.9, maxSteps: 1 };
+    await runner.run(state, opts);
+
+    const lastCall = getLastCallArg();
+    expect(lastCall).toBeDefined();
+    expect(lastCall!.temperature).toBe(0.9);
+  });
+
+  it('runStream() passes temperature to LLM stream call', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'streamed',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+    const { client, getLastStreamArg } = createCapturingClient([mockResponse]);
+
+    const runner = new AgentRunner({
+      model: 'test-model',
+      llmClient: client,
+    });
+
+    const state = createAgentState({
+      name: 'test',
+      instructions: 'You are a test assistant.',
+      tools: [],
+    });
+
+    const opts: RunOptions = { temperature: 0.5, maxSteps: 1 };
+    for await (const _event of runner.runStream(state, opts)) {
+      // drain
+    }
+
+    const lastStream = getLastStreamArg();
+    expect(lastStream).toBeDefined();
+    expect(lastStream!.temperature).toBe(0.5);
+  });
+});

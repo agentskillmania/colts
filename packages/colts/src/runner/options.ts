@@ -85,6 +85,9 @@ export interface RunnerOptions {
   /** 启用 prompt 级 thinking 引导（不支持原生 thinking 的模型） */
   enablePromptThinking?: boolean;
 
+  /** 采样温度（运行时默认，可被 PerRequestOptions.temperature 覆盖） */
+  temperature?: number;
+
   /** 自定义消息组装器（默认 DefaultMessageAssembler） */
   messageAssembler?: IMessageAssembler;
 }
@@ -99,6 +102,8 @@ export interface PerRequestOptions {
   thinkingEnabled?: boolean;
   /** Override the model for this specific request (overrides runner default) */
   model?: string;
+  /** Sampling temperature for this specific request (overrides runner default) */
+  temperature?: number;
   /** AbortSignal to cancel execution */
   signal?: AbortSignal;
 }
