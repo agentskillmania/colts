@@ -937,6 +937,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       runResult: RunResult
     ): Promise<{ state: AgentState; result: RunResult }> => {
       this.emit('run:end', { state: runState, result: runResult, timestamp: Date.now() });
+      this.emit('complete', { result: runResult, timestamp: Date.now() });
       if (this.hasMiddleware) {
         await this.middlewareExecutor.runAfterRun({
           state: runState,

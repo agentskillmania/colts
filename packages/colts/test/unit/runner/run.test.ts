@@ -63,6 +63,30 @@ describe('run()', () => {
     expect(finalState.context.stepCount).toBe(1);
   });
 
+  it('should emit complete event via EventEmitter', async () => {
+    const mockResponse: LLMResponse = {
+      content: 'The answer is 42',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([mockResponse]);
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
+
+    const events: Array<{ type: string; result?: unknown }> = [];
+    runner.on('complete', (data) => events.push({ type: 'complete', result: data.result }));
+    runner.on('run:end', (data) => events.push({ type: 'run:end', result: data.result }));
+
+    const state = createAgentState(defaultConfig);
+    await runner.run(state);
+
+    expect(events.some((e) => e.type === 'complete')).toBe(true);
+    const completeEvent = events.find((e) => e.type === 'complete');
+    expect(completeEvent?.result).toBeDefined();
+    expect((completeEvent?.result as { type: string }).type).toBe('success');
+  });
+
   it('should loop through tool execution to final answer', async () => {
     const responses: LLMResponse[] = [
       {
