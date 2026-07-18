@@ -11,8 +11,7 @@
 
 | 包 | 描述 |
 |---------|-------------|
-| [`@agentskillmania/colts`](./packages/colts/) | 核心 ReAct Agent 框架 — 无状态 Runner、不可变状态、三级执行控制、流式输出、上下文压缩、Skill 与 Subagent 系统 |
-| [`@agentskillmania/colts-cli`](./packages/colts-cli/) | 基于 Ink 构建的终端 UI 应用 — 交互式调试与开发环境 |
+| [`@agentskillmania/colts`](./packages/colts/) | 核心 ReAct Agent 框架 — 无状态 Runner、不可变状态、三级执行控制、事件驱动、上下文压缩、Skill 与 Subagent 系统 |
 | [`@agentskillmania/llm-client`](./packages/llm-client/) | 统一 LLM 客户端 — 多提供商支持、三级并发控制、优先级队列、Token 追踪 |
 | [`@agentskillmania/settings-yaml`](./packages/settings-yaml/) | YAML 配置管理库 — 深度合并、默认值回退、运行时覆盖 |
 
@@ -64,7 +63,6 @@ pnpm format:check
 ## 架构
 
 ```
-colts-cli ──depends──► colts, settings-yaml
 colts ──────depends──► llm-client
 settings-yaml ───────► (无内部依赖)
 llm-client ──────────► (无内部依赖)

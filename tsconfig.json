@@ -10,8 +10,7 @@
     "forceConsistentCasingInFileNames": true
   },
   "references": [
-    { "path": "./packages/colts" },
-    { "path": "./packages/colts-cli" }
+    { "path": "./packages/colts" }
   ],
   "files": []
 }

@@ -11,8 +11,7 @@
 
 | Package | Description |
 |---------|-------------|
-| [`@agentskillmania/colts`](./packages/colts/) | Core ReAct agent framework — stateless runner, immutable state, three-level execution control, streaming, context compression, skills, and subagents |
-| [`@agentskillmania/colts-cli`](./packages/colts-cli/) | Terminal UI application built with Ink — interactive debugging and development environment |
+| [`@agentskillmania/colts`](./packages/colts/) | Core ReAct agent framework — stateless runner, immutable state, three-level execution control, event-driven architecture, context compression, skills, and subagents |
 | [`@agentskillmania/llm-client`](./packages/llm-client/) | Unified LLM client with multi-provider support, three-level concurrency control, priority queuing, and token tracking |
 | [`@agentskillmania/settings-yaml`](./packages/settings-yaml/) | YAML configuration management library with deep merge, default value fallback, and runtime overrides |
 
@@ -64,7 +63,6 @@ pnpm format:check
 ## Architecture
 
 ```
-colts-cli ──depends──► colts, settings-yaml
 colts ──────depends──► llm-client
 settings-yaml ───────► (no internal deps)
 llm-client ──────────► (no internal deps)
