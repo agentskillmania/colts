@@ -110,7 +110,7 @@ describe('AgentRunner', () => {
       });
 
       const state = createAgentState(defaultConfig);
-      await runner.chat(state, 'Hi there!');
+      await runner.run(addUserMessage(state, 'Hi there!'));
 
       expect(customAssembler.build).toHaveBeenCalledWith(
         expect.any(Object),
@@ -118,399 +118,6 @@ describe('AgentRunner', () => {
       );
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       expect(callArg.messages[0].content).toBe('custom-system');
-    });
-  });
-
-  describe('chat', () => {
-    it('should call LLM and return response with updated state', async () => {
-      const client = createMockClient();
-      const mockResponse: LLMResponse = {
-        content: 'Hello! How can I help you?',
-        tokens: { input: 10, output: 8 },
-        stopReason: 'stop',
-      };
-      vi.mocked(client.call).mockResolvedValue(mockResponse);
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const state = createAgentState(defaultConfig);
-      const result = await runner.chat(state, 'Hi there!');
-
-      // Verify LLM was called with messages containing instructions
-      expect(client.call).toHaveBeenCalledWith({
-        model: 'gpt-4',
-        messages: expect.arrayContaining([
-          expect.objectContaining({ role: 'user' }),
-          expect.objectContaining({ role: 'user', content: 'Hi there!' }),
-        ]),
-        priority: 0,
-        requestTimeout: 1800000,
-      });
-
-      // Verify instructions are in first user message
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
-      const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
-      expect(firstUserMsg?.content).toMatch(
-        /\[System Instructions\][\s\S]*You are a helpful assistant/
-      );
-
-      // Verify result
-      expect(result.response).toBe('Hello! How can I help you?');
-      expect(result.tokens).toEqual({ input: 10, output: 8 });
-      expect(result.stopReason).toBe('stop');
-
-      // Verify state updated
-      expect(result.state.context.messages).toHaveLength(2);
-      expect(result.state.context.messages[0].role).toBe('user');
-      expect(result.state.context.messages[1].role).toBe('assistant');
-      expect(result.state.context.stepCount).toBe(1);
-    });
-
-    it('should include system prompt if provided', async () => {
-      const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
-        content: 'Response',
-        tokens: { input: 5, output: 5 },
-        stopReason: 'stop',
-      });
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        systemPrompt: 'Custom system instruction',
-      });
-
-      const state = createAgentState(defaultConfig);
-      await runner.chat(state, 'Hello');
-
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
-      const userMessages = callArg.messages.filter((m: { role: string }) => m.role === 'user');
-      expect(userMessages[0].content).toMatch(/Custom system instruction/);
-    });
-
-    it('should preserve conversation history', async () => {
-      const client = createMockClient();
-      vi.mocked(client.call)
-        .mockResolvedValueOnce({
-          content: 'First response',
-          tokens: { input: 5, output: 5 },
-          stopReason: 'stop',
-        })
-        .mockResolvedValueOnce({
-          content: 'Second response',
-          tokens: { input: 10, output: 5 },
-          stopReason: 'stop',
-        });
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      let state = createAgentState(defaultConfig);
-
-      // First turn
-      const result1 = await runner.chat(state, 'Message 1');
-      state = result1.state;
-
-      // Second turn
-      const result2 = await runner.chat(state, 'Message 2');
-      state = result2.state;
-
-      // Verify conversation history
-      expect(state.context.messages).toHaveLength(4);
-      expect(state.context.messages[0].content).toBe('Message 1');
-      expect(state.context.messages[1].content).toBe('First response');
-      expect(state.context.messages[2].content).toBe('Message 2');
-      expect(state.context.messages[3].content).toBe('Second response');
-      expect(state.context.stepCount).toBe(2);
-    });
-
-    it('should pass priority and timeout to LLM call', async () => {
-      const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
-        content: 'Response',
-        tokens: { input: 5, output: 5 },
-        stopReason: 'stop',
-      });
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        requestTimeout: 30000,
-      });
-
-      const state = createAgentState(defaultConfig);
-      // Pass priority in chat options
-      await runner.chat(state, 'Hello', { priority: 5 });
-
-      expect(client.call).toHaveBeenCalledWith(
-        expect.objectContaining({
-          priority: 5,
-          requestTimeout: 30000,
-        })
-      );
-    });
-
-    it('should use default priority 0 when not specified', async () => {
-      const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
-        content: 'Response',
-        tokens: { input: 5, output: 5 },
-        stopReason: 'stop',
-      });
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const state = createAgentState(defaultConfig);
-      await runner.chat(state, 'Hello');
-
-      expect(client.call).toHaveBeenCalledWith(
-        expect.objectContaining({
-          priority: 0,
-        })
-      );
-    });
-
-    it('should not modify original state', async () => {
-      const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
-        content: 'Response',
-        tokens: { input: 5, output: 5 },
-        stopReason: 'stop',
-      });
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const originalState = createAgentState(defaultConfig);
-      const originalMessageCount = originalState.context.messages.length;
-
-      await runner.chat(originalState, 'Hello');
-
-      // Original state unchanged
-      expect(originalState.context.messages).toHaveLength(originalMessageCount);
-    });
-  });
-
-  describe('chatStream', () => {
-    it('should stream text chunks and return final state', async () => {
-      const client = createMockClient();
-
-      // Mock async iterable for stream
-      async function* mockStream() {
-        yield { type: 'text', delta: 'Hello', accumulatedContent: 'Hello' };
-        yield { type: 'text', delta: ' there', accumulatedContent: 'Hello there' };
-        yield {
-          type: 'done',
-          accumulatedContent: 'Hello there',
-          roundTotalTokens: { input: 5, output: 5 },
-        };
-      }
-
-      vi.mocked(client.stream).mockReturnValue(
-        mockStream() as AsyncIterable<{
-          type: string;
-          delta?: string;
-          accumulatedContent?: string;
-          roundTotalTokens?: TokenStats;
-        }>
-      );
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const state = createAgentState(defaultConfig);
-      const chunks: Array<{ type: string; delta?: string; state: unknown }> = [];
-
-      for await (const chunk of runner.chatStream(state, 'Hi')) {
-        chunks.push(chunk);
-      }
-
-      // Verify chunks
-      expect(chunks).toHaveLength(3);
-      expect(chunks[0].type).toBe('text');
-      expect(chunks[0].delta).toBe('Hello');
-
-      // Verify token tracking in done chunk
-      const doneChunk = chunks[2] as {
-        type: string;
-        tokens?: TokenStats;
-        state: { context: { totalTokens?: TokenStats } };
-      };
-      expect(doneChunk.type).toBe('done');
-      expect(doneChunk.tokens).toEqual({ input: 5, output: 5 });
-      expect(doneChunk.state.context.totalTokens).toEqual({ input: 5, output: 5 });
-      expect(chunks[1].type).toBe('text');
-      expect(chunks[1].delta).toBe(' there');
-      expect(chunks[2].type).toBe('done');
-
-      // Verify final state has assistant message
-      const finalChunk = chunks[2];
-      expect(finalChunk.state).toEqual(
-        expect.objectContaining({
-          context: expect.objectContaining({
-            messages: [
-              expect.objectContaining({ role: 'user' }),
-              expect.objectContaining({ role: 'assistant' }),
-            ],
-          }),
-        })
-      );
-    });
-
-    it('should handle stream errors', async () => {
-      const client = createMockClient();
-
-      async function* mockStream() {
-        yield { type: 'text', delta: 'Partial', accumulatedContent: 'Partial' };
-        yield { type: 'error', error: 'Stream interrupted' };
-      }
-
-      vi.mocked(client.stream).mockReturnValue(
-        mockStream() as AsyncIterable<{
-          type: string;
-          delta?: string;
-          accumulatedContent?: string;
-          error?: string;
-        }>
-      );
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const state = createAgentState(defaultConfig);
-      const chunks = [];
-
-      for await (const chunk of runner.chatStream(state, 'Hi')) {
-        chunks.push(chunk);
-      }
-
-      expect(chunks).toHaveLength(2);
-      expect(chunks[1].type).toBe('error');
-      expect(chunks[1].error).toBe('Stream interrupted');
-    });
-
-    it('should handle exceptions during streaming', async () => {
-      const client = createMockClient();
-
-      async function* mockStream() {
-        yield { type: 'text', delta: 'Start', accumulatedContent: 'Start' };
-        throw new Error('Network error');
-      }
-
-      vi.mocked(client.stream).mockReturnValue(
-        mockStream() as AsyncIterable<{
-          type: string;
-          delta?: string;
-          accumulatedContent?: string;
-        }>
-      );
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const state = createAgentState(defaultConfig);
-      const chunks = [];
-
-      for await (const chunk of runner.chatStream(state, 'Hi')) {
-        chunks.push(chunk);
-      }
-
-      // Should have text chunk and error chunk
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
-      const lastChunk = chunks[chunks.length - 1];
-      expect(lastChunk.type).toBe('error');
-      expect(lastChunk.error).toBe('Network error');
-    });
-
-    it('should not modify original state during streaming', async () => {
-      const client = createMockClient();
-
-      async function* mockStream() {
-        yield { type: 'text', delta: 'Response', accumulatedContent: 'Response' };
-        yield {
-          type: 'done',
-          accumulatedContent: 'Response',
-          roundTotalTokens: { input: 5, output: 5 },
-        };
-      }
-
-      vi.mocked(client.stream).mockReturnValue(
-        mockStream() as AsyncIterable<{
-          type: string;
-          delta?: string;
-          accumulatedContent?: string;
-          roundTotalTokens?: TokenStats;
-        }>
-      );
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const originalState = createAgentState(defaultConfig);
-      const originalMessageCount = originalState.context.messages.length;
-
-      for await (const _ of runner.chatStream(originalState, 'Hello')) {
-        // Consume stream
-      }
-
-      // Original state unchanged
-      expect(originalState.context.messages).toHaveLength(originalMessageCount);
-    });
-
-    it('should accept priority option in chatStream', async () => {
-      const client = createMockClient();
-
-      async function* mockStream() {
-        yield {
-          type: 'done',
-          accumulatedContent: 'Response',
-          roundTotalTokens: { input: 5, output: 5 },
-        };
-      }
-
-      vi.mocked(client.stream).mockReturnValue(
-        mockStream() as AsyncIterable<{
-          type: string;
-          accumulatedContent?: string;
-          roundTotalTokens?: TokenStats;
-        }>
-      );
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const state = createAgentState(defaultConfig);
-      // Consume the stream
-      for await (const _ of runner.chatStream(state, 'Hello', { priority: 10 })) {
-        // Consume
-      }
-
-      // Verify priority was passed
-      expect(client.stream).toHaveBeenCalledWith(
-        expect.objectContaining({
-          priority: 10,
-        })
-      );
     });
   });
 
@@ -542,7 +149,7 @@ describe('AgentRunner', () => {
         },
       };
 
-      await runner.chat(state, 'Next message');
+      await runner.run(addUserMessage(state, 'Next message'));
 
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const userMsgs = callArg.messages.filter((m: { role: string }) => m.role === 'user');
@@ -588,7 +195,7 @@ describe('AgentRunner', () => {
         },
       };
 
-      await runner.chat(state, 'What is the result?');
+      await runner.run(addUserMessage(state, 'What is the result?'));
 
       // Then: Tool result is included as toolResult message
       const callArg = vi.mocked(client.call).mock.calls[0][0];
@@ -744,7 +351,7 @@ describe('AgentRunner', () => {
         },
       };
 
-      await runner.chat(state, 'Follow up');
+      await runner.run(addUserMessage(state, 'Follow up'));
 
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const allContent = JSON.stringify(callArg.messages);
@@ -772,38 +379,6 @@ describe('AgentRunner', () => {
       });
 
       expect(runner).toBeInstanceOf(AgentRunner);
-    });
-  });
-
-  describe('chatStream edge cases', () => {
-    it('should handle chatStream default event type', async () => {
-      // Test the default case in chatStream's event handling
-      const client = {
-        call: vi.fn(),
-        stream: vi.fn().mockImplementation(async function* () {
-          // Yield an unknown event type to hit default case
-          yield { type: 'unknown_event', data: 'test' };
-          yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
-        }),
-        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
-      } as unknown as LLMClient;
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const state = createAgentState(defaultConfig);
-      const chunks = [];
-
-      for await (const chunk of runner.chatStream(state, 'Hello')) {
-        chunks.push(chunk);
-        if (chunk.type === 'done') break;
-      }
-
-      // Should ignore unknown event and still complete
-      expect(chunks.length).toBeGreaterThan(0);
-      expect(chunks[chunks.length - 1].type).toBe('done');
     });
   });
 
@@ -940,7 +515,7 @@ describe('AgentRunner', () => {
       });
 
       const state = createAgentState(defaultConfig);
-      await runner.chat(state, 'Hello');
+      await runner.run(addUserMessage(state, 'Hello'));
 
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
@@ -974,7 +549,7 @@ describe('AgentRunner', () => {
       });
 
       const state = createAgentState(defaultConfig);
-      await runner.chat(state, 'Hello');
+      await runner.run(addUserMessage(state, 'Hello'));
 
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
@@ -1087,7 +662,7 @@ describe('AgentRunner', () => {
       });
 
       const state = createAgentState(defaultConfig);
-      await runner.chat(state, 'Hello');
+      await runner.run(addUserMessage(state, 'Hello'));
 
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
@@ -1113,7 +688,7 @@ describe('AgentRunner', () => {
       });
 
       const state = createAgentState(defaultConfig);
-      await runner.chat(state, 'Hello');
+      await runner.run(addUserMessage(state, 'Hello'));
 
       const callArg = vi.mocked(client.call).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');

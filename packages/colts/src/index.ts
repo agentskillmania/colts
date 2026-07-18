@@ -98,9 +98,6 @@ export {
   AgentRunner,
   type RunnerOptions,
   type RunnerEventMap,
-  type ChatOptions,
-  type ChatResult,
-  type ChatStreamChunk,
 } from './runner/index.js';
 
 // Per-request option types

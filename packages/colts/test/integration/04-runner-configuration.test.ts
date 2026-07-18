@@ -17,7 +17,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { createRealLLMClient } from './helpers.js';
 import { AgentRunner, ToolRegistry, calculatorTool } from '../../src/index.js';
-import { createAgentState } from '../../src/state/index.js';
+import { createAgentState, addUserMessage } from '../../src/state/index.js';
 import type { AgentConfig } from '../../src/types.js';
 import { z } from 'zod';
 
@@ -48,12 +48,12 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
         });
 
         const state = createAgentState(defaultConfig);
-        const { state: newState, response } = await runner.chat(state, 'What is 2+2?');
+        const { state: newState, result } = await runner.run(addUserMessage(state, 'What is 2+2?'));
 
-        // ChatResult doesn't have 'type' field, check response instead
-        expect(response).toBeTruthy();
-        expect(response.length).toBeGreaterThan(0);
-        expect(newState.context.messages).toHaveLength(2);
+        expect(result.type).toBe('success');
+        expect(result.answer).toBeTruthy();
+        expect(result.answer.length).toBeGreaterThan(0);
+        expect(newState.context.messages.length).toBeGreaterThanOrEqual(2);
       },
       30000
     );
@@ -95,11 +95,12 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
         });
 
         const state = createAgentState(defaultConfig);
-        const { state: newState, response } = await runner.chat(state, 'Hello!');
+        const { state: newState, result } = await runner.run(addUserMessage(state, 'Hello!'));
 
-        expect(response).toBeTruthy();
-        expect(response.length).toBeGreaterThan(0);
-        expect(newState.context.messages).toHaveLength(2);
+        expect(result.type).toBe('success');
+        expect(result.answer).toBeTruthy();
+        expect(result.answer.length).toBeGreaterThan(0);
+        expect(newState.context.messages.length).toBeGreaterThanOrEqual(2);
       },
       30000
     );
