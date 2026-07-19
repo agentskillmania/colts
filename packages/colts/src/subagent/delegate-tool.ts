@@ -165,10 +165,42 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
         } satisfies DelegateResult;
       }
 
-      // Run until completion with signal support
-      const { result } = await subRunner.run(stateWithTask, {
-        signal: options?.signal,
-      });
+      // Set up timeout if configured — combines with caller's signal
+      const timeoutMs = config.timeout;
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const timeoutController = new AbortController();
+      const combinedSignal = options?.signal
+        ? AbortSignal.any([options.signal, timeoutController.signal])
+        : timeoutController.signal;
+
+      if (timeoutMs) {
+        timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+      }
+
+      // Run until completion with signal + timeout support
+      let result;
+      try {
+        ({ result } = await subRunner.run(stateWithTask, {
+          signal: combinedSignal,
+        }));
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+
+      // Check if timeout caused the abort
+      if (result.type === 'abort' && timeoutMs && timeoutController.signal.aborted) {
+        deps.emit('subagent:end', {
+          name: agent,
+          result: { status: 'timeout', partialResult: '', totalSteps: result.totalSteps },
+          subtaskId,
+          timestamp: Date.now(),
+        });
+        return {
+          status: 'timeout',
+          partialResult: '',
+          totalSteps: result.totalSteps,
+        } satisfies DelegateResult;
+      }
 
       // Build the structured result
       let delegateResult: DelegateResult;

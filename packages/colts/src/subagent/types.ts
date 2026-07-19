@@ -14,10 +14,12 @@ export interface SubAgentConfig {
   description: string;
   /** AgentConfig (independent instructions and tools) */
   config: AgentConfig;
-  /** Max steps limit for sub-agent (default: 10) */
+  /** Max steps limit for sub-agent (default: 500) */
   maxSteps?: number;
   /** Allow this sub-agent to delegate further (default: false) */
   allowDelegation?: boolean;
+  /** Timeout in milliseconds — sub-agent is aborted if it exceeds this (default: no timeout) */
+  timeout?: number;
 }
 
 /**

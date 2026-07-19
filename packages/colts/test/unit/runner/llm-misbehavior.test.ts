@@ -59,29 +59,6 @@ function createSkillToolRegistry(): ToolRegistry {
   return registry;
 }
 
-/**
- * Create a registry with a mock delegate tool that returns a plain result.
- */
-function createDelegateToolRegistry(): ToolRegistry {
-  const registry = new ToolRegistry();
-
-  registry.register({
-    name: 'delegate',
-    description: 'Delegate a task to a sub-agent',
-    parameters: z.object({
-      agent: z.string(),
-      task: z.string(),
-    }),
-    execute: async () => ({
-      answer: 'Sub-agent completed the task',
-      totalSteps: 1,
-      finalState: null,
-    }),
-  });
-
-  return registry;
-}
-
 // ---------------------------------------------------------------------------
 // Naughty LLM tests
 // ---------------------------------------------------------------------------
@@ -123,8 +100,12 @@ describe('Naughty LLM - misbehavior edge cases', () => {
   });
 
   it('should emit subagent:start and subagent:end for delegate tool via blocking run', async () => {
-    const registry = createDelegateToolRegistry();
+    // The delegate tool now emits subagent:start/subagent:end itself through the
+    // runner's EventEmitter (previously these were synthesized as effects by
+    // ToolResultHandler). Use the subAgents option so the runner registers a
+    // real delegate tool wired to its EventEmitter.
     const client = createMockLLMClient([
+      // Main agent: calls delegate
       {
         content: '',
         toolCalls: [
@@ -133,9 +114,30 @@ describe('Naughty LLM - misbehavior edge cases', () => {
         tokens: mockTokens,
         stopReason: 'toolUse',
       },
+      // Sub-agent LLM response (consumed inside the delegate tool run)
+      {
+        content: 'Sub-agent completed the task',
+        toolCalls: [],
+        tokens: mockTokens,
+        stopReason: 'stop',
+      },
+      // Main agent: final answer after delegation
       { content: 'Delegation complete', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
     ]);
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, toolRegistry: registry });
+
+    const subAgents = [
+      {
+        name: 'helper',
+        description: 'Helper sub-agent',
+        config: {
+          name: 'helper',
+          instructions: 'You are a helpful assistant.',
+          tools: [],
+        },
+      },
+    ];
+
+    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, subAgents });
     const state = createAgentState(defaultConfig);
 
     const events: string[] = [];

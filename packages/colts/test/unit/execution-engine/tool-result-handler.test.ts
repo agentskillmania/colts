@@ -275,7 +275,7 @@ describe('ToolResultHandler — SKILL_NOT_FOUND', () => {
 // ---------------------------------------------------------------------------
 
 describe('ToolResultHandler — delegate tools', () => {
-  it('should produce subagent:start/end + tool:end for delegate + plain result', async () => {
+  it('should produce tool:end for delegate + plain result (subagent events now via EventEmitter)', async () => {
     const state = createAgentState(defaultConfig);
     const execState = createToolResultExecState(
       { tc8: 'delegated task completed' },
@@ -291,30 +291,15 @@ describe('ToolResultHandler — delegate tools', () => {
     const result = await handler.execute(createMockCtx(), state, execState);
 
     expect(result.phase.type).toBe('tool-result');
-    expect(result.effects!.map((e) => e.type)).toEqual([
-      'subagent:start',
-      'tool:end',
-      'subagent:end',
-    ]);
+    // subagent:start/subagent:end are now emitted by the delegate tool itself
+    // via EventEmitter; ToolResultHandler only emits tool:end.
+    expect(result.effects!.map((e) => e.type)).toEqual(['tool:end']);
 
-    const subStart = result.effects![0] as {
-      type: 'subagent:start';
-      name: string;
-      task: string;
-    };
-    expect(subStart.name).toBe('sub-agent');
-    expect(subStart.task).toBe('do something');
-
-    const subEnd = result.effects![2] as {
-      type: 'subagent:end';
-      name: string;
-      result: unknown;
-    };
-    expect(subEnd.name).toBe('sub-agent');
-    expect(subEnd.result).toBe('delegated task completed');
+    const toolEnd = result.effects![0] as { type: 'tool:end'; result: unknown };
+    expect(toolEnd.result).toBe('delegated task completed');
   });
 
-  it('should produce subagent:start + skill:start + tool:end + subagent:end for delegate + SWITCH_SKILL', async () => {
+  it('should produce skill:start + tool:end for delegate + SWITCH_SKILL (subagent events via EventEmitter)', async () => {
     const state = createAgentState(defaultConfig);
     const switchSignal = {
       type: 'SWITCH_SKILL',
@@ -335,26 +320,20 @@ describe('ToolResultHandler — delegate tools', () => {
 
     const result = await handler.execute(createMockCtx(), state, execState);
 
+    // subagent:start/subagent:end are now emitted by the delegate tool itself
+    // via EventEmitter; ToolResultHandler only emits skill:* + tool:end.
     expect(result.effects!.map((e) => e.type)).toEqual([
-      'subagent:start',
       'skill:loading',
       'skill:loaded',
       'skill:start',
       'tool:end',
-      'subagent:end',
     ]);
 
-    const subStart = result.effects![0] as { type: 'subagent:start'; name: string };
-    expect(subStart.name).toBe('research-agent');
-
-    const skillStart = result.effects![3] as { type: 'skill:start'; name: string };
+    const skillStart = result.effects![2] as { type: 'skill:start'; name: string };
     expect(skillStart.name).toBe('research');
-
-    const subEnd = result.effects![5] as { type: 'subagent:end'; name: string };
-    expect(subEnd.name).toBe('research-agent');
   });
 
-  it('should produce subagent:start/end for delegate + same-skill', async () => {
+  it('should produce tool:end for delegate + same-skill (subagent events via EventEmitter)', async () => {
     let state = createAgentState(defaultConfig);
     state = updateState(state, (draft) => {
       draft.context.skillState = {
@@ -382,17 +361,15 @@ describe('ToolResultHandler — delegate tools', () => {
     const result = await handler.execute(createMockCtx(), state, execState);
 
     expect(result.phase.type).toBe('tool-result');
-    expect(result.effects!.map((e) => e.type)).toEqual([
-      'subagent:start',
-      'tool:end',
-      'subagent:end',
-    ]);
+    // subagent:start/subagent:end are now emitted by the delegate tool itself
+    // via EventEmitter; ToolResultHandler only emits tool:end.
+    expect(result.effects!.map((e) => e.type)).toEqual(['tool:end']);
   });
 
   // Note: the delegate + cyclic-load and delegate + RETURN_SKILL cases were
   // removed together with the skill stack and the RETURN_SKILL signal.
 
-  it('should produce subagent:start/end for delegate + SKILL_NOT_FOUND', async () => {
+  it('should produce error for delegate + SKILL_NOT_FOUND (subagent events via EventEmitter)', async () => {
     const state = createAgentState(defaultConfig);
     const notFoundSignal = {
       type: 'SKILL_NOT_FOUND',
@@ -414,10 +391,12 @@ describe('ToolResultHandler — delegate tools', () => {
 
     expect(result.done).toBe(true);
     expect(result.phase.type).toBe('error');
-    expect(result.effects!.map((e) => e.type)).toEqual(['subagent:start', 'error', 'subagent:end']);
+    // subagent:start/subagent:end are now emitted by the delegate tool itself
+    // via EventEmitter; ToolResultHandler only emits error.
+    expect(result.effects!.map((e) => e.type)).toEqual(['error']);
   });
 
-  it('should detect delegate tool in allActions when action points elsewhere', async () => {
+  it('should detect delegate tool in allActions when action points elsewhere (subagent events via EventEmitter)', async () => {
     const state = createAgentState(defaultConfig);
     const execState = createToolResultExecState(
       { 'tc-1': '42', 'tc-2': 'delegated' },
@@ -436,17 +415,18 @@ describe('ToolResultHandler — delegate tools', () => {
 
     const result = await handler.execute(createMockCtx(), state, execState);
 
+    // With multiple results, the handler emits a single tools:end effect.
+    // The delegate tool in allActions is no longer wrapped with subagent:*
+    // effects here; those are emitted by the delegate tool itself via
+    // EventEmitter.
     const types = result.effects!.map((e) => e.type);
-    expect(types).toContain('subagent:start');
-    expect(types).toContain('subagent:end');
+    expect(types).toEqual(['tools:end']);
 
-    const subStart = result.effects!.find((e) => e.type === 'subagent:start') as {
-      type: 'subagent:start';
-      name: string;
-      task: string;
+    const toolsEnd = result.effects![0] as {
+      type: 'tools:end';
+      results: Record<string, unknown>;
     };
-    expect(subStart.name).toBe('sub-expert');
-    expect(subStart.task).toBe('analyze data');
+    expect(toolsEnd.results['tc-2']).toBe('delegated');
   });
 });
 

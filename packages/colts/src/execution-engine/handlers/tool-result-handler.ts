@@ -38,22 +38,9 @@ export class ToolResultHandler implements IPhaseHandler {
     const action = execState.action;
     let currentState = state;
 
-    // 1. Delegate detection — search allActions, fallback to single action
-    const delegateAction =
-      execState.allActions?.find((a) => a.tool === 'delegate') ??
-      (action?.tool === 'delegate' ? action : undefined);
-    if (delegateAction) {
-      const agentName = String(delegateAction.arguments.agent ?? '');
-      const taskDesc = String(delegateAction.arguments.task ?? '');
-      effects.push({
-        type: 'subagent:start',
-        timestamp: Date.now(),
-        name: agentName,
-        task: taskDesc,
-      });
-    }
-
-    // 2. Skill signal processing — sole call site of applySkillSignal
+    // 1. Skill signal processing — sole call site of applySkillSignal
+    // Note: delegate start/end events are now emitted by the delegate tool itself
+    // (via parentEmitter), not generated here as effects.
     if (isSkillSignal(result)) {
       const [newState, sigResult] = applySkillSignal(currentState, result as SkillSignal);
       currentState = newState;
@@ -87,15 +74,6 @@ export class ToolResultHandler implements IPhaseHandler {
             timestamp: Date.now(),
             result: formatSkillToolResult(result),
           });
-          // Delegate post-processing: subagent:end
-          if (delegateAction) {
-            effects.push({
-              type: 'subagent:end',
-              timestamp: Date.now(),
-              name: String(delegateAction.arguments.agent ?? ''),
-              result,
-            });
-          }
           const nextExec = updateExecState(execState, (draft) => {
             draft.phase = { type: 'idle' };
           });
@@ -114,14 +92,6 @@ export class ToolResultHandler implements IPhaseHandler {
             timestamp: Date.now(),
             result: `Skill '${sigResult.currentSkill}' is already active`,
           });
-          if (delegateAction) {
-            effects.push({
-              type: 'subagent:end',
-              timestamp: Date.now(),
-              name: String(delegateAction.arguments.agent ?? ''),
-              result,
-            });
-          }
           return { state: currentState, execState, phase: execState.phase, done: false, effects };
         }
 
@@ -132,14 +102,6 @@ export class ToolResultHandler implements IPhaseHandler {
             error: sigResult.error,
             context: { step: 0 },
           });
-          if (delegateAction) {
-            effects.push({
-              type: 'subagent:end',
-              timestamp: Date.now(),
-              name: String(delegateAction.arguments.agent ?? ''),
-              result,
-            });
-          }
           const nextExec = updateExecState(execState, (draft) => {
             draft.phase = { type: 'error', error: sigResult.error };
           });
@@ -159,15 +121,6 @@ export class ToolResultHandler implements IPhaseHandler {
       effects.push({ type: 'tool:end', timestamp: Date.now(), result });
     } else {
       effects.push({ type: 'tools:end', timestamp: Date.now(), results });
-    }
-
-    if (delegateAction) {
-      effects.push({
-        type: 'subagent:end',
-        timestamp: Date.now(),
-        name: String(delegateAction.arguments.agent ?? ''),
-        result,
-      });
     }
 
     return { state: currentState, execState, phase: execState.phase, done: false, effects };
