@@ -4,16 +4,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
-无状态 ReAct Agent 框架。流式优先的 API 设计、三级执行控制、可插拔的上下文工程。一个 Runner 实例可安全服务多个并发 Agent。
+无状态 ReAct Agent 框架。三级执行控制、事件驱动流式输出、可插拔的上下文工程。一个 Runner 实例可安全服务多个并发 Agent。
 
 ## 特色
 
 - **无状态 Runner** — 一个 `AgentRunner` 实例，多个 `AgentState` 实例。天然线程安全。
-- **三级执行控制** — `run()`（自动循环）、`step()`（一个 ReAct 周期）、`advance()`（一个阶段）。均提供流式变体。
-- **流式优先** — 每个执行 API 都有 `AsyncIterable` 对应版本：`runStream`、`stepStream`、`advanceStream`、`chatStream`。
+- **三级执行控制** — `run()`（自动循环）、`step()`（一个 ReAct 周期）、`advance()`（一个阶段）。
+- **事件驱动可观测性** — `AgentRunner` 继承 `EventEmitter`。所有执行事件（token、思考、工具调用、阶段变更、子代理活动）均通过 `runner.on(...)` 发出。token 在内部通过 `llmProvider.stream()` 流式拉取后逐个 emit 到 EventEmitter。
 - **Thinking / 推理模式** — 原生推理（Claude 风格）和提示词级推理（`<think/>` 标签）。可按请求配置。
 - **Skill 系统** — 运行时从 `SKILL.md` 文件动态加载领域指令。支持 `load_skill` / `return_skill` 嵌套调用。
-- **Subagent 委托** — 将任务委托给具有独立配置、工具和状态的专用子代理。
+- **Subagent 委托** — 将任务委托给具有独立配置、工具、状态和可选超时的专用子代理。子代理事件冒泡到父 Runner 的 EventEmitter，可实时观察。
 - **上下文压缩** — 两种策略（`truncate`、`summarize`）。消息永不删除。
 - **可插拔消息组装** — `IMessageAssembler` 接口，支持自定义 RAG、记忆或提示词策略，无需 fork Runner。
 - **工具系统** — 基于 Zod 的参数校验，自动生成 JSON Schema。
@@ -45,6 +45,10 @@ let state = createAgentState({
   instructions: 'You are a helpful assistant.',
   tools: [],
 });
+
+// 通过 EventEmitter 将 token 流式输出到控制台
+runner.on('token', (e) => process.stdout.write(e.token));
+runner.on('complete', (e) => console.log('\n完成:', e.result.type));
 
 // 自动循环直到获得最终答案或达到 maxSteps
 const { result } = await runner.run(state);
@@ -78,28 +82,14 @@ const runner = new AgentRunner({
 
 ## 核心 API
 
-### Chat — 单轮对话，不执行工具
-
-```typescript
-const { state: newState, response } = await runner.chat(state, '你好！');
-
-// 流式
-for await (const chunk of runner.chatStream(state, '你好！')) {
-  if (chunk.type === 'text') process.stdout.write(chunk.delta);
-}
-```
-
 ### Run — 自动循环直到获得最终答案或达到 maxSteps
 
 ```typescript
-const { state: finalState, result } = await runner.run(state, { maxSteps: 15 });
-// result.type: 'success' | 'max_steps' | 'error'
+runner.on('token', (e) => process.stdout.write(e.token));
+runner.on('complete', (e) => console.log('完成:', e.result));
 
-// 流式
-for await (const event of runner.runStream(state)) {
-  if (event.type === 'token') process.stdout.write(event.token);
-  if (event.type === 'complete') console.log('完成:', event.result);
-}
+const { state: finalState, result } = await runner.run(state, { maxSteps: 15 });
+// result.type: 'success' | 'max_steps' | 'error' | 'abort'
 ```
 
 ### Step — 执行一个 ReAct 周期
@@ -108,9 +98,7 @@ for await (const event of runner.runStream(state)) {
 const { state: newState, result } = await runner.step(state);
 // result.type: 'done' | 'continue' | 'error'
 
-for await (const event of runner.stepStream(state)) {
-  if (event.type === 'phase-change') console.log('阶段:', event.to.type);
-}
+runner.on('phase-change', (e) => console.log('阶段:', e.to.type));
 ```
 
 ### Advance — 细粒度按阶段控制
@@ -124,6 +112,25 @@ while (!isTerminalPhase(execState.phase)) {
   state = result.state;
 }
 ```
+
+## 事件系统
+
+`AgentRunner` 继承 `EventEmitter`（来自 `eventemitter3`）。所有执行事件都走单一通道，不存在独立的流式 API。通过 `runner.on(event, handler)` 订阅：
+
+```typescript
+runner.on('run:start', (e) => console.log('Run 开始'));
+runner.on('step:start', (e) => console.log(`Step ${e.step}`));
+runner.on('token', (e) => process.stdout.write(e.token));
+runner.on('thinking', (e) => process.stderr.write(e.content));
+runner.on('tool:start', (e) => console.log('工具:', e.action.name));
+runner.on('tool:end', (e) => console.log('工具结果:', e.result));
+runner.on('phase-change', (e) => console.log(`${e.from.type} → ${e.to.type}`));
+runner.on('compressing', () => console.log('压缩上下文中...'));
+runner.on('complete', (e) => console.log('Run 结果:', e.result.type));
+runner.on('error', (e) => console.error('错误:', e.error));
+```
+
+主要事件分组：生命周期（`run:start`、`run:end`、`step:start`、`step:end`、`complete`）、token 流（`token`、`thinking`）、工具（`tool:start`、`tool:end`、`tools:start`、`tools:end`）、上下文压缩（`compressing`、`compressed`）、LLM 调用（`llm:request`、`llm:response`）、技能（`skill:start`、`skill:end`）。
 
 ## 工具系统
 
@@ -216,6 +223,8 @@ const runner = new AgentRunner({
 
 ## Subagent 系统
 
+将任务委托给专用子代理。每个子代理拥有独立的指令、工具、状态，可选的步数上限和超时：
+
 ```typescript
 const runner = new AgentRunner({
   model: 'glm-4',
@@ -225,11 +234,27 @@ const runner = new AgentRunner({
     description: 'Research specialist',
     config: { name: 'researcher', instructions: 'Research topics thoroughly.', tools: [] },
     maxSteps: 5,
+    timeout: 60_000, // 毫秒，超出则中断子代理
   }],
 });
 ```
 
-`delegate` 工具会自动注册，使父代理能够调用子代理。
+`delegate` 工具会自动注册，使父代理能够调用子代理。工具返回一个判别联合 `DelegateResult`（`status: 'success' | 'error' | 'max_steps' | 'abort' | 'timeout'`），父代理可据此分支处理。
+
+### 子代理事件冒泡
+
+子代理事件以 `subagent:` 前缀冒泡到父 Runner 的 EventEmitter，前端可实时观察子代理工作：
+
+```typescript
+runner.on('subagent:start', (e) => console.log(`[${e.subtaskId}] 委托给 ${e.name}: ${e.task}`));
+runner.on('subagent:token', (e) => process.stdout.write(e.token)); // 子代理实时文本
+runner.on('subagent:thinking', (e) => process.stderr.write(e.content));
+runner.on('subagent:tool:start', (e) => console.log('子代理工具:', (e.action as { name?: string })?.name));
+runner.on('subagent:tool:end', (e) => console.log('子代理工具结果:', e.result));
+runner.on('subagent:end', (e) => console.log(`[${e.subtaskId}] 完成:`, e.result.status));
+```
+
+当多个子代理并发运行时，每个事件都携带 `subtaskId` 和 `subagentName` 用于路由。
 
 ## 状态管理
 

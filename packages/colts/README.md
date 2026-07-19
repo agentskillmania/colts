@@ -4,16 +4,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
-A stateless ReAct agent framework with streaming-first APIs, three-level execution control, and pluggable context engineering. One runner instance safely serves multiple concurrent agents.
+A stateless ReAct agent framework with three-level execution control, event-driven streaming, and pluggable context engineering. One runner instance safely serves multiple concurrent agents.
 
 ## Highlights
 
 - **Stateless Runner** — One `AgentRunner` instance, multiple `AgentState` instances. Thread-safe by design.
-- **Three-Level Execution** — `run()` (auto-loop), `step()` (one ReAct cycle), `advance()` (one phase). All with streaming variants.
-- **Streaming-First** — Every execution API has an `AsyncIterable` counterpart: `runStream`, `stepStream`, `advanceStream`, `chatStream`.
+- **Three-Level Execution** — `run()` (auto-loop), `step()` (one ReAct cycle), `advance()` (one phase).
+- **Event-Driven Observability** — `AgentRunner` extends `EventEmitter`. All execution events (tokens, thinking, tool calls, phase changes, sub-agent activity) are emitted via `runner.on(...)`. Tokens are streamed internally through `llmProvider.stream()` and emitted to the EventEmitter.
 - **Thinking / Reasoning** — Native thinking (Claude-style) and prompt-level thinking (`<think/>` tags). Configurable per request.
 - **Skill System** — Runtime skill loading from `SKILL.md` files. Supports nested skill calls with `load_skill` / `return_skill`.
-- **Subagent Delegation** — Delegate tasks to specialized sub-agents with independent configs, tools, and state.
+- **Subagent Delegation** — Delegate tasks to specialized sub-agents with independent configs, tools, state, and optional timeout. Sub-agent events bubble up to the parent runner's EventEmitter for real-time visibility.
 - **Context Compression** — Two strategies (`truncate`, `summarize`). Messages are never deleted.
 - **Pluggable Message Assembly** — `IMessageAssembler` interface for custom RAG, memory, or prompt strategies without forking the runner.
 - **Tool System** — Zod-based parameter validation with automatic JSON Schema generation.
@@ -41,6 +41,10 @@ let state = createAgentState({
   instructions: 'You are a helpful assistant.',
   tools: [],
 });
+
+// Stream tokens to the console via the EventEmitter
+runner.on('token', (e) => process.stdout.write(e.token));
+runner.on('complete', (e) => console.log('\nDone:', e.result.type));
 
 // Auto-loop until final answer or maxSteps reached
 const { result } = await runner.run(state);
@@ -72,28 +76,14 @@ const runner = new AgentRunner({
 
 ## Core APIs
 
-### Chat — single turn, no tool execution
-
-```typescript
-const { state: newState, response } = await runner.chat(state, 'Hello!');
-
-// Streaming
-for await (const chunk of runner.chatStream(state, 'Hello!')) {
-  if (chunk.type === 'text') process.stdout.write(chunk.delta);
-}
-```
-
 ### Run — auto-loop until final answer or maxSteps
 
 ```typescript
-const { state: finalState, result } = await runner.run(state, { maxSteps: 15 });
-// result.type: 'success' | 'max_steps' | 'error'
+runner.on('token', (e) => process.stdout.write(e.token));
+runner.on('complete', (e) => console.log('Done:', e.result));
 
-// Streaming
-for await (const event of runner.runStream(state)) {
-  if (event.type === 'token') process.stdout.write(event.token);
-  if (event.type === 'complete') console.log('Done:', event.result);
-}
+const { state: finalState, result } = await runner.run(state, { maxSteps: 15 });
+// result.type: 'success' | 'max_steps' | 'error' | 'abort'
 ```
 
 ### Step — one ReAct cycle
@@ -102,9 +92,7 @@ for await (const event of runner.runStream(state)) {
 const { state: newState, result } = await runner.step(state);
 // result.type: 'done' | 'continue' | 'error'
 
-for await (const event of runner.stepStream(state)) {
-  if (event.type === 'phase-change') console.log('Phase:', event.to.type);
-}
+runner.on('phase-change', (e) => console.log('Phase:', e.to.type));
 ```
 
 ### Advance — fine-grained phase-by-phase control
@@ -118,6 +106,25 @@ while (!isTerminalPhase(execState.phase)) {
   state = result.state;
 }
 ```
+
+## Event System
+
+`AgentRunner` extends `EventEmitter` (from `eventemitter3`). All execution events flow through a single channel — there are no separate streaming APIs. Subscribe with `runner.on(event, handler)`:
+
+```typescript
+runner.on('run:start', (e) => console.log('Run started'));
+runner.on('step:start', (e) => console.log(`Step ${e.step}`));
+runner.on('token', (e) => process.stdout.write(e.token));
+runner.on('thinking', (e) => process.stderr.write(e.content));
+runner.on('tool:start', (e) => console.log('Tool:', e.action.name));
+runner.on('tool:end', (e) => console.log('Tool result:', e.result));
+runner.on('phase-change', (e) => console.log(`${e.from.type} → ${e.to.type}`));
+runner.on('compressing', () => console.log('Compressing context...'));
+runner.on('complete', (e) => console.log('Run result:', e.result.type));
+runner.on('error', (e) => console.error('Error:', e.error));
+```
+
+Key event groups: lifecycle (`run:start`, `run:end`, `step:start`, `step:end`, `complete`), token streaming (`token`, `thinking`), tools (`tool:start`, `tool:end`, `tools:start`, `tools:end`), context compression (`compressing`, `compressed`), LLM calls (`llm:request`, `llm:response`), and skills (`skill:start`, `skill:end`).
 
 ## Tool System
 
@@ -210,6 +217,8 @@ Strategies: `truncate`, `summarize`. The `summarize` strategy calls the LLM to g
 
 ## Subagent System
 
+Delegate tasks to specialized sub-agents. Each sub-agent has independent instructions, tools, state, an optional step limit, and an optional timeout:
+
 ```typescript
 const runner = new AgentRunner({
   model: 'gpt-4o',
@@ -219,11 +228,27 @@ const runner = new AgentRunner({
     description: 'Research specialist',
     config: { name: 'researcher', instructions: 'Research topics thoroughly.', tools: [] },
     maxSteps: 5,
+    timeout: 60_000, // ms — sub-agent is aborted if exceeded
   }],
 });
 ```
 
-The `delegate` tool is auto-registered, allowing the parent agent to invoke sub-agents.
+The `delegate` tool is auto-registered, allowing the parent agent to invoke sub-agents. The tool returns a `DelegateResult` discriminated union (`status: 'success' | 'error' | 'max_steps' | 'abort' | 'timeout'`) so the parent can branch on outcome.
+
+### Sub-agent event bubbling
+
+Sub-agent events bubble up to the parent runner's EventEmitter with a `subagent:` prefix, so frontends can observe sub-agent work in real time:
+
+```typescript
+runner.on('subagent:start', (e) => console.log(`[${e.subtaskId}] delegated to ${e.name}: ${e.task}`));
+runner.on('subagent:token', (e) => process.stdout.write(e.token)); // live sub-agent text
+runner.on('subagent:thinking', (e) => process.stderr.write(e.content));
+runner.on('subagent:tool:start', (e) => console.log('Sub-agent tool:', (e.action as { name?: string })?.name));
+runner.on('subagent:tool:end', (e) => console.log('Sub-agent tool result:', e.result));
+runner.on('subagent:end', (e) => console.log(`[${e.subtaskId}] finished:`, e.result.status));
+```
+
+Each event carries `subtaskId` and `subagentName` for routing when multiple sub-agents run.
 
 ## State Management
 
