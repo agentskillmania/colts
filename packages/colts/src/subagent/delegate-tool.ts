@@ -29,6 +29,11 @@ export interface DelegateToolDeps {
   parentToolRegistry: IToolRegistry;
   /** Sub-agent factory (defaults to DefaultSubAgentFactory) */
   subAgentFactory?: ISubAgentFactory;
+  /**
+   * Event emitter callback — forwards sub-agent events to the parent runner's EventEmitter.
+   * Called with (type, data) for each event the sub-agent produces.
+   */
+  emit: (type: string, data: Record<string, unknown>) => void;
 }
 
 /**
@@ -138,6 +143,20 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
         subRunner.registerTool(tool);
       }
 
+      // Wire sub-agent event forwarding: each event is re-emitted to the parent
+      // runner's EventEmitter with a 'subagent:' prefix and subtaskId for routing.
+      const subtaskId = `${agent}-${Date.now()}`;
+      const forwardEvents = ['token', 'thinking', 'tool:start', 'tool:end', 'tools:start', 'tools:end'];
+      for (const evtType of forwardEvents) {
+        subRunner.on(evtType as 'token', (...args: unknown[]) => {
+          const data = (args[0] ?? {}) as Record<string, unknown>;
+          deps.emit(`subagent:${evtType}`, { ...data, subtaskId, subagentName: agent });
+        });
+      }
+
+      // Emit subagent:start before running
+      deps.emit('subagent:start', { name: agent, task, subtaskId, timestamp: Date.now() });
+
       // Check abort signal before running
       if (options?.signal?.aborted) {
         return {
@@ -151,33 +170,22 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
         signal: options?.signal,
       });
 
+      // Build the structured result
+      let delegateResult: DelegateResult;
       if (result.type === 'abort') {
-        return {
-          status: 'abort',
-          totalSteps: result.totalSteps,
-        } satisfies DelegateResult;
+        delegateResult = { status: 'abort', totalSteps: result.totalSteps };
+      } else if (result.type === 'success') {
+        delegateResult = { status: 'success', answer: result.answer, totalSteps: result.totalSteps };
+      } else if (result.type === 'error') {
+        delegateResult = { status: 'error', error: result.error.message, totalSteps: result.totalSteps };
+      } else {
+        delegateResult = { status: 'max_steps', lastAnswer: result.type === 'stopped' ? (result.data ?? '') : '', totalSteps: result.totalSteps };
       }
 
-      if (result.type === 'success') {
-        return {
-          status: 'success',
-          answer: result.answer,
-          totalSteps: result.totalSteps,
-        } satisfies DelegateResult;
-      }
-      if (result.type === 'error') {
-        return {
-          status: 'error',
-          error: result.error.message,
-          totalSteps: result.totalSteps,
-        } satisfies DelegateResult;
-      }
-      // max_steps or stopped
-      return {
-        status: 'max_steps',
-        lastAnswer: result.type === 'stopped' ? (result.data ?? '') : '',
-        totalSteps: result.totalSteps,
-      } satisfies DelegateResult;
+      // Emit subagent:end with the result
+      deps.emit('subagent:end', { name: agent, result: delegateResult, subtaskId, timestamp: Date.now() });
+
+      return delegateResult;
     },
   };
 }

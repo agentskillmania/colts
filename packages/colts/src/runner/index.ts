@@ -118,11 +118,19 @@ export interface RunnerEventMap {
   /** Skill execution completed */
   'skill:end': { name: string; result: string; state?: AgentState; timestamp: number };
 
-  // ── SubAgent (aligned with StreamEvent) ──
+  // ── SubAgent ──
   /** Sub-agent started */
-  'subagent:start': { name: string; task: string; timestamp: number };
+  'subagent:start': { name: string; task: string; subtaskId?: string; timestamp: number };
   /** Sub-agent completed */
-  'subagent:end': { name: string; result: DelegateResult; timestamp: number };
+  'subagent:end': { name: string; result: DelegateResult; subtaskId?: string; timestamp: number };
+  /** Sub-agent token (real-time text streaming) */
+  'subagent:token': { token: string; subtaskId: string; subagentName: string; timestamp?: number };
+  /** Sub-agent thinking content */
+  'subagent:thinking': { content: string; subtaskId: string; subagentName: string; timestamp?: number };
+  /** Sub-agent tool call started */
+  'subagent:tool:start': { action: unknown; subtaskId: string; subagentName: string; timestamp?: number };
+  /** Sub-agent tool call completed */
+  'subagent:tool:end': { result: unknown; subtaskId: string; subagentName: string; timestamp?: number };
 
   // ── LLM call (aligned with StreamEvent) ──
   /** Before LLM request is sent */
@@ -306,6 +314,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         model: this.options.model,
         parentToolRegistry: this.toolRegistry,
         subAgentFactory: this.subAgentFactory,
+        emit: (type: string, data: Record<string, unknown>) => {
+          this.emit(type as keyof RunnerEventMap, data as never);
+        },
       });
       this.toolRegistry.register(delegateTool);
     }

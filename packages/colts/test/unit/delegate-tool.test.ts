@@ -139,6 +139,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -150,6 +151,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -163,6 +165,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -174,6 +177,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -200,6 +204,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([mockResponse]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -225,6 +230,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([mockResponse]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -252,6 +258,7 @@ describe('createDelegateTool', () => {
       const client = createErrorLLMClient('API rate limit exceeded');
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -278,6 +285,7 @@ describe('createDelegateTool', () => {
       // researcher maxSteps is 5
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -297,6 +305,7 @@ describe('createDelegateTool', () => {
       // writer has no maxSteps config, uses defaultMaxSteps
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
         defaultMaxSteps: 3,
@@ -328,6 +337,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -366,6 +376,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -396,6 +407,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -415,6 +427,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs: emptyConfigs,
         llmProvider: client,
       });
@@ -484,6 +497,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs: configs,
         llmProvider: client,
       });
@@ -552,6 +566,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: parentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: configs,
         llmProvider: client,
       });
@@ -595,6 +610,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient(responses);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -618,6 +634,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -639,6 +656,7 @@ describe('createDelegateTool', () => {
       const client = createMockLLMClient([]);
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -672,6 +690,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
         defaultMaxSteps: 100,
@@ -710,6 +729,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: new ToolRegistry(),
+        emit: vi.fn(),
         subAgentConfigs,
         llmProvider: client,
       });
@@ -798,6 +818,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: parentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: configs,
         llmProvider: client,
       });
@@ -846,6 +867,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: parentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: configs,
         llmProvider: client,
       });
@@ -914,6 +936,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: parentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: configs,
         llmProvider: client,
       });
@@ -976,6 +999,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: parentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: configs,
         llmProvider: client,
       });
@@ -1025,6 +1049,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: parentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: configs,
         llmProvider: client,
       });
@@ -1073,6 +1098,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: parentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: configs,
         llmProvider: client,
       });
@@ -1115,6 +1141,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: localParentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: localConfigs,
         llmProvider: client,
       });
@@ -1162,6 +1189,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: localParentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: localConfigs,
         llmProvider: client,
       });
@@ -1202,6 +1230,7 @@ describe('createDelegateTool', () => {
 
       const tool = createDelegateTool({
         parentToolRegistry: localParentRegistry,
+        emit: vi.fn(),
         subAgentConfigs: localConfigs,
         llmProvider: client,
       });
