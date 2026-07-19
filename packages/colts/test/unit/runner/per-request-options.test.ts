@@ -51,7 +51,9 @@ function createCapturingClient(responses: LLMResponse[]) {
 
   return {
     client: client as unknown as import('@agentskillmania/llm-client').LLMClient,
-    getLastCallArg: () => callArgs[callArgs.length - 1],
+    // run()/step()/advance() now go through `stream()`, so the captured "call"
+    // argument is whatever was last passed to `stream`.
+    getLastCallArg: () => streamArgs[streamArgs.length - 1],
     getLastStreamArg: () => streamArgs[streamArgs.length - 1],
   };
 }

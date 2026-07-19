@@ -123,10 +123,11 @@ export function createMockLLMClient(
         throw new Error('No more mock responses for stream');
       }
 
-      // NOTE: Most variants (A/B/C) increment callIndex AFTER yielding all
-      // tokens. Variant D (concurrency) increments BEFORE. We replicate the
-      // "after" behavior here because it is the majority pattern.
+      // Lock in this generator's response immediately and increment the index
+      // BEFORE yielding anything. Yielding introduces await points, so deferring
+      // the increment would let concurrent generators race on the same index.
       const response = responses[callIndex];
+      callIndex++;
 
       if (enableThinking && response.thinking) {
         const thinkingTokens = response.thinking.split(' ');
@@ -187,8 +188,6 @@ export function createMockLLMClient(
         type: 'done' as const,
         roundTotalTokens: response.tokens,
       };
-
-      callIndex++;
     }),
 
     getModelMeta: vi.fn().mockReturnValue({
@@ -199,20 +198,40 @@ export function createMockLLMClient(
 }
 
 /**
- * Create a mock LLM client whose `stream()` immediately throws.
- * Used by delegate-tool tests that only exercise the blocking path.
+ * Create a mock LLM client that serves the given responses via both `call()`
+ * and `stream()`. Originally this helper only implemented `call()` and threw
+ * from `stream()`; since CallingLLMHandler now goes through `stream()`, both
+ * paths share one response index and `stream()` yields text + tool_calls +
+ * done. Used by delegate-tool tests.
  */
 export function createNoStreamMockLLMClient(responses: LLMResponse[]): LLMClient {
   let callIndex = 0;
+  const take = () => {
+    if (callIndex >= responses.length) {
+      throw new Error(`No more mock responses (index ${callIndex}, total ${responses.length})`);
+    }
+    return responses[callIndex++];
+  };
   return {
-    call: vi.fn().mockImplementation(() => {
-      if (callIndex >= responses.length) {
-        throw new Error(`No more mock responses (index ${callIndex}, total ${responses.length})`);
-      }
-      return Promise.resolve(responses[callIndex++]);
-    }),
+    call: vi.fn().mockImplementation(() => Promise.resolve(take())),
     stream: vi.fn().mockImplementation(async function* () {
-      throw new Error('Stream not used in this test');
+      const response = take();
+      if (response.thinking) {
+        yield { type: 'thinking' as const, delta: response.thinking };
+      }
+      if (response.content) {
+        yield {
+          type: 'text' as const,
+          delta: response.content,
+          accumulatedContent: response.content,
+        };
+      }
+      if (response.toolCalls?.length) {
+        for (const toolCall of response.toolCalls) {
+          yield { type: 'tool_call' as const, toolCall };
+        }
+      }
+      yield { type: 'done' as const, roundTotalTokens: response.tokens };
     }),
     getModelMeta: vi.fn().mockReturnValue({
       contextWindow: 128000,
@@ -222,19 +241,40 @@ export function createNoStreamMockLLMClient(responses: LLMResponse[]): LLMClient
 }
 
 /**
- * Create a mock LLM client with no `stream` implementation at all
- * (method is just `vi.fn()`). Used by runner/index.test.ts.
+ * Create a mock LLM client that streams the provided responses via `stream()`.
+ * The `call()` method still throws when invoked, signaling it is not the active
+ * path. Used by runner/index.test.ts (subagent delegate) where `execute()` now
+ * goes through `stream()`.
  */
 export function createCallOnlyMockLLMClient(responses: LLMResponse[]): LLMClient {
   let callIndex = 0;
   return {
     call: vi.fn().mockImplementation(() => {
+      throw new Error('call() not used; runner now streams');
+    }),
+    stream: vi.fn().mockImplementation(async function* () {
       if (callIndex >= responses.length) {
         throw new Error(`No more mock responses (index ${callIndex})`);
       }
-      return Promise.resolve(responses[callIndex++]);
+      const response = responses[callIndex];
+      callIndex++;
+      if (response.thinking) {
+        yield { type: 'thinking' as const, delta: response.thinking };
+      }
+      if (response.content) {
+        yield {
+          type: 'text' as const,
+          delta: response.content,
+          accumulatedContent: response.content,
+        };
+      }
+      if (response.toolCalls?.length) {
+        for (const toolCall of response.toolCalls) {
+          yield { type: 'tool_call' as const, toolCall };
+        }
+      }
+      yield { type: 'done' as const, roundTotalTokens: response.tokens };
     }),
-    stream: vi.fn(),
     getModelMeta: vi.fn().mockReturnValue({
       contextWindow: 128000,
       maxTokens: 4096,

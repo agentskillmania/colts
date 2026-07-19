@@ -13,13 +13,17 @@ import type { AgentConfig } from '../../../src/types.js';
 import { createExecutionState } from '../../../src/execution/index.js';
 
 function createMockClient() {
+  const mockResponse: LLMResponse = {
+    content: 'Mock response',
+    tokens: { input: 5, output: 5 },
+    stopReason: 'stop',
+  };
   return {
-    call: vi.fn().mockResolvedValue({
-      content: 'Mock response',
-      tokens: { input: 5, output: 5 },
-      stopReason: 'stop',
-    } satisfies LLMResponse),
-    stream: vi.fn(),
+    call: vi.fn().mockResolvedValue(mockResponse),
+    stream: vi.fn().mockImplementation(async function* () {
+      yield { type: 'text', delta: mockResponse.content, accumulatedContent: mockResponse.content };
+      yield { type: 'done', roundTotalTokens: mockResponse.tokens };
+    }),
   } as unknown as LLMClient;
 }
 
@@ -36,7 +40,7 @@ describe('AbortSignal (Step 16)', () => {
   describe('advance()', () => {
     it('should catch AbortError when signal is pre-aborted at calling-llm', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockImplementation(() => {
+      vi.mocked(client.stream).mockImplementation(() => {
         throw new DOMException('The operation was aborted', 'AbortError');
       });
 
@@ -84,7 +88,7 @@ describe('AbortSignal (Step 16)', () => {
       // Now at calling-llm, advance with signal
       await runner.advance(state, execState, undefined, { signal });
 
-      expect(client.call).toHaveBeenCalledWith(expect.objectContaining({ signal }));
+      expect(client.stream).toHaveBeenCalledWith(expect.objectContaining({ signal }));
     });
 
     it('should pass signal to tool execution', async () => {

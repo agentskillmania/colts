@@ -46,7 +46,11 @@ function createMockCtx(overrides?: Partial<PhaseHandlerContext>): PhaseHandlerCo
         tokens: { input: 10, output: 5 },
         stopReason: 'stop',
       }),
-      stream: vi.fn(),
+      stream: vi.fn().mockImplementation(async function* () {
+        yield { type: 'text', delta: 'mock response', accumulatedContent: 'mock response' };
+        yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
+      }),
+      getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
     } as never,
     toolRegistry: createMockToolRegistry(),
     messageAssembler: {
@@ -65,6 +69,7 @@ function createMockCtx(overrides?: Partial<PhaseHandlerContext>): PhaseHandlerCo
       onParseError: (error: Error) => ({ decision: 'fail' as const, error }),
     },
     options: { model: 'test-model' },
+    emit: vi.fn(),
     ...overrides,
   };
 }
@@ -190,19 +195,16 @@ describe('CallingLLMHandler', () => {
     execState.preparedMessages = [{ role: 'user', content: 'hi' }] as never;
     const ctx = createMockCtx({
       llmProvider: {
-        call: vi.fn().mockResolvedValue({
-          content: 'Using tool',
-          toolCalls: [
-            {
-              id: 'call-1',
-              name: 'calculator',
-              arguments: { expression: '2+2' },
-            },
-          ],
-          tokens: { input: 10, output: 5 },
-          stopReason: 'tool_calls',
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          yield { type: 'text', delta: 'Using tool', accumulatedContent: 'Using tool' };
+          yield {
+            type: 'tool_call',
+            toolCall: { id: 'call-1', name: 'calculator', arguments: { expression: '2+2' } },
+          };
+          yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
         }),
-        stream: vi.fn(),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
       } as never,
     });
 
@@ -224,7 +226,7 @@ describe('CallingLLMHandler', () => {
 
     await handler.execute(ctx, state, execState);
 
-    expect(ctx.llmProvider.call).toHaveBeenCalledTimes(1);
+    expect(ctx.llmProvider.stream).toHaveBeenCalledTimes(1);
   });
 
   it('should build messages from assembler if preparedMessages missing', async () => {
@@ -239,6 +241,63 @@ describe('CallingLLMHandler', () => {
     await handler.execute(ctx, state, execState);
 
     expect(build).toHaveBeenCalledTimes(1);
+  });
+
+  it('should emit token events via ctx.emit during streaming', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.preparedMessages = [{ role: 'user', content: 'hi' }] as never;
+    const emittedEvents: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const ctx = createMockCtx({
+      llmProvider: {
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          yield { type: 'text', delta: 'Hello', accumulatedContent: 'Hello' };
+          yield { type: 'text', delta: ' World', accumulatedContent: 'Hello World' };
+          yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
+        }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
+      } as never,
+      emit: (type: string, data: Record<string, unknown>) => emittedEvents.push({ type, data }),
+    });
+
+    await handler.execute(ctx, state, execState);
+
+    const tokenEvents = emittedEvents.filter((e) => e.type === 'token');
+    expect(tokenEvents).toHaveLength(2);
+    expect(tokenEvents[0].data.token).toBe('Hello');
+    expect(tokenEvents[1].data.token).toBe(' World');
+
+    // Should also emit llm:request and llm:response
+    expect(emittedEvents.some((e) => e.type === 'llm:request')).toBe(true);
+    expect(emittedEvents.some((e) => e.type === 'llm:response')).toBe(true);
+  });
+
+  it('should emit thinking events when thinking content streams', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.preparedMessages = [{ role: 'user', content: 'hi' }] as never;
+    const emittedEvents: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const ctx = createMockCtx({
+      llmProvider: {
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          yield { type: 'thinking', delta: 'Let me think' };
+          yield { type: 'text', delta: 'Answer', accumulatedContent: 'Answer' };
+          yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
+        }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
+      } as never,
+      emit: (type: string, data: Record<string, unknown>) => emittedEvents.push({ type, data }),
+    });
+
+    const result = await handler.execute(ctx, state, execState);
+
+    const thinkingEvents = emittedEvents.filter((e) => e.type === 'thinking');
+    expect(thinkingEvents).toHaveLength(1);
+    expect(thinkingEvents[0].data.content).toBe('Let me think');
+    // Thinking should be accumulated in execState
+    expect(result.execState.llmThinking).toBe('Let me think');
   });
 
   it('should clear stale action when LLM response has no tool calls', async () => {
@@ -930,7 +989,19 @@ describe('Execution Policy integration', () => {
             tokens: { input: 10, output: 5 },
             stopReason: 'tool_calls',
           }),
-          stream: vi.fn(),
+          stream: vi.fn().mockImplementation(async function* () {
+            yield {
+              type: 'text',
+              delta: 'response with bad tool call',
+              accumulatedContent: 'response with bad tool call',
+            };
+            yield {
+              type: 'tool_call',
+              toolCall: { id: 'tc-1', name: 'someTool', arguments: {} },
+            };
+            yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
+          }),
+          getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
         } as never,
         executionPolicy: {
           shouldStop: () => ({ decision: 'continue' }),
@@ -980,7 +1051,19 @@ describe('Execution Policy integration', () => {
             tokens: { input: 10, output: 5 },
             stopReason: 'tool_calls',
           }),
-          stream: vi.fn(),
+          stream: vi.fn().mockImplementation(async function* () {
+            yield {
+              type: 'text',
+              delta: 'original response',
+              accumulatedContent: 'original response',
+            };
+            yield {
+              type: 'tool_call',
+              toolCall: { id: 'tc-1', name: 'someTool', arguments: {} },
+            };
+            yield { type: 'done', roundTotalTokens: { input: 10, output: 5 } };
+          }),
+          getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
         } as never,
         executionPolicy: {
           shouldStop: () => ({ decision: 'continue' }),

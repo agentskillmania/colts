@@ -14,7 +14,8 @@ import type { IMessageAssembler } from '../../../src/message-assembler/types.js'
 import { createCallOnlyMockLLMClient } from '../../helpers/mock-llm.js';
 
 describe('AgentRunner', () => {
-  // Mock LLMClient
+  // Mock LLMClient. `stream` is the active path used by CallingLLMHandler.
+  // Tests seed the stream response with `mockStreamResponse(client, response)`.
   const createMockClient = () => {
     return {
       call: vi.fn(),
@@ -22,6 +23,28 @@ describe('AgentRunner', () => {
       getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
     } as unknown as LLMClient;
   };
+
+  /** Configure a mock client's `stream()` to yield a single response. */
+  function mockStreamResponse(client: LLMClient, response: LLMResponse) {
+    vi.mocked(client.stream).mockImplementation(async function* () {
+      if (response.thinking) {
+        yield { type: 'thinking', delta: response.thinking };
+      }
+      if (response.content) {
+        yield {
+          type: 'text',
+          delta: response.content,
+          accumulatedContent: response.content,
+        };
+      }
+      if (response.toolCalls?.length) {
+        for (const toolCall of response.toolCalls) {
+          yield { type: 'tool_call', toolCall };
+        }
+      }
+      yield { type: 'done', roundTotalTokens: response.tokens };
+    });
+  }
 
   const defaultConfig: AgentConfig = {
     name: 'test-agent',
@@ -94,7 +117,7 @@ describe('AgentRunner', () => {
         tokens: { input: 1, output: 1 },
         stopReason: 'stop',
       };
-      vi.mocked(client.call).mockResolvedValue(mockResponse);
+      mockStreamResponse(client,mockResponse);
 
       const customAssembler: IMessageAssembler = {
         build: vi.fn().mockReturnValue([
@@ -116,7 +139,7 @@ describe('AgentRunner', () => {
         expect.any(Object),
         expect.objectContaining({ systemPrompt: undefined })
       );
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       expect(callArg.messages[0].content).toBe('custom-system');
     });
   });
@@ -124,7 +147,7 @@ describe('AgentRunner', () => {
   describe('message building', () => {
     it('should include all assistant messages in LLM context', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -151,7 +174,7 @@ describe('AgentRunner', () => {
 
       await runner.run(addUserMessage(state, 'Next message'));
 
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const userMsgs = callArg.messages.filter((m: { role: string }) => m.role === 'user');
       const assistantMsgs = callArg.messages.filter(
         (m: { role: string }) => m.role === 'assistant'
@@ -171,7 +194,7 @@ describe('AgentRunner', () => {
 
     it('should include tool results in context', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Response',
         tokens: { input: 10, output: 5 },
         stopReason: 'stop',
@@ -198,7 +221,7 @@ describe('AgentRunner', () => {
       await runner.run(addUserMessage(state, 'What is the result?'));
 
       // Then: Tool result is included as toolResult message
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const toolMessages = callArg.messages.filter(
         (m: { role: string }) => m.role === 'toolResult'
       );
@@ -259,7 +282,7 @@ describe('AgentRunner', () => {
 
     it('should auto-compress during step() when threshold exceeded', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Final answer',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -292,7 +315,7 @@ describe('AgentRunner', () => {
 
     it('should not compress when shouldCompress returns false', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Final answer',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -319,7 +342,7 @@ describe('AgentRunner', () => {
 
     it('should build messages with compression summary', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -353,7 +376,7 @@ describe('AgentRunner', () => {
 
       await runner.run(addUserMessage(state, 'Follow up'));
 
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const allContent = JSON.stringify(callArg.messages);
 
       // Should contain summary
@@ -456,7 +479,7 @@ describe('AgentRunner', () => {
 
     it('should auto-register load_skill tool when skillProvider exists', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Done',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -493,7 +516,7 @@ describe('AgentRunner', () => {
 
     it('should include skill list in system prompt when skillProvider has skills', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -517,7 +540,7 @@ describe('AgentRunner', () => {
       const state = createAgentState(defaultConfig);
       await runner.run(addUserMessage(state, 'Hello'));
 
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
 
       // System prompt should contain skill list
@@ -533,7 +556,7 @@ describe('AgentRunner', () => {
 
     it('should not include skill section when skillProvider has no skills', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -551,7 +574,7 @@ describe('AgentRunner', () => {
       const state = createAgentState(defaultConfig);
       await runner.run(addUserMessage(state, 'Hello'));
 
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
 
       // Should not contain skill-related content when no skills exist
@@ -649,7 +672,7 @@ describe('AgentRunner', () => {
 
     it('should inject sub-agent list into system prompt', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -664,7 +687,7 @@ describe('AgentRunner', () => {
       const state = createAgentState(defaultConfig);
       await runner.run(addUserMessage(state, 'Hello'));
 
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
 
       // System prompt should contain sub-agent list
@@ -676,7 +699,7 @@ describe('AgentRunner', () => {
 
     it('should not include sub-agent related content in system prompt when no sub-agents are configured', async () => {
       const client = createMockClient();
-      vi.mocked(client.call).mockResolvedValue({
+      mockStreamResponse(client,{
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -690,7 +713,7 @@ describe('AgentRunner', () => {
       const state = createAgentState(defaultConfig);
       await runner.run(addUserMessage(state, 'Hello'));
 
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
 
       expect(firstUserMsg?.content).not.toContain('Available sub-agents:');

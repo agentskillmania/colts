@@ -37,34 +37,97 @@ export class CallingLLMHandler implements IPhaseHandler {
     const { tools, messages, estimatedContextSize } = this.prepare(ctx, state, execState, registry);
 
     const resolvedModel = options?.model ?? ctx.options.model;
-    const response = await ctx.llmProvider.call({
-      model: resolvedModel,
-      messages,
-      tools,
-      priority: 0,
-      requestTimeout: ctx.options.requestTimeout,
-      thinkingEnabled: options?.thinkingEnabled ?? ctx.options.thinkingEnabled,
-      temperature: options?.temperature ?? ctx.options.temperature,
-      signal: options?.signal,
+    const signal = options?.signal;
+
+    // Emit llm:request event before LLM call
+    ctx.emit('llm:request', {
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      })),
+      tools: tools?.map((t) => t.name) ?? [],
+      skill: state.context.skillState
+        ? { current: state.context.skillState.current }
+        : null,
+      timestamp: Date.now(),
     });
 
-    const responseText = response.content ?? '';
+    // Stream LLM response, accumulating content + emitting token events
+    let accumulatedContent = '';
+    let accumulatedThinking = '';
+    let responseToolCalls:
+      | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+      | undefined;
+    let roundTokens: TokenStats | undefined;
+
+    try {
+      for await (const event of ctx.llmProvider.stream({
+        model: resolvedModel,
+        messages,
+        tools,
+        priority: 0,
+        requestTimeout: ctx.options.requestTimeout,
+        thinkingEnabled: options?.thinkingEnabled ?? ctx.options.thinkingEnabled,
+        temperature: options?.temperature ?? ctx.options.temperature,
+        signal,
+      })) {
+        if (signal?.aborted) break;
+
+        if (event.type === 'text') {
+          accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
+          ctx.emit('token', { token: event.delta ?? '', timestamp: Date.now() });
+        } else if (event.type === 'thinking') {
+          accumulatedThinking += event.delta ?? '';
+          ctx.emit('thinking', { content: event.delta ?? '', timestamp: Date.now() });
+        } else if (event.type === 'tool_call' && event.toolCall) {
+          responseToolCalls = responseToolCalls ?? [];
+          responseToolCalls.push({
+            id: event.toolCall.id,
+            name: event.toolCall.name,
+            arguments: event.toolCall.arguments,
+          });
+        } else if (event.type === 'done') {
+          if (event.roundTotalTokens) {
+            roundTokens = event.roundTotalTokens;
+          }
+        }
+      }
+    } catch (error) {
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      ctx.emit('error', { error: errorObj, context: { step: 0 }, timestamp: Date.now() });
+      const nextExec = updateExecState(execState, (draft) => {
+        draft.phase = { type: 'error', error: errorObj };
+      });
+      return { state, execState: nextExec, phase: nextExec.phase, done: true };
+    }
+
+    // Guard: if aborted, return current execState unchanged
+    if (signal?.aborted) {
+      return { state, execState, phase: execState.phase, done: false };
+    }
+
+    // Emit llm:response event after accumulation
+    ctx.emit('llm:response', {
+      text: accumulatedContent,
+      toolCalls: responseToolCalls ?? null,
+      timestamp: Date.now(),
+    });
 
     const { parsedAction, parsedAllActions, fallbackText } = await this.parseToolCalls(
       ctx,
-      responseText,
-      response.toolCalls ?? undefined,
+      accumulatedContent,
+      responseToolCalls,
       state
     );
 
     const nextExec = this.buildNextExec(
       execState,
       fallbackText,
-      response.thinking ?? '',
+      accumulatedThinking,
       parsedAction,
       parsedAllActions,
       estimatedContextSize,
-      response.tokens
+      roundTokens
     );
 
     return {
@@ -72,7 +135,7 @@ export class CallingLLMHandler implements IPhaseHandler {
       execState: nextExec,
       phase: nextExec.phase,
       done: false,
-      tokens: response.tokens,
+      tokens: roundTokens,
       estimatedContextSize,
     };
   }

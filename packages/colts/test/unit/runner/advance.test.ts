@@ -194,10 +194,13 @@ describe('advance()', () => {
     const state = createAgentState(defaultConfig);
     const execState = createExecutionState();
 
-    // Use a phase that triggers advanceToLLMResponse, but mock call to throw a string
+    // Use a phase that triggers advanceToLLMResponse, but mock stream to throw a string
     const throwClient = {
       call: vi.fn().mockRejectedValue('string error'),
-      stream: vi.fn(),
+      stream: vi.fn().mockImplementation(async function* () {
+        // eslint-disable-next-line no-throw-literal
+        throw 'string error';
+      }),
     } as unknown as LLMClient;
     const throwRunner = new AgentRunner({ model: 'gpt-4', llmClient: throwClient });
 

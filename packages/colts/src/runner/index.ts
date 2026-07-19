@@ -436,6 +436,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         enablePromptThinking: this.options.enablePromptThinking,
         temperature: this.options.temperature,
       },
+      emit: (type: string, data: Record<string, unknown>) => {
+        this.emit(type as keyof RunnerEventMap, data as never);
+      },
     };
   }
 

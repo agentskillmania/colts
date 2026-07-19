@@ -50,6 +50,8 @@ export interface PhaseHandlerContext {
     enablePromptThinking?: boolean;
     temperature?: number;
   };
+  /** Event emitter callback — forwards events to the runner's EventEmitter */
+  emit: (type: string, data: Record<string, unknown>) => void;
 }
 
 /**

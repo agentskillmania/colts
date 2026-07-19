@@ -100,9 +100,15 @@ describe('Step 14: Concurrency isolation', () => {
       stopReason: 'tool_calls',
     };
 
-    // Each runner uses an independent client to avoid race conditions from shared callIndex
-    const client1 = createMockLLMClient(Array(4).fill(toolCallResponse) as LLMResponse[]);
-    const client2 = createMockLLMClient(Array(4).fill(toolCallResponse) as LLMResponse[]);
+    // Each runner uses an independent client (tool calls enabled so the run loops).
+    const client1 = _createMockLLMClient(Array(4).fill(toolCallResponse) as LLMResponse[], {
+      split: 'all',
+      callDelay: 'random',
+    });
+    const client2 = _createMockLLMClient(Array(4).fill(toolCallResponse) as LLMResponse[], {
+      split: 'all',
+      callDelay: 'random',
+    });
 
     const registry = new ToolRegistry();
     registry.register({
@@ -137,7 +143,9 @@ describe('Step 14: Concurrency isolation', () => {
   it('one error does not affect the other', async () => {
     const errorClient = {
       call: vi.fn().mockRejectedValue(new Error('API exploded')),
-      stream: vi.fn(),
+      stream: vi.fn().mockImplementation(async function* () {
+        throw new Error('API exploded');
+      }),
     } as unknown as LLMClient;
 
     const successClient = createMockLLMClient([

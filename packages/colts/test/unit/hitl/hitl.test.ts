@@ -339,7 +339,10 @@ describe('HITL V2: Integration with runner', () => {
           tokens: { input: 50, output: 20 },
           toolCalls: [{ id: 'tc_1', name: 'delete_file', arguments: { path: '/tmp/x' } }],
         }),
-        stream: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          yield { type: 'tool_call', toolCall: { id: 'tc_1', name: 'delete_file', arguments: { path: '/tmp/x' } } };
+          yield { type: 'done', roundTotalTokens: { input: 50, output: 20 } };
+        }),
       };
 
       const runner = new AgentRunner({
@@ -437,14 +440,42 @@ describe('HITL V2: Integration with runner', () => {
 
     const executeFn = vi.fn().mockResolvedValue({ deleted: true });
 
-    const mockLLM = {
-      call: vi.fn().mockResolvedValue({
-        content: '',
-        stopReason: 'tool_call',
-        tokens: { input: 50, output: 20 },
+    // Stream sequence: 1st = delete_file tool call (waiting-human),
+    // 2nd = delete_file tool call again (approved → executes),
+    // 3rd = final answer.
+    const responses = [
+      {
         toolCalls: [{ id: 'tc_approve', name: 'delete_file', arguments: { path: '/tmp/x' } }],
+        tokens: { input: 50, output: 20 },
+      },
+      {
+        toolCalls: [{ id: 'tc_approve', name: 'delete_file', arguments: { path: '/tmp/x' } }],
+        tokens: { input: 50, output: 20 },
+      },
+      {
+        content: 'File deleted successfully',
+        tokens: { input: 60, output: 10 },
+      },
+    ];
+    let responseIndex = 0;
+    const mockLLM = {
+      call: vi.fn(),
+      stream: vi.fn().mockImplementation(async function* () {
+        const response = responses[responseIndex++] ?? responses[responses.length - 1];
+        if (response.toolCalls?.length) {
+          for (const toolCall of response.toolCalls) {
+            yield { type: 'tool_call', toolCall };
+          }
+        }
+        if (response.content) {
+          yield {
+            type: 'text',
+            delta: response.content,
+            accumulatedContent: response.content,
+          };
+        }
+        yield { type: 'done', roundTotalTokens: response.tokens };
       }),
-      stream: vi.fn(),
     };
 
     const runner = new AgentRunner({
@@ -470,21 +501,6 @@ describe('HITL V2: Integration with runner', () => {
     const approvedState = respond(stateAfterFirstRun, (firstResult as any).request, {
       type: 'tool-confirm',
       approved: true,
-    });
-
-    // Need another LLM response for the second run (after tool executes, LLM responds)
-    mockLLM.call.mockResolvedValueOnce({
-      content: '',
-      stopReason: 'tool_call',
-      tokens: { input: 50, output: 20 },
-      toolCalls: [{ id: 'tc_approve', name: 'delete_file', arguments: { path: '/tmp/x' } }],
-    });
-    // Second call: tool result processed, LLM gives final answer
-    mockLLM.call.mockResolvedValueOnce({
-      content: 'File deleted successfully',
-      stopReason: 'end_turn',
-      tokens: { input: 60, output: 10 },
-      toolCalls: [],
     });
 
     // Second run: tool should execute normally

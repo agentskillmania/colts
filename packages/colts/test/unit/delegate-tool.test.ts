@@ -43,7 +43,9 @@ const mockTokens = { input: 10, output: 5 };
 function createErrorLLMClient(errorMessage: string): LLMClient {
   return {
     call: vi.fn().mockRejectedValue(new Error(errorMessage)),
-    stream: vi.fn(),
+    stream: vi.fn().mockImplementation(async function* () {
+      throw new Error(errorMessage);
+    }),
   } as unknown as LLMClient;
 }
 
@@ -338,8 +340,8 @@ describe('createDelegateTool', () => {
       })) as DelegateResult;
 
       // Verify instructions contain appended content when LLM is called
-      expect(client.call).toHaveBeenCalledTimes(1);
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      expect(client.stream).toHaveBeenCalledTimes(1);
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const messages = callArg.messages;
       // instructions appear in the first user message (via buildMessages)
       const firstUserMsg = messages.find((m: { role: string }) => m.role === 'user');
@@ -374,7 +376,7 @@ describe('createDelegateTool', () => {
         task: 'Research topic Y',
       });
 
-      const callArg = vi.mocked(client.call).mock.calls[0][0];
+      const callArg = vi.mocked(client.stream).mock.calls[0][0];
       const messages = callArg.messages;
       const firstUserMsg = messages.find((m: { role: string }) => m.role === 'user');
       const content =
@@ -498,7 +500,7 @@ describe('createDelegateTool', () => {
       expect(result.answer).toBe('Done with tool-a');
       expect(result.totalSteps).toBe(2);
       // Verify tools passed to LLM contain tool-a (passed via toToolSchemas)
-      expect(client.call).toHaveBeenCalledTimes(2);
+      expect(client.stream).toHaveBeenCalledTimes(2);
     });
 
     it('different sub-agents should have different tool sets', async () => {
@@ -560,7 +562,7 @@ describe('createDelegateTool', () => {
       await tool.execute({ agent: 'searcher', task: 'Find info' });
 
       // Verify first LLM call passed search tool (pi-ai Tool format: { name, description, parameters })
-      const firstCall = vi.mocked(client.call).mock.calls[0][0];
+      const firstCall = vi.mocked(client.stream).mock.calls[0][0];
       expect(firstCall.tools).toHaveLength(1);
       expect(firstCall.tools[0].name).toBe('search');
     });
@@ -858,7 +860,7 @@ describe('createDelegateTool', () => {
       // Sub-agent can still run, but no search tool is available
       expect(result.answer).toBe('Search result');
       // Verify tools passed to LLM are empty (because parentRegistry has no search tool)
-      const firstCall = vi.mocked(client.call).mock.calls[0][0];
+      const firstCall = vi.mocked(client.stream).mock.calls[0][0];
       expect(firstCall.tools).toEqual([]);
     });
 
@@ -982,7 +984,7 @@ describe('createDelegateTool', () => {
       await tool.execute({ agent: 'restricted', task: 'Do something' });
 
       // Verify tools passed to LLM do not contain delegate
-      const firstCall = vi.mocked(client.call).mock.calls[0][0];
+      const firstCall = vi.mocked(client.stream).mock.calls[0][0];
       expect(firstCall.tools).toHaveLength(1);
       expect(firstCall.tools[0].name).toBe('search');
     });
@@ -1031,7 +1033,7 @@ describe('createDelegateTool', () => {
       await tool.execute({ agent: 'delegator', task: 'Do something' });
 
       // Verify tools passed to LLM contain delegate
-      const firstCall = vi.mocked(client.call).mock.calls[0][0];
+      const firstCall = vi.mocked(client.stream).mock.calls[0][0];
       expect(firstCall.tools).toHaveLength(1);
       expect(firstCall.tools[0].name).toBe('delegate');
     });
@@ -1079,7 +1081,7 @@ describe('createDelegateTool', () => {
       await tool.execute({ agent: 'default', task: 'Do something' });
 
       // Verify tools passed to LLM do not contain delegate
-      const firstCall = vi.mocked(client.call).mock.calls[0][0];
+      const firstCall = vi.mocked(client.stream).mock.calls[0][0];
       expect(firstCall.tools).toHaveLength(0);
     });
   });
@@ -1142,17 +1144,20 @@ describe('createDelegateTool', () => {
         ],
       ]);
 
-      // Create a mock client that stays pending until resolved externally
-      let resolveLLM: ((value: LLMResponse) => void) | undefined;
+      // Create a mock client that aborts as soon as its stream is consumed
       const client = {
-        call: vi.fn().mockImplementation(() => {
-          return new Promise<LLMResponse>((resolve) => {
-            resolveLLM = resolve;
-            // Abort as soon as the LLM call is in-flight
-            controller.abort();
-          });
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          // Abort the controller once the streaming call has started so the
+          // CallingLLMHandler sees `signal.aborted === true` on the next tick.
+          controller.abort();
+          yield {
+            type: 'text' as const,
+            delta: 'partial',
+            accumulatedContent: 'partial',
+          };
+          yield { type: 'done' as const, roundTotalTokens: mockTokens };
         }),
-        stream: vi.fn(),
       } as unknown as LLMClient;
 
       const tool = createDelegateTool({
@@ -1168,17 +1173,9 @@ describe('createDelegateTool', () => {
         { signal: controller.signal }
       );
 
-      // Wait for the mock client's call to have been invoked
-      // (it will resolve the promise and abort the controller)
-      await vi.waitFor(() => expect(client.call).toHaveBeenCalledTimes(1), {
+      // Wait for the mock client's stream to have been invoked
+      await vi.waitFor(() => expect(client.stream).toHaveBeenCalledTimes(1), {
         timeout: 2000,
-      });
-
-      // Resolve the LLM call so the sub-agent can finish its step
-      resolveLLM!({
-        content: 'Done',
-        tokens: mockTokens,
-        stopReason: 'stop',
       });
 
       const result = (await executePromise) as DelegateResult;

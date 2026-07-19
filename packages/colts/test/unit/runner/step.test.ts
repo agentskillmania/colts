@@ -46,7 +46,7 @@ describe('step()', () => {
     const { state: newState, result } = await runner.step(state);
 
     // Verify LLM is called correctly
-    expect(client.call).toHaveBeenCalledWith(
+    expect(client.stream).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4',
         messages: expect.arrayContaining([expect.objectContaining({ role: 'user' })]),
@@ -102,7 +102,7 @@ describe('step()', () => {
     const { state: newState, result } = await runner.step(state, registry);
 
     // Verify tool schema is passed to LLM
-    expect(client.call).toHaveBeenCalledWith(
+    expect(client.stream).toHaveBeenCalledWith(
       expect.objectContaining({
         tools: expect.arrayContaining([expect.objectContaining({ name: 'calculate' })]),
       })
@@ -157,7 +157,9 @@ describe('step()', () => {
   it('should handle LLM error', async () => {
     const client = {
       call: vi.fn().mockRejectedValue(new Error('LLM API error')),
-      stream: vi.fn(),
+      stream: vi.fn().mockImplementation(async function* () {
+        throw new Error('LLM API error');
+      }),
     } as unknown as LLMClient;
 
     const runner = new AgentRunner({

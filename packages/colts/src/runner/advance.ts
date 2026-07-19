@@ -45,6 +45,8 @@ export interface RunnerContext {
     enablePromptThinking?: boolean;
     temperature?: number;
   };
+  /** Event emitter callback — forwards events to the runner's EventEmitter */
+  emit: (type: string, data: Record<string, unknown>) => void;
 }
 
 /** Module-level default PhaseRouter (shared, lazy-initialized) */
