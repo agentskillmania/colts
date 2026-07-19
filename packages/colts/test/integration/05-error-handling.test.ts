@@ -9,7 +9,7 @@
  * 1. Tool error is captured as string and returned as tool result
  * 2. LLM receives the error message and can recover in the next step
  * 3. run() completes successfully even when tool errors occur
- * 4. runStream() emits tool:start/tool:end events and completes successfully
+ * 4. run() emits tool:start/tool:end events and completes successfully
  * 5. Original state remains unchanged after error recovery
  */
 
@@ -143,10 +143,10 @@ describe('User Story: Error Handling with Real LLM', () => {
     );
   });
 
-  // Scenario 3: runStream with tool error → LLM recovers
-  describe('Scenario 3: Tool Error Recovery via runStream()', () => {
+  // Scenario 3: run with tool error → LLM recovers (events via EventEmitter)
+  describe('Scenario 3: Tool Error Recovery via run()', () => {
     itif(testConfig.enabled)(
-      'should recover from tool error in streaming mode',
+      'should recover from tool error and emit lifecycle events',
       async () => {
         // Given: A runner with a failing calculator
         const registry = new ToolRegistry();
@@ -179,25 +179,21 @@ describe('User Story: Error Handling with Real LLM', () => {
 
         const state = createAgentState(config);
 
-        // When: Run with streaming
+        // When: Register EventEmitter listeners for lifecycle events
         const eventTypes: string[] = [];
-        let returnValue: { result: { type: string } } | undefined;
+        runner.on('step:start', () => eventTypes.push('step:start'));
+        runner.on('step:end', () => eventTypes.push('step:end'));
+        runner.on('complete', () => eventTypes.push('complete'));
+        runner.on('tool:start', () => eventTypes.push('tool:start'));
+        runner.on('tool:end', () => eventTypes.push('tool:end'));
 
-        const iterator = runner.runStream(state, undefined, registry);
-        while (true) {
-          const { done, value } = await iterator.next();
-          if (done) {
-            returnValue = value;
-            break;
-          }
-          eventTypes.push(value.type);
-        }
+        // And: Run to completion (events are emitted via runner.on)
+        const { result } = await runner.run(state, undefined, registry);
 
         // Then: Should complete with success
-        expect(returnValue).toBeDefined();
-        expect(returnValue!.result.type).toBe('success');
-        if (returnValue!.result.type === 'success') {
-          expect(returnValue!.result.answer).toBeTruthy();
+        expect(result.type).toBe('success');
+        if (result.type === 'success') {
+          expect(result.answer).toBeTruthy();
         }
 
         // And: Should have step lifecycle events

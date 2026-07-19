@@ -192,10 +192,10 @@ describe('User Story: Step Control with Real LLM', () => {
     );
   });
 
-  // Scenario 4: Step streaming observation
-  describe('Scenario 4: Step Streaming Observation', () => {
+  // Scenario 4: Step execution observation via EventEmitter
+  describe('Scenario 4: Step Execution Observation', () => {
     itif(testConfig.enabled)(
-      'should emit events during stepStream',
+      'should emit events during step',
       async () => {
         // Given: A runner with calculator tool
         const registry = new ToolRegistry();
@@ -216,35 +216,29 @@ describe('User Story: Step Control with Real LLM', () => {
 
         const state = createAgentState(config);
 
-        // When: Execute stepStream
-        const events: { type: string }[] = [];
-        const stream = runner.stepStream(state, registry);
-        let finalResult: { state: AgentState; result: StepResult } | undefined;
+        // When: Register EventEmitter listeners to collect events
+        const eventTypes: string[] = [];
+        runner.on('phase-change', () => eventTypes.push('phase-change'));
+        runner.on('token', () => eventTypes.push('token'));
 
-        while (true) {
-          const { done, value } = await stream.next();
-          if (done) {
-            finalResult = value;
-            break;
-          }
-          events.push({ type: value.type });
-        }
+        // And: Execute step (events are emitted via runner.on)
+        const finalResult = await runner.step(state, registry);
 
         // Then: Should have phase-change events
-        expect(events.some((e) => e.type === 'phase-change')).toBe(true);
+        expect(eventTypes.includes('phase-change')).toBe(true);
 
         // And: Should have token events
-        expect(events.some((e) => e.type === 'token')).toBe(true);
+        expect(eventTypes.includes('token')).toBe(true);
 
         // And: Step result should have token usage
         expect(finalResult).toBeDefined();
-        expect(finalResult!.result.tokens).toBeDefined();
-        expect(finalResult!.result.tokens.input).toBeGreaterThan(0);
-        expect(finalResult!.result.tokens.output).toBeGreaterThan(0);
-        expect(finalResult!.state.context.totalTokens).toBeDefined();
-        expect(finalResult!.state.context.totalTokens!.input).toBeGreaterThan(0);
-        expect(finalResult!.state.context.totalTokens!.output).toBeGreaterThan(0);
-        expect(finalResult!.state.context.estimatedContextSize).toBeGreaterThan(0);
+        expect(finalResult.result.tokens).toBeDefined();
+        expect(finalResult.result.tokens.input).toBeGreaterThan(0);
+        expect(finalResult.result.tokens.output).toBeGreaterThan(0);
+        expect(finalResult.state.context.totalTokens).toBeDefined();
+        expect(finalResult.state.context.totalTokens!.input).toBeGreaterThan(0);
+        expect(finalResult.state.context.totalTokens!.output).toBeGreaterThan(0);
+        expect(finalResult.state.context.estimatedContextSize).toBeGreaterThan(0);
       },
       60000
     );

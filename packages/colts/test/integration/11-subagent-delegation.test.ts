@@ -125,10 +125,10 @@ describe('User Story: Subagent Delegation', () => {
     );
   });
 
-  // Scenario 3: Streaming emits subagent events
-  describe('Scenario 3: Streaming Subagent Events', () => {
+  // Scenario 3: run emits subagent events via EventEmitter
+  describe('Scenario 3: Subagent Events', () => {
     itif(testConfig.enabled)(
-      'should emit subagent:start and subagent:end during runStream',
+      'should emit subagent:start and subagent:end during run',
       async () => {
         const registry = new ToolRegistry();
         registry.register(calculatorTool);
@@ -154,9 +154,7 @@ describe('User Story: Subagent Delegation', () => {
         runner.on('subagent:start', (e) => events.push(`start:${e.name}`));
         runner.on('subagent:end', (e) => events.push(`end:${e.name}`));
 
-        for await (const _ of runner.runStream(state, { maxSteps: 5 })) {
-          // consume stream
-        }
+        await runner.run(state, { maxSteps: 5 });
 
         // EXPLORATORY: Real LLM may or may not use delegate tool
         if (events.includes('start:math-expert')) {

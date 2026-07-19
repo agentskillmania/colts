@@ -120,10 +120,10 @@ describe('User Story: Per-Request Configuration with Real LLM', () => {
     );
   });
 
-  // Scenario 3: runStream() with per-request options
-  describe('Scenario 3: runStream() with per-request options', () => {
+  // Scenario 3: run() with per-request options (events via EventEmitter)
+  describe('Scenario 3: run() with per-request options', () => {
     itif(testConfig.enabled)(
-      'should stream and complete with thinkingEnabled override',
+      'should emit tokens and complete with thinkingEnabled override',
       async () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
@@ -137,14 +137,16 @@ describe('User Story: Per-Request Configuration with Real LLM', () => {
           tools: [],
         });
 
-        const opts: RunOptions = { thinkingEnabled: true, maxSteps: 1 };
+        // Register an EventEmitter listener to count tokens
         let tokenCount = 0;
-        for await (const event of runner.runStream(state, opts)) {
-          if (event.type === 'token') tokenCount++;
-        }
+        runner.on('token', () => tokenCount++);
+
+        const opts: RunOptions = { thinkingEnabled: true, maxSteps: 1 };
+        const { result } = await runner.run(state, opts);
 
         // Should have received at least one token
         expect(tokenCount).toBeGreaterThan(0);
+        expect(result.type).toBe('success');
       }
     );
   });

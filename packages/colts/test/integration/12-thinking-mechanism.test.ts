@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { LLMClient } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../src/runner/index.js';
-import { createAgentState } from '../../src/state/index.js';
+import { createAgentState, addUserMessage } from '../../src/state/index.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { z } from 'zod';
 
@@ -66,7 +66,7 @@ describe('User Story: Thinking Mechanism with Real LLM', () => {
         tools: [],
       });
 
-      const { state: finalState } = await runner.run(state, 'What is 15 + 27?');
+      const { state: finalState } = await runner.run(addUserMessage(state, 'What is 15 + 27?'));
       const messages = finalState.context.messages;
 
       // glm-5 returns native thinking. Verify it is saved as a thought message.
@@ -104,7 +104,11 @@ describe('User Story: Thinking Mechanism with Real LLM', () => {
         tools: registry.toToolSchemas(),
       });
 
-      const { state: finalState } = await runner.run(state, 'Echo "integration test"', registry);
+      const { state: finalState } = await runner.run(
+        addUserMessage(state, 'Echo "integration test"'),
+        undefined,
+        registry
+      );
       const messages = finalState.context.messages;
 
       // Should have a thought message from native thinking
@@ -129,7 +133,7 @@ describe('User Story: Thinking Mechanism with Real LLM', () => {
   );
 
   itif(testConfig.enabled)(
-    'should preserve thinking in stream mode via stepStream',
+    'should preserve thinking via step',
     async () => {
       const runner = new AgentRunner({
         model: 'glm-5',
@@ -137,19 +141,13 @@ describe('User Story: Thinking Mechanism with Real LLM', () => {
       });
 
       const state = createAgentState({
-        name: 'stream-think-test',
+        name: 'step-think-test',
         instructions: 'You are a helpful assistant.',
         tools: [],
       });
 
-      // Consume stepStream to get final state
-      const iterator = runner.stepStream(state);
-      let result = await iterator.next();
-      while (!result.done) {
-        result = await iterator.next();
-      }
-
-      const finalState = result.value.state;
+      // Execute step (events available via runner.on)
+      const { state: finalState } = await runner.step(state);
       const messages = finalState.context.messages;
 
       // Should have a thought message from native thinking
@@ -174,7 +172,7 @@ describe('User Story: Thinking Mechanism with Real LLM', () => {
         tools: [],
       });
 
-      const { state: finalState } = await runner.run(state, 'Say hello');
+      const { state: finalState } = await runner.run(addUserMessage(state, 'Say hello'));
       const messages = finalState.context.messages;
 
       // No message should have the removed 'final' type

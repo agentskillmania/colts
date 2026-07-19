@@ -11,7 +11,7 @@
  * 3. Summarize strategy: generates summary via LLM
  * 4. After compression, agent continues to function correctly
  * 5. Manual compression via runner.compress() works
- * 6. runStream() emits compressing/compressed events
+ * 6. run() emits compressing/compressed events
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -278,13 +278,13 @@ describe('User Story: Context Compression with Real LLM', () => {
   });
 
   // ============================================================
-  // User Story 4: runStream() compression events
+  // User Story 4: run() compression events
   // ============================================================
-  describe('User Story 4: runStream Compression Events', () => {
-    // Scenario 1: Streaming emits compression events
-    describe('Scenario 1: Compression events in runStream', () => {
+  describe('User Story 4: run Compression Events', () => {
+    // Scenario 1: run emits compression events via EventEmitter
+    describe('Scenario 1: Compression events in run', () => {
       itif(testConfig.enabled)(
-        'should emit compressing/compressed events during runStream',
+        'should emit compressing/compressed events during run',
         async () => {
           // Given: A runner with low threshold compression
           const runner = new AgentRunner({
@@ -307,23 +307,18 @@ describe('User Story: Context Compression with Real LLM', () => {
             },
           };
 
-          // When: Run with streaming
+          // When: Register EventEmitter listeners for lifecycle events
           const eventTypes: string[] = [];
-          let returnValue: { result: { type: string } } | undefined;
+          runner.on('step:start', () => eventTypes.push('step:start'));
+          runner.on('complete', () => eventTypes.push('complete'));
+          runner.on('compressing', () => eventTypes.push('compressing'));
+          runner.on('compressed', () => eventTypes.push('compressed'));
 
-          const iterator = runner.runStream(state);
-          while (true) {
-            const { done, value } = await iterator.next();
-            if (done) {
-              returnValue = value;
-              break;
-            }
-            eventTypes.push(value.type);
-          }
+          // And: Run to completion (events are emitted via runner.on)
+          const { result } = await runner.run(state);
 
           // Then: Should complete successfully
-          expect(returnValue).toBeDefined();
-          expect(returnValue!.result.type).toBe('success');
+          expect(result.type).toBe('success');
 
           // And: Should have step lifecycle events
           expect(eventTypes).toContain('step:start');

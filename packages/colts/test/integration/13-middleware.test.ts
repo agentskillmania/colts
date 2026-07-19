@@ -398,15 +398,15 @@ describe('User Story: Middleware', () => {
     );
   });
 
-  // Scenario 8: Streaming middleware — stepStream
-  describe('Scenario 8: stepStream Middleware Hooks', () => {
+  // Scenario 8: Middleware hooks via step()
+  describe('Scenario 8: step Middleware Hooks', () => {
     itif(testConfig.enabled)(
-      'should fire beforeStep, afterStep, beforeAdvance, and afterAdvance during stepStream()',
+      'should fire beforeStep, afterStep, beforeAdvance, and afterAdvance during step()',
       async () => {
         const hooks: string[] = [];
 
         const mw: AgentMiddleware = {
-          name: 'stream-audit',
+          name: 'step-audit',
           beforeStep: async () => {
             hooks.push('beforeStep');
           },
@@ -429,13 +429,7 @@ describe('User Story: Middleware', () => {
         });
 
         const state = addUserMessage(createAgentState(defaultConfig), 'Say hello.');
-        const iterator = runner.stepStream(state);
-
-        // Drain the generator
-        while (true) {
-          const { done } = await iterator.next();
-          if (done) break;
-        }
+        await runner.step(state);
 
         expect(hooks).toContain('beforeStep');
         expect(hooks).toContain('afterStep');
@@ -450,15 +444,15 @@ describe('User Story: Middleware', () => {
     );
   });
 
-  // Scenario 9: Streaming middleware — runStream with all three levels
-  describe('Scenario 9: runStream Middleware Hooks', () => {
+  // Scenario 9: Middleware hooks via run() with all three levels
+  describe('Scenario 9: run Middleware Hooks', () => {
     itif(testConfig.enabled)(
-      'should fire run, step, and advance level hooks during runStream()',
+      'should fire run, step, and advance level hooks during run()',
       async () => {
         const hooks: string[] = [];
 
         const mw: AgentMiddleware = {
-          name: 'stream-full-audit',
+          name: 'full-audit',
           beforeRun: async () => {
             hooks.push('beforeRun');
           },
@@ -487,13 +481,7 @@ describe('User Story: Middleware', () => {
         });
 
         const state = addUserMessage(createAgentState(defaultConfig), 'Say hello.');
-        const iterator = runner.runStream(state, { maxSteps: 1 });
-
-        // Drain the generator
-        while (true) {
-          const { done } = await iterator.next();
-          if (done) break;
-        }
+        await runner.run(state, { maxSteps: 1 });
 
         // All three levels must fire
         expect(hooks).toContain('beforeRun');
@@ -513,10 +501,10 @@ describe('User Story: Middleware', () => {
     );
 
     itif(testConfig.enabled)(
-      'should stop runStream when beforeStep returns stop',
+      'should stop run when beforeStep returns stop',
       async () => {
         const mw: AgentMiddleware = {
-          name: 'stream-step-guard',
+          name: 'step-guard',
           beforeStep: async () => {
             return { stop: true as const };
           },
@@ -530,21 +518,11 @@ describe('User Story: Middleware', () => {
         });
 
         const state = addUserMessage(createAgentState(defaultConfig), 'Say hello.');
-        const iterator = runner.runStream(state, { maxSteps: 5 });
+        const { result } = await runner.run(state, { maxSteps: 5 });
 
-        // Drain
-        let finalResult: import('../../src/execution/index.js').RunResult | undefined;
-        while (true) {
-          const { done, value } = await iterator.next();
-          if (done) {
-            finalResult = value.result;
-            break;
-          }
-        }
-
-        expect(finalResult!.type).toBe('error');
-        if (finalResult!.type === 'error') {
-          expect(finalResult!.error.message).toContain('Stopped by middleware');
+        expect(result.type).toBe('error');
+        if (result.type === 'error') {
+          expect(result.error.message).toContain('Stopped by middleware');
         }
       },
       60000

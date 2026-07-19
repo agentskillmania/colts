@@ -14,7 +14,7 @@
  * 2. ConfirmableRegistry intercepts tool execution and requires confirmation
  * 3. When confirmed, tool executes normally and LLM continues
  * 4. When rejected, LLM sees error and adapts its response
- * 5. run() / runStream() work correctly with both mechanisms
+ * 5. run() works correctly with both mechanisms
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -166,10 +166,10 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
       );
     });
 
-    // Scenario 3: ask_human via runStream
-    describe('Scenario 3: ask_human via runStream()', () => {
+    // Scenario 3: ask_human via run (events via EventEmitter)
+    describe('Scenario 3: ask_human via run()', () => {
       itif(testConfig.enabled)(
-        'should work with streaming execution',
+        'should work with event-driven execution',
         async () => {
           // Given: A runner with ask_human tool
           const askHuman = createAskHumanTool(async () => ({
@@ -184,7 +184,7 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
             llmClient: client,
             toolRegistry: registry,
             systemPrompt:
-              'CRITICAL RULE: You MUST use the ask_human tool to ask questions. NEVER ask in plain text. ' +
+              'CRITICAL RULE: You MUST use the ask_human tool to ask questions. NEVER ask questions in plain text. ' +
               'If you need information from the user, call the ask_human tool. ' +
               'After receiving the tool result, use it in your response.',
           });
@@ -199,25 +199,18 @@ describe('User Story: Human-in-the-Loop with Real LLM', () => {
 
           const state = createAgentState(config);
 
-          // When: Run with streaming
+          // When: Register EventEmitter listeners for lifecycle events
           const eventTypes: string[] = [];
-          let returnValue: { result: { type: string } } | undefined;
+          runner.on('step:start', () => eventTypes.push('step:start'));
+          runner.on('complete', () => eventTypes.push('complete'));
 
-          const iterator = runner.runStream(state, undefined, registry);
-          while (true) {
-            const { done, value } = await iterator.next();
-            if (done) {
-              returnValue = value;
-              break;
-            }
-            eventTypes.push(value.type);
-          }
+          // And: Run to completion (events are emitted via runner.on)
+          const { result } = await runner.run(state, undefined, registry);
 
           // Then: Should complete successfully
-          expect(returnValue).toBeDefined();
-          expect(returnValue!.result.type).toBe('success');
-          if (returnValue!.result.type === 'success') {
-            expect(returnValue!.result.answer).toBeTruthy();
+          expect(result.type).toBe('success');
+          if (result.type === 'success') {
+            expect(result.answer).toBeTruthy();
           }
 
           // And: Should have step lifecycle events

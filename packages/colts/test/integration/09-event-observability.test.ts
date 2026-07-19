@@ -15,7 +15,7 @@
  * 3. Can observe advance-level phase transitions (phase-change)
  * 4. Can observe execution details (tool:start, tool:end, compressing, compressed)
  * 5. Events are emitted hierarchically (run includes step includes advance)
- * 6. Both streaming and non-streaming modes emit the same EventEmitter events
+ * 6. run(), step(), and advance() all emit the same EventEmitter events
  * 7. Error events are emitted with context when failures occur
  */
 
@@ -84,7 +84,7 @@ describe('User Story: Event Observability', () => {
     );
 
     itif(testConfig.enabled)(
-      'should emit run:start and run:end during runStream()',
+      'should emit run:start and run:end during run() (repeated)',
       async () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
@@ -98,9 +98,7 @@ describe('User Story: Event Observability', () => {
         runner.on('run:start', () => events.push('run:start'));
         runner.on('run:end', () => events.push('run:end'));
 
-        for await (const _ of runner.runStream(state, { maxSteps: 1 })) {
-          // consume stream
-        }
+        await runner.run(state, { maxSteps: 1 });
 
         expect(events).toContain('run:start');
         expect(events).toContain('run:end');
