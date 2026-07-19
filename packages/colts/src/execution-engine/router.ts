@@ -11,7 +11,6 @@ import type {
   ExecutionState,
   AdvanceResult,
   AdvanceOptions,
-  StreamEvent,
 } from '../execution/index.js';
 import { updateExecState } from '../execution/index.js';
 import type { AgentState, IToolRegistry } from '../types.js';
@@ -123,49 +122,6 @@ export class PhaseRouter {
       return buildUnknownPhaseResult(state, execState);
     }
     return await handler.execute(ctx, state, execState, toolRegistry, options);
-  }
-
-  /**
-   * Stream execution for the current phase.
-   *
-   * If the handler implements streamExecute(), delegates to it directly.
-   * Otherwise wraps execute() in a default generator that yields
-   * phase-change and effects.
-   *
-   * @param ctx - Handler context with dependencies
-   * @param state - Current agent state
-   * @param execState - Execution state tracking current phase
-   * @param toolRegistry - Optional tool registry override
-   * @param options - Optional advance options
-   * @yields Stream events during phase advancement
-   * @returns Advance result from the matched handler
-   */
-  async *executeStream(
-    ctx: PhaseHandlerContext,
-    state: AgentState,
-    execState: ExecutionState,
-    toolRegistry?: IToolRegistry,
-    options?: AdvanceOptions
-  ): AsyncGenerator<StreamEvent, AdvanceResult> {
-    const handler = this.handlers.get(execState.phase.type);
-
-    if (!handler) {
-      return buildUnknownPhaseResult(state, execState);
-    }
-
-    if (handler.streamExecute) {
-      return yield* handler.streamExecute(ctx, state, execState, toolRegistry, options);
-    }
-
-    try {
-      return await handler.execute(ctx, state, execState, toolRegistry, options);
-    } catch (error) {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      const nextExec = updateExecState(execState, (draft) => {
-        draft.phase = { type: 'error', error: errorObj };
-      });
-      return { state, execState: nextExec, phase: nextExec.phase, done: true };
-    }
   }
 
   /**

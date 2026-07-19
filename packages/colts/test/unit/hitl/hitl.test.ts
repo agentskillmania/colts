@@ -383,56 +383,6 @@ describe('HITL V2: Integration with runner', () => {
     }
   );
 
-  it('should return waiting-human via runStream()', async () => {
-    const { AgentRunner } = await import('../../../src/runner/index.js');
-    const { HitlMiddleware } = await import('../../../src/hitl/middleware.js');
-
-    async function* mockStream() {
-      yield { type: 'text', delta: '', accumulatedContent: '' };
-      yield {
-        type: 'tool_call',
-        toolCall: { id: 'tc_stream', name: 'delete_file', arguments: { path: '/tmp/x' } },
-      };
-      yield { type: 'done', roundTotalTokens: { input: 50, output: 20 } };
-    }
-
-    const mockLLM = {
-      call: vi.fn(),
-      stream: vi.fn().mockImplementation(mockStream),
-    };
-
-    const runner = new AgentRunner({
-      llmClient: mockLLM as any,
-      model: 'test-model',
-      middleware: [new HitlMiddleware({ confirmTools: ['delete_file'] })],
-    });
-
-    runner.registerTool({
-      name: 'delete_file',
-      description: 'Delete a file',
-      parameters: z.object({ path: z.string() }),
-      execute: vi.fn().mockResolvedValue({ success: true }),
-    });
-
-    const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-
-    const gen = runner.runStream(state);
-    let lastReturn: any;
-    while (true) {
-      const { done, value } = await gen.next();
-      if (done) {
-        lastReturn = value;
-        break;
-      }
-    }
-
-    expect(lastReturn).toBeDefined();
-    expect(lastReturn.result.type).toBe('waiting-human');
-    if (lastReturn.result.type === 'waiting-human') {
-      expect(lastReturn.result.request.type).toBe('tool-confirm');
-    }
-  });
-
   it('should let approved tool execute on second run after respond()', async () => {
     const { AgentRunner } = await import('../../../src/runner/index.js');
     const { HitlMiddleware } = await import('../../../src/hitl/middleware.js');

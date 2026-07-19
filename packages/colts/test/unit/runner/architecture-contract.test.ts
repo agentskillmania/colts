@@ -1,7 +1,7 @@
 /**
  * Architecture contract tests — verify the delegation chain
  *
- * runStream() → stepStream() → StepRunner.runStreaming()
+ * run() → step() → StepRunner.runBlocking()
  *
  * These tests protect against accidental architectural regressions
  * where a public method bypasses the intermediate layer.
@@ -24,60 +24,6 @@ const defaultConfig: AgentConfig = {
 const mockTokens = { input: 10, output: 5 };
 
 describe('Architecture contract: delegation chain', () => {
-  it('runStream must delegate to stepStream, not directly to StepRunner', async () => {
-    const mockResponse: LLMResponse = {
-      content: 'Hello',
-      toolCalls: [],
-      tokens: mockTokens,
-      stopReason: 'stop',
-    };
-
-    const client = createMockLLMClient([mockResponse]);
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
-
-    const stepStreamSpy = vi.spyOn(runner, 'stepStream');
-
-    const state = createAgentState(defaultConfig);
-    const gen = runner.runStream(state);
-
-    // Consume the stream
-    while (true) {
-      const { done } = await gen.next();
-      if (done) break;
-    }
-
-    expect(stepStreamSpy).toHaveBeenCalled();
-
-    stepStreamSpy.mockRestore();
-  });
-
-  it('stepStream must delegate to StepRunner.runStreaming', async () => {
-    const mockResponse: LLMResponse = {
-      content: 'Hello',
-      toolCalls: [],
-      tokens: mockTokens,
-      stopReason: 'stop',
-    };
-
-    const client = createMockLLMClient([mockResponse]);
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });
-
-    const runStreamingSpy = vi.spyOn(StepRunner.prototype, 'runStreaming');
-
-    const state = createAgentState(defaultConfig);
-    const gen = runner.stepStream(state);
-
-    // Consume the stream
-    while (true) {
-      const { done } = await gen.next();
-      if (done) break;
-    }
-
-    expect(runStreamingSpy).toHaveBeenCalled();
-
-    runStreamingSpy.mockRestore();
-  });
-
   it('run must delegate to step, not directly to StepRunner', async () => {
     const mockResponse: LLMResponse = {
       content: 'Hello',

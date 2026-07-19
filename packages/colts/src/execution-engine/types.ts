@@ -87,18 +87,4 @@ export interface IPhaseHandler {
     toolRegistry?: IToolRegistry,
     options?: AdvanceOptions
   ): Promise<AdvanceResult> | AdvanceResult;
-
-  /**
-   * Optional stream execution for phases that produce real-time events.
-   *
-   * If not implemented, PhaseRouter will fall back to wrapping execute()
-   * in a default generator that yields phase-change and effects.
-   */
-  streamExecute?(
-    ctx: PhaseHandlerContext,
-    state: AgentState,
-    execState: ExecutionState,
-    toolRegistry?: IToolRegistry,
-    options?: AdvanceOptions
-  ): AsyncGenerator<StreamEvent, AdvanceResult>;
 }

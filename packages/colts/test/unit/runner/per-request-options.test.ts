@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for PerRequestOptions pass-through: thinkingEnabled and model
- * should flow from run/step/runStream/stepStream → advance → CallingLLMHandler → LLM call.
+ * should flow from run/step → advance → CallingLLMHandler → LLM call.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -216,50 +216,6 @@ describe('PerRequestOptions — run()', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runStream()
-// ---------------------------------------------------------------------------
-
-describe('PerRequestOptions — runStream()', () => {
-  it('should pass thinkingEnabled and model from RunOptions to LLM stream call', async () => {
-    const mockResponse: LLMResponse = {
-      content: 'streamed answer',
-      toolCalls: [],
-      tokens: mockTokens,
-      stopReason: 'stop',
-    };
-    const { client, getLastStreamArg } = createCapturingClient([mockResponse]);
-
-    const runner = new AgentRunner({
-      model: 'default-model',
-      llmClient: client,
-      thinkingEnabled: false,
-    });
-
-    const state = createAgentState({
-      name: 'test',
-      instructions: 'You are a test assistant.',
-      tools: [],
-    });
-
-    const opts: RunOptions = {
-      thinkingEnabled: true,
-      model: 'stream-override-model',
-      maxSteps: 1,
-    };
-
-    // Drain the stream
-    for await (const _event of runner.runStream(state, opts)) {
-      // consume
-    }
-
-    const lastStream = getLastStreamArg();
-    expect(lastStream).toBeDefined();
-    expect(lastStream!.thinkingEnabled).toBe(true);
-    expect(lastStream!.model).toBe('stream-override-model');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // step()
 // ---------------------------------------------------------------------------
 
@@ -319,44 +275,6 @@ describe('PerRequestOptions — step()', () => {
     const lastCall = getLastCallArg();
     expect(lastCall).toBeDefined();
     expect(lastCall!.model).toBe('step-override-model');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// stepStream()
-// ---------------------------------------------------------------------------
-
-describe('PerRequestOptions — stepStream()', () => {
-  it('should pass model override from StepOptions to LLM stream call', async () => {
-    const mockResponse: LLMResponse = {
-      content: 'streamed step answer',
-      toolCalls: [],
-      tokens: mockTokens,
-      stopReason: 'stop',
-    };
-    const { client, getLastStreamArg } = createCapturingClient([mockResponse]);
-
-    const runner = new AgentRunner({
-      model: 'default-model',
-      llmClient: client,
-    });
-
-    const state = createAgentState({
-      name: 'test',
-      instructions: 'You are a test assistant.',
-      tools: [],
-    });
-
-    const stepOpts: StepOptions = { model: 'step-stream-model' };
-
-    // Drain the stream
-    for await (const _event of runner.stepStream(state, undefined, stepOpts)) {
-      // consume
-    }
-
-    const lastStream = getLastStreamArg();
-    expect(lastStream).toBeDefined();
-    expect(lastStream!.model).toBe('step-stream-model');
   });
 });
 
@@ -579,35 +497,5 @@ describe('PerRequestOptions — temperature', () => {
     const lastCall = getLastCallArg();
     expect(lastCall).toBeDefined();
     expect(lastCall!.temperature).toBe(0.9);
-  });
-
-  it('runStream() passes temperature to LLM stream call', async () => {
-    const mockResponse: LLMResponse = {
-      content: 'streamed',
-      toolCalls: [],
-      tokens: mockTokens,
-      stopReason: 'stop',
-    };
-    const { client, getLastStreamArg } = createCapturingClient([mockResponse]);
-
-    const runner = new AgentRunner({
-      model: 'test-model',
-      llmClient: client,
-    });
-
-    const state = createAgentState({
-      name: 'test',
-      instructions: 'You are a test assistant.',
-      tools: [],
-    });
-
-    const opts: RunOptions = { temperature: 0.5, maxSteps: 1 };
-    for await (const _event of runner.runStream(state, opts)) {
-      // drain
-    }
-
-    const lastStream = getLastStreamArg();
-    expect(lastStream).toBeDefined();
-    expect(lastStream!.temperature).toBe(0.5);
   });
 });

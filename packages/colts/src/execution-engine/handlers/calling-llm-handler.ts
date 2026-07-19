@@ -12,7 +12,6 @@ import type {
   ExecutionState,
   AdvanceResult,
   AdvanceOptions,
-  StreamEvent,
   Action,
 } from '../../execution/index.js';
 import { updateExecState, toolCallToAction } from '../../execution/index.js';
@@ -116,129 +115,6 @@ export class CallingLLMHandler implements IPhaseHandler {
     const { parsedAction, parsedAllActions, fallbackText } = await this.parseToolCalls(
       ctx,
       accumulatedContent,
-      responseToolCalls,
-      state
-    );
-
-    const nextExec = this.buildNextExec(
-      execState,
-      fallbackText,
-      accumulatedThinking,
-      parsedAction,
-      parsedAllActions,
-      estimatedContextSize,
-      roundTokens
-    );
-
-    return {
-      state,
-      execState: nextExec,
-      phase: nextExec.phase,
-      done: false,
-      tokens: roundTokens,
-      estimatedContextSize,
-    };
-  }
-
-  async *streamExecute(
-    ctx: PhaseHandlerContext,
-    state: AgentState,
-    execState: ExecutionState,
-    toolRegistry?: IToolRegistry,
-    options?: AdvanceOptions
-  ): AsyncGenerator<StreamEvent, AdvanceResult> {
-    const registry = toolRegistry ?? ctx.toolRegistry;
-    const { tools, messages, estimatedContextSize } = this.prepare(ctx, state, execState, registry);
-    const signal = options?.signal;
-    const resolvedModel = options?.model ?? ctx.options.model;
-
-    // Yield llm:request event before LLM call
-    yield {
-      type: 'llm:request',
-      messages: messages.map((m) => ({
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-      })),
-      tools: tools?.map((t) => t.name) ?? [],
-      skill: state.context.skillState
-        ? {
-            current: state.context.skillState.current,
-          }
-        : null,
-      timestamp: Date.now(),
-    };
-
-    let accumulatedContent = '';
-    let accumulatedThinking = '';
-    let responseToolCalls:
-      | Array<{ id: string; name: string; arguments: Record<string, unknown> }>
-      | undefined;
-    let roundTokens: TokenStats | undefined;
-
-    try {
-      for await (const event of ctx.llmProvider.stream({
-        model: resolvedModel,
-        messages,
-        tools,
-        priority: 0,
-        requestTimeout: ctx.options.requestTimeout,
-        thinkingEnabled: options?.thinkingEnabled ?? ctx.options.thinkingEnabled,
-        temperature: options?.temperature ?? ctx.options.temperature,
-        signal,
-      })) {
-        if (signal?.aborted) break;
-
-        if (event.type === 'text') {
-          accumulatedContent = event.accumulatedContent ?? accumulatedContent + (event.delta ?? '');
-          yield { type: 'token', token: event.delta ?? '', timestamp: Date.now() };
-        } else if (event.type === 'thinking') {
-          accumulatedThinking += event.delta ?? '';
-          yield { type: 'thinking', content: event.delta ?? '', timestamp: Date.now() };
-        } else if (event.type === 'tool_call' && event.toolCall) {
-          responseToolCalls = responseToolCalls ?? [];
-          responseToolCalls.push({
-            id: event.toolCall.id,
-            name: event.toolCall.name,
-            arguments: event.toolCall.arguments,
-          });
-        } else if (event.type === 'done') {
-          if (event.roundTotalTokens) {
-            roundTokens = event.roundTotalTokens;
-          }
-        }
-      }
-    } catch (error) {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      yield { type: 'error', error: errorObj, context: { step: 0 }, timestamp: Date.now() };
-      const nextExec = updateExecState(execState, (draft) => {
-        draft.phase = { type: 'error', error: errorObj };
-      });
-      return { state, execState: nextExec, phase: nextExec.phase, done: true };
-    }
-
-    // Guard: if aborted, return current execState unchanged
-    if (signal?.aborted) {
-      return {
-        state,
-        execState,
-        phase: execState.phase,
-        done: false,
-      };
-    }
-
-    const finalResponse = accumulatedContent;
-
-    // Yield llm:response event after LLM response
-    yield {
-      type: 'llm:response',
-      text: finalResponse,
-      toolCalls: responseToolCalls ?? null,
-      timestamp: Date.now(),
-    };
-
-    const { parsedAction, parsedAllActions, fallbackText } = await this.parseToolCalls(
-      ctx,
-      finalResponse,
       responseToolCalls,
       state
     );
