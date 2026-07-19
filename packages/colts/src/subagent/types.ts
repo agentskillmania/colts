@@ -21,16 +21,16 @@ export interface SubAgentConfig {
 }
 
 /**
- * Delegate tool result
+ * Delegate tool result — discriminated union by status.
+ * The parent agent receives this as the tool's return value and can
+ * branch on status to decide retry/fallback/report.
  */
-export interface DelegateResult {
-  /** Sub-agent's final answer */
-  answer: string;
-  /** Total steps executed by sub-agent */
-  totalSteps: number;
-  /** Sub-agent's final state (null for unknown sub-agents) */
-  finalState: AgentState | null;
-}
+export type DelegateResult =
+  | { status: 'success'; answer: string; totalSteps: number }
+  | { status: 'max_steps'; lastAnswer: string; totalSteps: number }
+  | { status: 'error'; error: string; totalSteps: number }
+  | { status: 'abort'; totalSteps: number }
+  | { status: 'timeout'; partialResult: string; totalSteps: number };
 
 /**
  * Sub-agent streaming event types

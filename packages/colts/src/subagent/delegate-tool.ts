@@ -86,9 +86,9 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
       if (!config) {
         const available = Array.from(subAgentConfigs.keys()).join(', ');
         return {
-          answer: `Error: Unknown sub-agent '${agent}'. Available: ${available}`,
+          status: 'error',
+          error: `Unknown sub-agent '${agent}'. Available: ${available}`,
           totalSteps: 0,
-          finalState: null,
         } satisfies DelegateResult;
       }
 
@@ -141,43 +141,42 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
       // Check abort signal before running
       if (options?.signal?.aborted) {
         return {
-          answer: 'Aborted',
+          status: 'abort',
           totalSteps: 0,
-          finalState: null,
         } satisfies DelegateResult;
       }
 
       // Run until completion with signal support
-      const { state: finalState, result } = await subRunner.run(stateWithTask, {
+      const { result } = await subRunner.run(stateWithTask, {
         signal: options?.signal,
       });
 
       if (result.type === 'abort') {
         return {
-          answer: 'Aborted',
+          status: 'abort',
           totalSteps: result.totalSteps,
-          finalState,
         } satisfies DelegateResult;
       }
 
       if (result.type === 'success') {
         return {
+          status: 'success',
           answer: result.answer,
           totalSteps: result.totalSteps,
-          finalState,
         } satisfies DelegateResult;
       }
       if (result.type === 'error') {
         return {
-          answer: `Error: ${result.error.message}`,
+          status: 'error',
+          error: result.error.message,
           totalSteps: result.totalSteps,
-          finalState,
         } satisfies DelegateResult;
       }
+      // max_steps or stopped
       return {
-        answer: 'Max steps reached',
+        status: 'max_steps',
+        lastAnswer: result.type === 'stopped' ? (result.data ?? '') : '',
         totalSteps: result.totalSteps,
-        finalState,
       } satisfies DelegateResult;
     },
   };

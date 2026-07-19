@@ -746,6 +746,7 @@ describe('AgentRunner', () => {
 
       expect(result).toEqual(
         expect.objectContaining({
+          status: 'success',
           answer: 'Research complete: found 3 relevant papers.',
           totalSteps: 1,
         })
@@ -765,8 +766,9 @@ describe('AgentRunner', () => {
         task: 'Do something',
       });
 
-      const delegateResult = result as { answer: string; totalSteps: number };
-      expect(delegateResult.answer).toContain('Unknown sub-agent');
+      const delegateResult = result as { status: string; error: string; totalSteps: number };
+      expect(delegateResult.status).toBe('error');
+      expect(delegateResult.error).toContain('Unknown sub-agent');
       expect(delegateResult.totalSteps).toBe(0);
     });
 

@@ -209,10 +209,9 @@ describe('createDelegateTool', () => {
         task: 'Research TypeScript',
       })) as DelegateResult;
 
+      expect(result.status).toBe('success');
       expect(result.answer).toBe('Research result: TypeScript is a typed superset of JavaScript.');
       expect(result.totalSteps).toBe(1);
-      expect(result.finalState).not.toBeNull();
-      expect(result.finalState!.context.stepCount).toBe(1);
     });
 
     it('should execute through ToolRegistry and return correct result', async () => {
@@ -239,6 +238,7 @@ describe('createDelegateTool', () => {
       });
 
       const result = registryResult as DelegateResult;
+      expect(result.status).toBe('success');
       expect(result.answer).toBe('Written article about AI.');
       expect(result.totalSteps).toBe(1);
     });
@@ -261,9 +261,9 @@ describe('createDelegateTool', () => {
         task: 'Search for something',
       })) as DelegateResult;
 
-      expect(result.answer).toBe('Error: API rate limit exceeded');
+      expect(result.status).toBe('error');
+      expect(result.error).toBe('API rate limit exceeded');
       expect(result.totalSteps).toBe(1);
-      expect(result.finalState).not.toBeNull();
     });
   });
 
@@ -287,9 +287,8 @@ describe('createDelegateTool', () => {
         task: 'Complex research task',
       })) as DelegateResult;
 
-      expect(result.answer).toBe('Max steps reached');
+      expect(result.status).toBe('max_steps');
       expect(result.totalSteps).toBe(5);
-      expect(result.finalState).not.toBeNull();
     });
 
     it('should use defaultMaxSteps when sub-agent has no maxSteps configured', async () => {
@@ -308,7 +307,7 @@ describe('createDelegateTool', () => {
         task: 'Long writing task',
       })) as DelegateResult;
 
-      expect(result.answer).toBe('Max steps reached');
+      expect(result.status).toBe('max_steps');
       expect(result.totalSteps).toBe(3);
     });
   });
@@ -406,11 +405,9 @@ describe('createDelegateTool', () => {
         task: 'Do something',
       })) as DelegateResult;
 
-      expect(result.answer).toBe(
-        "Error: Unknown sub-agent 'nonexistent'. Available: researcher, writer"
-      );
+      expect(result.status).toBe('error');
+      expect(result.error).toBe("Unknown sub-agent 'nonexistent'. Available: researcher, writer");
       expect(result.totalSteps).toBe(0);
-      expect(result.finalState).toBeNull();
     });
 
     it('should return empty list when no sub-agents are configured', async () => {
@@ -427,9 +424,9 @@ describe('createDelegateTool', () => {
         task: 'Do something',
       })) as DelegateResult;
 
-      expect(result.answer).toBe("Error: Unknown sub-agent 'anything'. Available: ");
+      expect(result.status).toBe('error');
+      expect(result.error).toBe("Unknown sub-agent 'anything'. Available: ");
       expect(result.totalSteps).toBe(0);
-      expect(result.finalState).toBeNull();
     });
   });
 
@@ -497,6 +494,7 @@ describe('createDelegateTool', () => {
       })) as DelegateResult;
 
       // agent-a should successfully call tool-a
+      expect(result.status).toBe('success');
       expect(result.answer).toBe('Done with tool-a');
       expect(result.totalSteps).toBe(2);
       // Verify tools passed to LLM contain tool-a (passed via toToolSchemas)
@@ -606,10 +604,9 @@ describe('createDelegateTool', () => {
         task: 'Tell me about TypeScript',
       })) as DelegateResult;
 
+      expect(result.status).toBe('success');
       expect(result.answer).toBe('TypeScript was created by Microsoft in 2012.');
       expect(result.totalSteps).toBe(2);
-      expect(result.finalState).not.toBeNull();
-      expect(result.finalState!.context.stepCount).toBe(2);
     });
   });
 
@@ -686,7 +683,7 @@ describe('createDelegateTool', () => {
         task: 'Research task',
       })) as DelegateResult;
 
-      expect(result.answer).toBe('Max steps reached');
+      expect(result.status).toBe('max_steps');
       expect(result.totalSteps).toBe(5);
     });
   });
@@ -728,13 +725,13 @@ describe('createDelegateTool', () => {
       })) as DelegateResult;
 
       // Two delegations should be independent
+      expect(result1.status).toBe('success');
       expect(result1.answer).toBe('First answer');
+      expect(result2.status).toBe('success');
       expect(result2.answer).toBe('Second answer');
       // Both complete in single step
       expect(result1.totalSteps).toBe(1);
       expect(result2.totalSteps).toBe(1);
-      // States are independent
-      expect(result1.finalState!.id).not.toBe(result2.finalState!.id);
     });
   });
 
@@ -814,6 +811,7 @@ describe('createDelegateTool', () => {
       expect(toolExecuted).toBe(true);
       expect(receivedArgs).toBe('2+2');
       // Verify sub-agent returned correct result
+      expect(result.status).toBe('success');
       expect(result.answer).toBe('The answer is 4');
       expect(result.totalSteps).toBe(2);
     });
@@ -858,6 +856,7 @@ describe('createDelegateTool', () => {
       })) as DelegateResult;
 
       // Sub-agent can still run, but no search tool is available
+      expect(result.status).toBe('success');
       expect(result.answer).toBe('Search result');
       // Verify tools passed to LLM are empty (because parentRegistry has no search tool)
       const firstCall = vi.mocked(client.stream).mock.calls[0][0];
@@ -1126,6 +1125,7 @@ describe('createDelegateTool', () => {
         { signal: controller.signal }
       )) as DelegateResult;
 
+      expect(result.status).toBe('success');
       expect(result.answer).toBe('Task result');
     });
 
@@ -1180,7 +1180,7 @@ describe('createDelegateTool', () => {
 
       const result = (await executePromise) as DelegateResult;
 
-      expect(result.answer).toBe('Aborted');
+      expect(result.status).toBe('abort');
     });
 
     it('should return abort result when aborted before execution', async () => {
@@ -1214,9 +1214,8 @@ describe('createDelegateTool', () => {
         { signal: controller.signal }
       )) as DelegateResult;
 
-      expect(result.answer).toBe('Aborted');
+      expect(result.status).toBe('abort');
       expect(result.totalSteps).toBe(0);
-      expect(result.finalState).toBeNull();
     });
   });
 });
