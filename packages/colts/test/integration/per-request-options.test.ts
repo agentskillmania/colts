@@ -74,7 +74,8 @@ describe('User Story: Per-Request Configuration with Real LLM', () => {
         if (result.type === 'success') {
           expect(result.answer).toBeTruthy();
         }
-      }
+      },
+      30000
     );
   });
 
