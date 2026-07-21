@@ -94,10 +94,11 @@ describe('DefaultSubAgentFactory — tool/skill inheritance', () => {
     expect(toolNames).not.toContain('shell');
   });
 
-  it('filters out delegate tool from inherited set (prevents recursion)', () => {
+  it('filters out delegate AND load_skill from inherited set', () => {
     const registry = new ToolRegistry();
     registry.register(createFakeTool('file_read'));
     registry.register(createFakeTool('delegate')); // would-be-recursive
+    registry.register(createFakeTool('load_skill')); // auto-registered by skillProvider
 
     const factory = new DefaultSubAgentFactory();
     const runner = factory.create(createBaseConfig(), {
@@ -109,6 +110,9 @@ describe('DefaultSubAgentFactory — tool/skill inheritance', () => {
     const toolNames = runner.getToolRegistry().getAll().map((t) => t.name);
     expect(toolNames).toContain('file_read');
     expect(toolNames).not.toContain('delegate');
+    // load_skill is filtered because the parent's copy would collide with
+    // the one AgentRunner auto-registers when a skillProvider is forwarded.
+    expect(toolNames).not.toContain('load_skill');
   });
 
   it('registers load_skill automatically when parent skillProvider is inherited', () => {

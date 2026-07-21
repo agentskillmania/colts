@@ -117,11 +117,14 @@ export class DefaultSubAgentFactory implements ISubAgentFactory {
 
     let inheritedTools: import('../tools/registry.js').Tool<import('zod').ZodTypeAny>[] = [];
     if (inheritTools) {
-      // `delegate` is filtered out to prevent infinite recursion — a sub-agent
-      // cannot itself call delegate unless `allowDelegation` is set and the
-      // parent factory re-adds it (not the default factory's job).
+      // Filter out tools the sub-runner wires up itself:
+      // - `delegate`: would be recursive (the parent's delegate closes over
+      //   the parent's registry, not a fresh sub-agent delegate)
+      // - `load_skill`: auto-registered by AgentRunner when skillProvider is
+      //   present (inherited below), so including the parent's copy would
+      //   throw "Tool 'load_skill' is already registered" on construction
       const all = parentContext.toolRegistry.getAll?.() ?? [];
-      inheritedTools = all.filter((t) => t.name !== 'delegate');
+      inheritedTools = all.filter((t) => t.name !== 'delegate' && t.name !== 'load_skill');
     }
 
     return new AgentRunner({
