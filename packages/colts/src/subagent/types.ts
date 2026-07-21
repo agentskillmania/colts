@@ -2,7 +2,13 @@
  * @fileoverview Core sub-agent type definitions
  */
 import { AgentRunner } from '../runner/index.js';
-import type { AgentConfig, AgentState, ILLMProvider, IToolRegistry } from '../types.js';
+import type {
+  AgentConfig,
+  AgentState,
+  ILLMProvider,
+  IToolRegistry,
+  ISkillProvider,
+} from '../types.js';
 
 /**
  * Sub-agent configuration
@@ -20,6 +26,17 @@ export interface SubAgentConfig {
   allowDelegation?: boolean;
   /** Timeout in milliseconds — sub-agent is aborted if it exceeds this (default: no timeout) */
   timeout?: number;
+  /**
+   * Inherit the parent runner's full tool set (file_read, shell, web_search, ...).
+   * The recursive `delegate` tool is always filtered out. Default: true.
+   * Set to false to keep the sub-agent limited to its declared `config.tools`.
+   */
+  inheritParentTools?: boolean;
+  /**
+   * Inherit the parent runner's skill provider, which wires up the
+   * `load_skill` tool on the sub-agent. Default: true.
+   */
+  inheritParentSkills?: boolean;
 }
 
 /**
@@ -63,6 +80,8 @@ export interface ISubAgentFactory {
       toolRegistry: IToolRegistry;
       /** Parent agent's model identifier */
       model?: string;
+      /** Parent runner's skill provider — forwarded when the sub-agent inherits skills */
+      skillProvider?: ISkillProvider;
     }
   ): AgentRunner;
 }
@@ -87,12 +106,30 @@ export class DefaultSubAgentFactory implements ISubAgentFactory {
       llmProvider: ILLMProvider;
       toolRegistry: IToolRegistry;
       model?: string;
+      skillProvider?: ISkillProvider;
     }
   ): AgentRunner {
+    // Default-on inheritance matches the expectation that a sub-agent can
+    // do real work (read files, run shell, etc.) without the caller having
+    // to redeclare every tool per agent. Either flag can be opted out.
+    const inheritTools = config.inheritParentTools !== false;
+    const inheritSkills = config.inheritParentSkills !== false;
+
+    let inheritedTools: import('../tools/registry.js').Tool<import('zod').ZodTypeAny>[] = [];
+    if (inheritTools) {
+      // `delegate` is filtered out to prevent infinite recursion — a sub-agent
+      // cannot itself call delegate unless `allowDelegation` is set and the
+      // parent factory re-adds it (not the default factory's job).
+      const all = parentContext.toolRegistry.getAll?.() ?? [];
+      inheritedTools = all.filter((t) => t.name !== 'delegate');
+    }
+
     return new AgentRunner({
       model: parentContext.model ?? 'sub-agent',
       llmClient: parentContext.llmProvider,
       maxSteps: config.maxSteps ?? this.defaultMaxSteps,
+      tools: inheritedTools,
+      skillProvider: inheritSkills ? parentContext.skillProvider : undefined,
     });
   }
 }

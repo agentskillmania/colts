@@ -11,7 +11,7 @@ import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from './types.j
 import { DefaultSubAgentFactory, DEFAULT_SUBAGENT_MAX_STEPS } from './types.js';
 import { createAgentState, addUserMessage } from '../state/index.js';
 import type { Tool } from '../tools/registry.js';
-import type { ILLMProvider, IToolRegistry } from '../types.js';
+import type { ILLMProvider, IToolRegistry, ISkillProvider } from '../types.js';
 
 /**
  * Dependency injection interface for the delegate tool
@@ -27,6 +27,11 @@ export interface DelegateToolDeps {
   defaultMaxSteps?: number;
   /** Parent agent's tool registry for inheriting tool implementations */
   parentToolRegistry: IToolRegistry;
+  /**
+   * Parent runner's skill provider. Forwarded to the sub-agent factory so
+   * sub-agents that opt into `inheritParentSkills` get `load_skill` wired up.
+   */
+  parentSkillProvider?: ISkillProvider;
   /** Sub-agent factory (defaults to DefaultSubAgentFactory) */
   subAgentFactory?: ISubAgentFactory;
   /**
@@ -108,39 +113,42 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool {
       const subState = createAgentState(subConfig);
       const stateWithTask = addUserMessage(subState, task);
 
-      // Build sub-agent tools from parent registry
-      const subAgentTools: Tool[] = [];
-      const canDelegate = config.allowDelegation ?? false;
-
-      for (const toolDef of config.config.tools) {
-        // Skip delegate tool if sub-agent is not allowed to delegate
-        if (toolDef.name === 'delegate' && !canDelegate) {
-          continue;
-        }
-
-        // Look up tool implementation from parent registry
-        const parentTool = parentToolRegistry.get(toolDef.name);
-        if (parentTool) {
-          // Use the parent's tool implementation (including execute function)
-          subAgentTools.push({
-            name: parentTool.name,
-            description: parentTool.description,
-            parameters: parentTool.parameters,
-            execute: parentTool.execute,
-          });
-        }
-        // If tool not found in parent, it's not added (sub-agent won't have access)
-      }
-
-      // Create a runner for the sub-agent via factory
+      // Create a runner for the sub-agent via factory.
+      // The factory handles `inheritParentTools`/`inheritParentSkills`
+      // (both default true) — when inheriting, the factory already wires the
+      // parent's tool set and skill provider into the sub-runner's registry.
       const subRunner = subAgentFactory.create(config, {
         llmProvider,
         toolRegistry: parentToolRegistry,
         model,
+        skillProvider: deps.parentSkillProvider,
       });
-      // Register resolved tool implementations onto the sub-agent's registry
-      for (const tool of subAgentTools) {
-        subRunner.registerTool(tool);
+
+      // Register tools explicitly listed in config.config.tools, but ONLY when
+      // the sub-agent did NOT inherit the parent's full tool set. When
+      // inheritParentTools is true, the factory already registered every tool,
+      // so re-registering the named subset would be redundant (and would
+      // double-register anything also in the inherited set).
+      const inheritTools = config.inheritParentTools !== false;
+      if (!inheritTools) {
+        const canDelegate = config.allowDelegation ?? false;
+        for (const toolDef of config.config.tools) {
+          // Skip delegate tool if sub-agent is not allowed to delegate
+          if (toolDef.name === 'delegate' && !canDelegate) {
+            continue;
+          }
+
+          // Look up tool implementation from parent registry
+          const parentTool = parentToolRegistry.get(toolDef.name);
+          if (parentTool) {
+            subRunner.registerTool({
+              name: parentTool.name,
+              description: parentTool.description,
+              parameters: parentTool.parameters,
+              execute: parentTool.execute,
+            });
+          }
+        }
       }
 
       // Wire sub-agent event forwarding: each event is re-emitted to the parent

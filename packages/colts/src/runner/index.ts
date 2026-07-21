@@ -313,6 +313,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         llmProvider: this.llmProvider,
         model: this.options.model,
         parentToolRegistry: this.toolRegistry,
+        // Forward the parent's skill provider so sub-agents that opt into
+        // inheritParentSkills get load_skill wired up by the factory.
+        parentSkillProvider: this._skillProvider,
         subAgentFactory: this.subAgentFactory,
         emit: (type: string, data: Record<string, unknown>) => {
           this.emit(type as keyof RunnerEventMap, data as never);

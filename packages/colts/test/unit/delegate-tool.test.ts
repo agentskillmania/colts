@@ -534,6 +534,9 @@ describe('createDelegateTool', () => {
       const agentWithSearch: SubAgentConfig = {
         name: 'searcher',
         description: 'Search agent',
+        // inheritParentTools: false — this test asserts the sub-agent sees
+        // ONLY its declared tools, not the parent registry's full set.
+        inheritParentTools: false,
         config: {
           name: 'searcher',
           instructions: 'You search things.',
@@ -544,6 +547,7 @@ describe('createDelegateTool', () => {
       const agentWithCalc: SubAgentConfig = {
         name: 'calculator',
         description: 'Calc agent',
+        inheritParentTools: false,
         config: {
           name: 'calculator',
           instructions: 'You calculate things.',
@@ -1023,10 +1027,13 @@ describe('createDelegateTool', () => {
       };
       parentRegistry.register(delegateToolImpl);
 
-      // Sub-agent declares use of delegate tool, allowDelegation=true
+      // Sub-agent declares use of delegate tool, allowDelegation=true.
+      // inheritParentTools: false because this test asserts the sub-agent
+      // sees ONLY the delegate tool it declared, not the parent's full set.
       const delegatorAgent: SubAgentConfig = {
         name: 'delegator',
         description: 'Delegator agent',
+        inheritParentTools: false,
         config: {
           name: 'delegator',
           instructions: 'You can delegate.',
