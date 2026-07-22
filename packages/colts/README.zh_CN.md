@@ -235,9 +235,17 @@ const runner = new AgentRunner({
     config: { name: 'researcher', instructions: 'Research topics thoroughly.', tools: [] },
     maxSteps: 5,
     timeout: 60_000, // 毫秒，超出则中断子代理
+    // 工具与技能继承（默认开启）：
+    inheritParentTools: true,   // 复制父注册表中的全部工具
+                                //（delegate 和 load_skill 会被过滤掉，
+                                // 避免递归和重复注册）
+    inheritParentSkills: true,  // 转发父 Runner 的 skillProvider，
+                                // 让子代理能调用 load_skill
   }],
 });
 ```
+
+子代理默认继承父 Runner 的完整工具集和技能提供者，因此无需在每个 agent 上重复声明 file_read、shell、web_search 等工具就能读文件、跑 shell、搜网页、加载技能。将任一标志设为 `false` 可关闭继承——此时子代理只能使用 `config.tools` 中显式列出的工具。
 
 `delegate` 工具会自动注册，使父代理能够调用子代理。工具返回一个判别联合 `DelegateResult`（`status: 'success' | 'error' | 'max_steps' | 'abort' | 'timeout'`），父代理可据此分支处理。
 

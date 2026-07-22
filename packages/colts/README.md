@@ -229,9 +229,17 @@ const runner = new AgentRunner({
     config: { name: 'researcher', instructions: 'Research topics thoroughly.', tools: [] },
     maxSteps: 5,
     timeout: 60_000, // ms — sub-agent is aborted if exceeded
+    // Tool & skill inheritance (default true):
+    inheritParentTools: true,   // copies every tool from the parent registry
+                                // (delegate and load_skill are filtered out to
+                                // avoid recursion and double-registration)
+    inheritParentSkills: true,  // forwards the parent's skillProvider so the
+                                // sub-agent can call load_skill
   }],
 });
 ```
+
+By default a sub-agent inherits the parent runner's full tool set and skill provider, so it can read files, run shell, search the web, and load skills without you redeclaring every tool per agent. Set either flag to `false` to opt out — the sub-agent then only sees the tools explicitly listed in `config.tools`.
 
 The `delegate` tool is auto-registered, allowing the parent agent to invoke sub-agents. The tool returns a `DelegateResult` discriminated union (`status: 'success' | 'error' | 'max_steps' | 'abort' | 'timeout'`) so the parent can branch on outcome.
 
