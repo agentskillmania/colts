@@ -8,7 +8,6 @@ import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { AgentMiddleware } from '../middleware/types.js';
 import type { IExecutionPolicy } from '../policy/types.js';
 import type { ISkillProvider } from '../skills/types.js';
-import type { SubAgentConfig, ISubAgentFactory } from '../subagent/types.js';
 import type { Tool as ColtsTool } from '../tools/registry.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 import type {
@@ -64,15 +63,9 @@ export interface RunnerOptions {
   /** Skill 目录列表（快速初始化，内部创建 FilesystemSkillProvider） */
   skillDirs?: string[];
 
-  // --- SubAgents ---
-  /** Sub-agent 配置列表，提供时自动注册 delegate 工具 */
-  subAgents?: SubAgentConfig[];
-
   // --- 扩展 ---
   /** 工具 schema 格式化器（默认 DefaultToolSchemaFormatter） */
   toolSchemaFormatter?: IToolSchemaFormatter;
-  /** Sub-agent 工厂（默认 DefaultSubAgentFactory） */
-  subAgentFactory?: ISubAgentFactory;
   /** 执行策略，控制停止条件和错误处理（默认 DefaultExecutionPolicy） */
   executionPolicy?: IExecutionPolicy;
 

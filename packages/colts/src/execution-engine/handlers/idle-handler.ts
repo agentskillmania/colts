@@ -23,7 +23,6 @@ export class IdleHandler implements IPhaseHandler {
       systemPrompt: ctx.options.systemPrompt,
       model: ctx.options.model,
       skillProvider: ctx.skillProvider,
-      subAgentConfigs: ctx.subAgentConfigs,
     });
     const displayMessages: LocalMessage[] = messages.map((m) => ({
       id: randomUUID(),

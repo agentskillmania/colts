@@ -62,7 +62,6 @@ describe('buildMessagesFromCtx', () => {
         enablePromptThinking: true,
       },
       skillProvider: undefined,
-      subAgentConfigs: undefined,
     } as unknown as RunnerContext;
 
     const messages = buildMessagesFromCtx(ctx, mockState);
@@ -71,17 +70,15 @@ describe('buildMessagesFromCtx', () => {
       systemPrompt: 'Custom system prompt',
       model: 'gpt-4-test',
       skillProvider: undefined,
-      subAgentConfigs: undefined,
       enablePromptThinking: true,
     });
     expect(messages).toHaveLength(2);
     expect(messages[0].role).toBe('system');
   });
 
-  it('should pass skillProvider and subAgentConfigs when present', () => {
+  it('should pass skillProvider when present', () => {
     const mockBuild = vi.fn().mockReturnValue([]);
     const mockSkillProvider = { listSkills: vi.fn() };
-    const mockSubAgentConfigs = new Map([['agent1', { name: 'agent1' }]]);
 
     const ctx = {
       messageAssembler: {
@@ -93,7 +90,6 @@ describe('buildMessagesFromCtx', () => {
         enablePromptThinking: false,
       },
       skillProvider: mockSkillProvider,
-      subAgentConfigs: mockSubAgentConfigs,
     } as unknown as RunnerContext;
 
     buildMessagesFromCtx(ctx, {} as AgentState);
@@ -102,7 +98,6 @@ describe('buildMessagesFromCtx', () => {
       expect.anything(),
       expect.objectContaining({
         skillProvider: mockSkillProvider,
-        subAgentConfigs: mockSubAgentConfigs,
       })
     );
   });

@@ -119,14 +119,13 @@ describe('IdleHandler', () => {
     expect(result.execState.preparedMessages!.length).toBeGreaterThan(0);
   });
 
-  it('should pass skillProvider and subAgentConfigs to assembler', () => {
+  it('should pass skillProvider to assembler', () => {
     const state = createMockState();
     const execState = createExecutionState();
     const build = vi.fn().mockReturnValue([{ role: 'user', content: 'hi' }]);
     const ctx = createMockCtx({
       messageAssembler: { build } as never,
       skillProvider: {} as never,
-      subAgentConfigs: new Map(),
     });
 
     handler.execute(ctx, state, execState);
@@ -135,7 +134,6 @@ describe('IdleHandler', () => {
       systemPrompt: undefined,
       model: 'test-model',
       skillProvider: expect.anything(),
-      subAgentConfigs: expect.anything(),
     });
   });
 });

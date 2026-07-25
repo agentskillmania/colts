@@ -15,7 +15,6 @@ import type {
 import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { IExecutionPolicy } from '../policy/types.js';
 import type { ISkillProvider } from '../skills/types.js';
-import type { SubAgentConfig } from '../subagent/types.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 
@@ -36,8 +35,6 @@ export interface PhaseHandlerContext {
   toolSchemaFormatter: IToolSchemaFormatter;
   /** Skill provider (optional, for skill-aware handlers) */
   skillProvider?: ISkillProvider;
-  /** Sub-agent configuration map (optional) */
-  subAgentConfigs?: Map<string, SubAgentConfig>;
   /** Execution policy for error handling decisions */
   executionPolicy: IExecutionPolicy;
   /** Runner-level configuration */

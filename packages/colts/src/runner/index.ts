@@ -22,7 +22,6 @@ import type {
 import type { AdvanceOptions } from '../execution/index.js';
 import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { IExecutionPolicy } from '../policy/types.js';
-import type { SubAgentConfig, DelegateResult, ISubAgentFactory } from '../subagent/types.js';
 import type { Tool as ColtsTool } from '../tools/registry.js';
 import type {
   AgentState,
@@ -52,8 +51,6 @@ import {
   updateState,
   updateTotalTokens,
 } from '../state/index.js';
-import { createDelegateTool } from '../subagent/delegate-tool.js';
-import { DefaultSubAgentFactory } from '../subagent/types.js';
 import { getToolsForLLM } from '../tools/llm-format.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { DefaultToolSchemaFormatter } from '../tools/schema-formatter.js';
@@ -117,20 +114,6 @@ export interface RunnerEventMap {
   'skill:start': { name: string; task: string; state?: AgentState; timestamp: number };
   /** Skill execution completed */
   'skill:end': { name: string; result: string; state?: AgentState; timestamp: number };
-
-  // ── SubAgent ──
-  /** Sub-agent started */
-  'subagent:start': { name: string; task: string; subtaskId?: string; timestamp: number };
-  /** Sub-agent completed */
-  'subagent:end': { name: string; result: DelegateResult; subtaskId?: string; timestamp: number };
-  /** Sub-agent token (real-time text streaming) */
-  'subagent:token': { token: string; subtaskId: string; subagentName: string; timestamp?: number };
-  /** Sub-agent thinking content */
-  'subagent:thinking': { content: string; subtaskId: string; subagentName: string; timestamp?: number };
-  /** Sub-agent tool call started */
-  'subagent:tool:start': { action: unknown; subtaskId: string; subagentName: string; timestamp?: number };
-  /** Sub-agent tool call completed */
-  'subagent:tool:end': { result: unknown; subtaskId: string; subagentName: string; timestamp?: number };
 
   // ── LLM call (aligned with StreamEvent) ──
   /** Before LLM request is sent */
@@ -201,11 +184,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private toolRegistry: IToolRegistry;
   private compressor?: IContextCompressor;
   private _skillProvider?: ISkillProvider;
-  private subAgentConfigs?: Map<string, SubAgentConfig>;
   private messageAssembler: IMessageAssembler;
   private phaseRouter: ReturnType<typeof createRouter>;
   private toolSchemaFormatter: IToolSchemaFormatter;
-  private subAgentFactory: ISubAgentFactory;
   private executionPolicy: IExecutionPolicy;
   private middlewareExecutor: MiddlewareExecutor;
   private hasMiddleware: boolean;
@@ -269,9 +250,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Initialize tool schema formatter
     this.toolSchemaFormatter = options.toolSchemaFormatter ?? new DefaultToolSchemaFormatter();
 
-    // Initialize sub-agent factory
-    this.subAgentFactory = options.subAgentFactory ?? new DefaultSubAgentFactory();
-
     // Initialize compressor
     if (options.compressor) {
       if (typeof options.compressor === 'object' && 'shouldCompress' in options.compressor) {
@@ -303,25 +281,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     if (this._skillProvider) {
       const loadSkillTool = createLoadSkillTool(this._skillProvider);
       this.toolRegistry.register(loadSkillTool);
-    }
-
-    // Initialize sub-agent configs and register delegate tool
-    if (options.subAgents && options.subAgents.length > 0) {
-      this.subAgentConfigs = new Map(options.subAgents.map((sa) => [sa.name, sa]));
-      const delegateTool = createDelegateTool({
-        subAgentConfigs: this.subAgentConfigs,
-        llmProvider: this.llmProvider,
-        model: this.options.model,
-        parentToolRegistry: this.toolRegistry,
-        // Forward the parent's skill provider so sub-agents that opt into
-        // inheritParentSkills get load_skill wired up by the factory.
-        parentSkillProvider: this._skillProvider,
-        subAgentFactory: this.subAgentFactory,
-        emit: (type: string, data: Record<string, unknown>) => {
-          this.emit(type as keyof RunnerEventMap, data as never);
-        },
-      });
-      this.toolRegistry.register(delegateTool);
     }
 
     // Initialize execution policy
@@ -436,7 +395,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       phaseRouter: this.phaseRouter,
       toolSchemaFormatter: this.toolSchemaFormatter,
       skillProvider: this._skillProvider,
-      subAgentConfigs: this.subAgentConfigs,
       executionPolicy: this.executionPolicy,
       options: {
         model: this.options.model,
@@ -466,7 +424,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       systemPrompt: this.options.systemPrompt,
       model: this.options.model,
       skillProvider: this._skillProvider,
-      subAgentConfigs: this.subAgentConfigs,
     });
   }
 

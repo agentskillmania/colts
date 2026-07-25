@@ -2,7 +2,7 @@
  * @fileoverview colts - ReAct Agent Framework for Development and Debugging
  *
  * Main entry point exporting types, state operations, tools, runner,
- * execution control, skills, and sub-agent capabilities.
+ * execution control, and skills.
  */
 
 // Types
@@ -94,11 +94,7 @@ export type { IMessageAssembler, BuildMessagesOptions } from './message-assemble
 export { DefaultMessageAssembler } from './message-assembler/default-assembler.js';
 
 // Runner
-export {
-  AgentRunner,
-  type RunnerOptions,
-  type RunnerEventMap,
-} from './runner/index.js';
+export { AgentRunner, type RunnerOptions, type RunnerEventMap } from './runner/index.js';
 
 // Per-request option types
 export type { PerRequestOptions, StepOptions, RunOptions } from './runner/options.js';
@@ -122,16 +118,6 @@ export {
 
 // Skills
 export { FilesystemSkillProvider, createLoadSkillTool } from './skills/index.js';
-
-// Subagent
-export type {
-  SubAgentConfig,
-  DelegateResult,
-  SubAgentStreamEvent,
-  ISubAgentFactory,
-} from './subagent/index.js';
-export { createDelegateTool, DefaultSubAgentFactory } from './subagent/index.js';
-export type { DelegateToolDeps } from './subagent/index.js';
 
 // Execution Engine
 export type { IPhaseHandler, PhaseHandlerContext } from './execution-engine/index.js';

@@ -15,7 +15,6 @@ import type { IPhaseHandler } from '../execution-engine/types.js';
 import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { IExecutionPolicy } from '../policy/types.js';
 import type { ISkillProvider } from '../skills/types.js';
-import type { SubAgentConfig } from '../subagent/types.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 import type { AgentState, ILLMProvider, IToolRegistry } from '../types.js';
 
@@ -32,8 +31,6 @@ export interface RunnerContext {
   /** Tool schema formatter for converting tools to LLM format */
   toolSchemaFormatter: IToolSchemaFormatter;
   skillProvider?: ISkillProvider;
-  /** Sub-agent configuration map (name → SubAgentConfig) */
-  subAgentConfigs?: Map<string, SubAgentConfig>;
   /** Execution policy for error handling decisions */
   executionPolicy: IExecutionPolicy;
   options: {
@@ -112,7 +109,6 @@ export function buildMessagesFromCtx(ctx: RunnerContext, state: AgentState): Mes
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,
     skillProvider: ctx.skillProvider,
-    subAgentConfigs: ctx.subAgentConfigs,
     enablePromptThinking: ctx.options.enablePromptThinking,
   });
 }

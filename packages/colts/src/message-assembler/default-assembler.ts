@@ -6,7 +6,7 @@
  * compression summaries, and conversation history.
  *
  * KV-cache design:
- * - Static prefix: system prompt + instructions + skill catalog + sub-agents + thinking guidance
+ * - Static prefix: system prompt + instructions + skill catalog + thinking guidance
  * - Active skill instructions persist in history as `load_skill` tool results,
  *   so no dynamic reminder is injected — the static prefix stays stable for caching
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
@@ -65,16 +65,6 @@ export class DefaultMessageAssembler implements IMessageAssembler {
       systemParts.push(
         'Before answering or using tools, please think step by step inside <think></think> tags. ' +
           'After the closing </think> tag, provide your final response or tool calls.'
-      );
-    }
-
-    // Sub-agent list — static
-    if (opts.subAgentConfigs && opts.subAgentConfigs.size > 0) {
-      const subAgentLines = Array.from(opts.subAgentConfigs.values()).map(
-        (sa) => `- ${sa.name}: ${sa.description}`
-      );
-      systemParts.push(
-        `Available sub-agents:\n${subAgentLines.join('\n')}\nUse the delegate tool to delegate tasks to specialized sub-agents.`
       );
     }
 

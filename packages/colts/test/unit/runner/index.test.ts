@@ -8,7 +8,6 @@ import { AgentRunner } from '../../../src/runner/index.js';
 import { createAgentState, addUserMessage, addAssistantMessage } from '../../../src/state/index.js';
 import type { AgentConfig, IContextCompressor, CompressResult } from '../../../src/types.js';
 import type { ISkillProvider, SkillManifest } from '../../../src/skills/types.js';
-import type { SubAgentConfig } from '../../../src/subagent/types.js';
 import { FilesystemSkillProvider } from '../../../src/skills/filesystem-provider.js';
 import type { IMessageAssembler } from '../../../src/message-assembler/types.js';
 import { createCallOnlyMockLLMClient } from '../../helpers/mock-llm.js';
@@ -117,7 +116,7 @@ describe('AgentRunner', () => {
         tokens: { input: 1, output: 1 },
         stopReason: 'stop',
       };
-      mockStreamResponse(client,mockResponse);
+      mockStreamResponse(client, mockResponse);
 
       const customAssembler: IMessageAssembler = {
         build: vi.fn().mockReturnValue([
@@ -147,7 +146,7 @@ describe('AgentRunner', () => {
   describe('message building', () => {
     it('should include all assistant messages in LLM context', async () => {
       const client = createMockClient();
-      mockStreamResponse(client,{
+      mockStreamResponse(client, {
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -194,7 +193,7 @@ describe('AgentRunner', () => {
 
     it('should include tool results in context', async () => {
       const client = createMockClient();
-      mockStreamResponse(client,{
+      mockStreamResponse(client, {
         content: 'Response',
         tokens: { input: 10, output: 5 },
         stopReason: 'stop',
@@ -282,7 +281,7 @@ describe('AgentRunner', () => {
 
     it('should auto-compress during step() when threshold exceeded', async () => {
       const client = createMockClient();
-      mockStreamResponse(client,{
+      mockStreamResponse(client, {
         content: 'Final answer',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -315,7 +314,7 @@ describe('AgentRunner', () => {
 
     it('should not compress when shouldCompress returns false', async () => {
       const client = createMockClient();
-      mockStreamResponse(client,{
+      mockStreamResponse(client, {
         content: 'Final answer',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -342,7 +341,7 @@ describe('AgentRunner', () => {
 
     it('should build messages with compression summary', async () => {
       const client = createMockClient();
-      mockStreamResponse(client,{
+      mockStreamResponse(client, {
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -479,7 +478,7 @@ describe('AgentRunner', () => {
 
     it('should auto-register load_skill tool when skillProvider exists', async () => {
       const client = createMockClient();
-      mockStreamResponse(client,{
+      mockStreamResponse(client, {
         content: 'Done',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -516,7 +515,7 @@ describe('AgentRunner', () => {
 
     it('should include skill list in system prompt when skillProvider has skills', async () => {
       const client = createMockClient();
-      mockStreamResponse(client,{
+      mockStreamResponse(client, {
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -556,7 +555,7 @@ describe('AgentRunner', () => {
 
     it('should not include skill section when skillProvider has no skills', async () => {
       const client = createMockClient();
-      mockStreamResponse(client,{
+      mockStreamResponse(client, {
         content: 'Response',
         tokens: { input: 5, output: 5 },
         stopReason: 'stop',
@@ -591,244 +590,6 @@ describe('AgentRunner', () => {
 
       const tools = runner.getToolRegistry().toToolSchemas();
       expect(tools.some((t) => t.function.name === 'load_skill')).toBe(false);
-    });
-  });
-
-  // ============================================================
-  // SubAgent integration
-  // ============================================================
-  describe('subagent integration', () => {
-    /** Mock token stats */
-    const mockTokens = { input: 10, output: 5 };
-
-    /** Create mock LLM Client (supports multiple response sequences) */
-    const createMultiResponseClient = createCallOnlyMockLLMClient;
-
-    /** Create test sub-agent configs */
-    const createTestSubAgents = (): SubAgentConfig[] => [
-      {
-        name: 'researcher',
-        description: 'Information research specialist',
-        config: {
-          name: 'researcher',
-          instructions: 'You are a research specialist.',
-          tools: [{ name: 'search', description: 'Search the web', parameters: {} }],
-        },
-        maxSteps: 5,
-      },
-      {
-        name: 'writer',
-        description: 'Content writing specialist',
-        config: {
-          name: 'writer',
-          instructions: 'You are a writing specialist.',
-          tools: [],
-        },
-      },
-    ];
-
-    it('should auto-register delegate tool when subAgents are provided', () => {
-      const client = createMockClient();
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        subAgents: createTestSubAgents(),
-      });
-
-      const tools = runner.getToolRegistry().toToolSchemas();
-      const delegateTool = tools.find((t) => t.function.name === 'delegate');
-      expect(delegateTool).toEqual(
-        expect.objectContaining({
-          function: expect.objectContaining({
-            description:
-              'Delegate a task to a specialized sub-agent. Use when a task requires specific expertise or tools that a sub-agent possesses.',
-          }),
-        })
-      );
-    });
-
-    it('should not register delegate tool when subAgents are not provided', () => {
-      const client = createMockClient();
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const tools = runner.getToolRegistry().toToolSchemas();
-      expect(tools.some((t) => t.function.name === 'delegate')).toBe(false);
-    });
-
-    it('should not register delegate tool for empty subAgents array', () => {
-      const client = createMockClient();
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        subAgents: [],
-      });
-
-      const tools = runner.getToolRegistry().toToolSchemas();
-      expect(tools.some((t) => t.function.name === 'delegate')).toBe(false);
-    });
-
-    it('should inject sub-agent list into system prompt', async () => {
-      const client = createMockClient();
-      mockStreamResponse(client,{
-        content: 'Response',
-        tokens: { input: 5, output: 5 },
-        stopReason: 'stop',
-      });
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        subAgents: createTestSubAgents(),
-      });
-
-      const state = createAgentState(defaultConfig);
-      await runner.run(addUserMessage(state, 'Hello'));
-
-      const callArg = vi.mocked(client.stream).mock.calls[0][0];
-      const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
-
-      // System prompt should contain sub-agent list
-      expect(firstUserMsg?.content).toContain('Available sub-agents:');
-      expect(firstUserMsg?.content).toContain('researcher: Information research specialist');
-      expect(firstUserMsg?.content).toContain('writer: Content writing specialist');
-      expect(firstUserMsg?.content).toContain('Use the delegate tool');
-    });
-
-    it('should not include sub-agent related content in system prompt when no sub-agents are configured', async () => {
-      const client = createMockClient();
-      mockStreamResponse(client,{
-        content: 'Response',
-        tokens: { input: 5, output: 5 },
-        stopReason: 'stop',
-      });
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-      });
-
-      const state = createAgentState(defaultConfig);
-      await runner.run(addUserMessage(state, 'Hello'));
-
-      const callArg = vi.mocked(client.stream).mock.calls[0][0];
-      const firstUserMsg = callArg.messages.find((m: { role: string }) => m.role === 'user');
-
-      expect(firstUserMsg?.content).not.toContain('Available sub-agents:');
-    });
-
-    it('delegate tool should be executable through registry', async () => {
-      // Main agent calls LLM and returns delegate tool call
-      // Sub-agent LLM call (inside delegate tool) also needs a response
-      const client = createMultiResponseClient([
-        {
-          // Sub-agent LLM response
-          content: 'Research complete: found 3 relevant papers.',
-          toolCalls: [],
-          tokens: mockTokens,
-          stopReason: 'stop',
-        },
-      ]);
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        subAgents: createTestSubAgents(),
-      });
-
-      // Execute delegate tool directly through registry
-      const result = await runner.getToolRegistry().execute('delegate', {
-        agent: 'researcher',
-        task: 'Research TypeScript',
-      });
-
-      expect(result).toEqual(
-        expect.objectContaining({
-          status: 'success',
-          answer: 'Research complete: found 3 relevant papers.',
-          totalSteps: 1,
-        })
-      );
-    });
-
-    it('delegate tool should handle unknown sub-agent', async () => {
-      const client = createMockClient();
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        subAgents: createTestSubAgents(),
-      });
-
-      const result = await runner.getToolRegistry().execute('delegate', {
-        agent: 'unknown_agent',
-        task: 'Do something',
-      });
-
-      const delegateResult = result as { status: string; error: string; totalSteps: number };
-      expect(delegateResult.status).toBe('error');
-      expect(delegateResult.error).toContain('Unknown sub-agent');
-      expect(delegateResult.totalSteps).toBe(0);
-    });
-
-    it('subAgents should coexist with other options (skills, tools)', () => {
-      const client = createMockClient();
-      const skillProvider = {
-        getManifest: vi.fn(),
-        loadInstructions: vi.fn(),
-        loadResource: vi.fn(),
-        listSkills: vi.fn(() => []),
-        refresh: vi.fn(),
-      } as unknown as ISkillProvider;
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        subAgents: createTestSubAgents(),
-        skillProvider,
-        tools: [
-          {
-            name: 'custom_tool',
-            description: 'A custom tool',
-            parameters: { _def: {} },
-            execute: async () => 'ok',
-          },
-        ],
-      });
-
-      const tools = runner.getToolRegistry().toToolSchemas();
-      const toolNames = tools.map((t) => t.function.name);
-
-      // delegate, load_skill, custom_tool should all be registered
-      expect(toolNames).toContain('delegate');
-      expect(toolNames).toContain('load_skill');
-      expect(toolNames).toContain('custom_tool');
-    });
-
-    it('should correctly handle allowDelegation in sub-agent config', () => {
-      const client = createMockClient();
-      const subAgents: SubAgentConfig[] = [
-        {
-          name: 'delegator',
-          description: 'Can delegate to others',
-          config: {
-            name: 'delegator',
-            instructions: 'You can delegate.',
-            tools: [],
-          },
-          allowDelegation: true,
-        },
-      ];
-
-      const runner = new AgentRunner({
-        model: 'gpt-4',
-        llmClient: client,
-        subAgents,
-      });
-
-      const tools = runner.getToolRegistry().toToolSchemas();
-      expect(tools.map((t) => t.function.name)).toContain('delegate');
     });
   });
 });

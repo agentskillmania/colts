@@ -9,7 +9,6 @@
 import type { Message as PiAIMessage } from '@mariozechner/pi-ai';
 
 import type { ISkillProvider } from '../skills/types.js';
-import type { SubAgentConfig } from '../subagent/types.js';
 import type { AgentState } from '../types.js';
 
 /**
@@ -26,8 +25,6 @@ export interface BuildMessagesOptions {
   model: string;
   /** Skill provider for injecting skill list into system prompt */
   skillProvider?: ISkillProvider;
-  /** Sub-agent config map for injecting sub-agent list into system prompt */
-  subAgentConfigs?: Map<string, SubAgentConfig>;
   /** Enable prompt-level thinking guidance */
   enablePromptThinking?: boolean;
 }

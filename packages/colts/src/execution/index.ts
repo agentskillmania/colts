@@ -11,7 +11,6 @@ import { produce, type Draft } from 'immer';
 import type { HumanRequest } from '../hitl/types.js';
 import type { ToolCall } from '../parser/index.js';
 import type { PerRequestOptions } from '../runner/options.js';
-import type { DelegateResult } from '../subagent/types.js';
 import type { AgentState, Message } from '../types.js';
 
 // ---------------------------------------------------------------------------
@@ -30,9 +29,6 @@ export type ToolPostEffect =
   | { type: 'skill:loaded'; name: string; tokenCount: number; timestamp: number }
   | { type: 'skill:start'; name: string; task: string; state: AgentState; timestamp: number }
   | { type: 'skill:end'; name: string; result: string; state: AgentState; timestamp: number }
-  // SubAgent lifecycle
-  | { type: 'subagent:start'; name: string; task: string; timestamp: number }
-  | { type: 'subagent:end'; name: string; result: unknown; timestamp: number }
   // Tool completion
   | { type: 'tool:end'; result: unknown; callId?: string; timestamp: number }
   | { type: 'tools:end'; results: Record<string, unknown>; timestamp: number }
@@ -98,8 +94,6 @@ export type StreamEvent =
   | { type: 'skill:loaded'; name: string; tokenCount: number; timestamp: number }
   | { type: 'skill:start'; name: string; task: string; state?: AgentState; timestamp: number }
   | { type: 'skill:end'; name: string; result: string; state?: AgentState; timestamp: number }
-  | { type: 'subagent:start'; name: string; task: string; timestamp: number }
-  | { type: 'subagent:end'; name: string; result: DelegateResult; timestamp: number }
   | {
       type: 'llm:request';
       messages: Array<{ role: string; content: string }>;

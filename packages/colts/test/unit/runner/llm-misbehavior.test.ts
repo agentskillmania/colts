@@ -99,57 +99,6 @@ describe('Naughty LLM - misbehavior edge cases', () => {
     expect(finalState.context.skillState?.current).toBeNull();
   });
 
-  it('should emit subagent:start and subagent:end for delegate tool via blocking run', async () => {
-    // The delegate tool now emits subagent:start/subagent:end itself through the
-    // runner's EventEmitter (previously these were synthesized as effects by
-    // ToolResultHandler). Use the subAgents option so the runner registers a
-    // real delegate tool wired to its EventEmitter.
-    const client = createMockLLMClient([
-      // Main agent: calls delegate
-      {
-        content: '',
-        toolCalls: [
-          { id: 'tc1', name: 'delegate', arguments: { agent: 'helper', task: 'Assist user' } },
-        ],
-        tokens: mockTokens,
-        stopReason: 'toolUse',
-      },
-      // Sub-agent LLM response (consumed inside the delegate tool run)
-      {
-        content: 'Sub-agent completed the task',
-        toolCalls: [],
-        tokens: mockTokens,
-        stopReason: 'stop',
-      },
-      // Main agent: final answer after delegation
-      { content: 'Delegation complete', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },
-    ]);
-
-    const subAgents = [
-      {
-        name: 'helper',
-        description: 'Helper sub-agent',
-        config: {
-          name: 'helper',
-          instructions: 'You are a helpful assistant.',
-          tools: [],
-        },
-      },
-    ];
-
-    const runner = new AgentRunner({ model: 'gpt-4', llmClient: client, subAgents });
-    const state = createAgentState(defaultConfig);
-
-    const events: string[] = [];
-    runner.on('subagent:start', () => events.push('subagent:start'));
-    runner.on('subagent:end', () => events.push('subagent:end'));
-
-    await runner.run(state);
-
-    expect(events).toContain('subagent:start');
-    expect(events).toContain('subagent:end');
-  });
-
   it('should reject cyclic skill loading during a run', async () => {
     // Load outer, then try to load outer again (cyclic)
     const registry = createSkillToolRegistry();
