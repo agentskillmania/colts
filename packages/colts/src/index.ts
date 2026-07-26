@@ -24,6 +24,8 @@ export type {
   LLMProviderEntry,
   ModelEntry,
   ToolQuickInit,
+  // Token usage
+  TokenStats,
   // Context Compression
   CompressionMeta,
   CompressResult,
