@@ -467,8 +467,10 @@ export interface CallOptions {
  * Token usage statistics.
  *
  * @remarks
- * Tracks input (prompt) and output (completion) token counts.
- * These values are returned by the LLM provider's API.
+ * Tracks input (prompt) and output (completion) token counts, plus
+ * cache read/write counts. These values are returned by the LLM provider's API.
+ * When the provider does not return usage data, callers may fall back to
+ * local estimation (see colts `estimateTokens`).
  */
 export interface TokenStats {
   /**
@@ -486,6 +488,25 @@ export interface TokenStats {
    * Includes all tokens in the model's response.
    */
   output: number;
+
+  /**
+   * Number of input tokens served from the provider's prompt cache.
+   *
+   * @remarks
+   * When the provider supports prompt caching (e.g. Anthropic), this is the
+   * number of input tokens that were a cache hit (not billed at full rate).
+   * Providers without caching support report 0.
+   */
+  cacheRead: number;
+
+  /**
+   * Number of input tokens written to the provider's prompt cache.
+   *
+   * @remarks
+   * Tokens written to the cache for future reuse. Providers without caching
+   * support report 0.
+   */
+  cacheWrite: number;
 }
 
 /**

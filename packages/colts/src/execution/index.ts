@@ -68,12 +68,12 @@ export type Phase =
  * Result of a single step (one ReAct cycle)
  */
 export type StepResult =
-  | { type: 'continue'; toolResult: unknown; actions: Action[]; tokens: TokenStats }
-  | { type: 'done'; answer: string; tokens: TokenStats }
-  | { type: 'error'; error: Error; tokens: TokenStats }
-  | { type: 'abort'; tokens: TokenStats }
-  | { type: 'stopped'; data?: unknown; tokens: TokenStats }
-  | { type: 'waiting-human'; request: HumanRequest; tokens: TokenStats };
+  | { type: 'continue'; toolResult: unknown; actions: Action[]; tokens: TokenStats; duration: number }
+  | { type: 'done'; answer: string; tokens: TokenStats; duration: number }
+  | { type: 'error'; error: Error; tokens: TokenStats; duration: number }
+  | { type: 'abort'; tokens: TokenStats; duration: number }
+  | { type: 'stopped'; data?: unknown; tokens: TokenStats; duration: number }
+  | { type: 'waiting-human'; request: HumanRequest; tokens: TokenStats; duration: number };
 
 /**
  * Events emitted during step/advance stream
@@ -105,6 +105,8 @@ export type StreamEvent =
       type: 'llm:response';
       text: string;
       toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
+      /** Token usage for this LLM call (includes fallback estimates when provider omits usage) */
+      tokens?: TokenStats;
       timestamp: number;
     }
   | { type: 'thinking'; content: string; timestamp: number }
@@ -222,12 +224,12 @@ export function isTerminalPhase(phase: Phase): boolean {
  * Result of a complete run (multiple ReAct cycles)
  */
 export type RunResult =
-  | { type: 'success'; answer: string; totalSteps: number; tokens: TokenStats }
-  | { type: 'max_steps'; totalSteps: number; tokens: TokenStats }
-  | { type: 'error'; error: Error; totalSteps: number; tokens: TokenStats }
-  | { type: 'abort'; totalSteps: number; tokens: TokenStats }
-  | { type: 'stopped'; data?: string; totalSteps: number; tokens: TokenStats }
-  | { type: 'waiting-human'; request: HumanRequest; totalSteps: number; tokens: TokenStats };
+  | { type: 'success'; answer: string; totalSteps: number; tokens: TokenStats; duration: number }
+  | { type: 'max_steps'; totalSteps: number; tokens: TokenStats; duration: number }
+  | { type: 'error'; error: Error; totalSteps: number; tokens: TokenStats; duration: number }
+  | { type: 'abort'; totalSteps: number; tokens: TokenStats; duration: number }
+  | { type: 'stopped'; data?: string; totalSteps: number; tokens: TokenStats; duration: number }
+  | { type: 'waiting-human'; request: HumanRequest; totalSteps: number; tokens: TokenStats; duration: number };
 
 /**
  * Events emitted during runStream()

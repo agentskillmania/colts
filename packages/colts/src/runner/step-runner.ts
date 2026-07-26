@@ -75,14 +75,15 @@ export class StepRunner {
   ): Promise<{ state: AgentState; result: StepResult }> {
     let currentExecState = createExecutionState();
     let currentState = state;
-    let stepTokens: TokenStats = { input: 0, output: 0 };
+    let stepTokens: TokenStats = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
     const stepIdx = stepNumber ?? 0;
+    const stepStartTime = Date.now();
 
     try {
       while (!isTerminalPhase(currentExecState.phase)) {
         if (options?.signal?.aborted) {
           emit('abort', { step: stepIdx, timestamp: Date.now() });
-          return { state: currentState, result: { type: 'abort', tokens: stepTokens } };
+          return { state: currentState, result: { type: 'abort', tokens: stepTokens, duration: Date.now() - stepStartTime } };
         }
 
         const from = currentExecState.phase;
@@ -96,7 +97,10 @@ export class StepRunner {
           stepTokens
         );
         if (beforeResult.shortCircuit) {
-          return beforeResult.value;
+          return {
+            ...beforeResult.value,
+            result: { ...beforeResult.value.result, duration: Date.now() - stepStartTime },
+          };
         }
         currentState = beforeResult.state;
         currentExecState = beforeResult.execState;
@@ -112,7 +116,10 @@ export class StepRunner {
         // ── afterAdvance ──
         const afterResult = await this.runAfterAdvance(result, stepIdx, stepTokens);
         if (afterResult.shortCircuit) {
-          return afterResult.value;
+          return {
+            ...afterResult.value,
+            result: { ...afterResult.value.result, duration: Date.now() - stepStartTime },
+          };
         }
         const effectiveResult = afterResult.result;
 
@@ -132,7 +139,7 @@ export class StepRunner {
 
         if (options?.signal?.aborted) {
           emit('abort', { step: stepIdx, timestamp: Date.now() });
-          return { state: nextState, result: { type: 'abort', tokens: stepTokens } };
+          return { state: nextState, result: { type: 'abort', tokens: stepTokens, duration: Date.now() - stepStartTime } };
         }
 
         currentState = await maybeCompress(this.compressor, nextState);
@@ -153,7 +160,10 @@ export class StepRunner {
           stepTokens
         );
         if (control) {
-          return control;
+          return {
+            ...control,
+            result: { ...control.result },
+          };
         }
       }
 
@@ -165,7 +175,7 @@ export class StepRunner {
       // Return error result (consistent with streaming mode)
       return {
         state: currentState,
-        result: { type: 'error', error: err, tokens: stepTokens },
+        result: { type: 'error', error: err, tokens: stepTokens, duration: Date.now() - stepStartTime },
       };
     }
   }
@@ -204,7 +214,7 @@ export class StepRunner {
             result: {
               type: 'stopped',
               data: chain.stopResult.phase.answer,
-              tokens: stepTokens,
+              tokens: stepTokens, duration: 0,
             },
           },
         };
@@ -218,7 +228,7 @@ export class StepRunner {
             result: {
               type: 'waiting-human',
               request: chain.stopResult.phase.request,
-              tokens: stepTokens,
+              tokens: stepTokens, duration: 0,
             },
           },
         };
@@ -231,7 +241,7 @@ export class StepRunner {
           result: {
             type: 'error',
             error: new Error('Stopped by middleware'),
-            tokens: stepTokens,
+            tokens: stepTokens, duration: 0,
           },
         },
       };
@@ -274,7 +284,7 @@ export class StepRunner {
             result: {
               type: 'stopped',
               data: chain.stopResult.phase.answer,
-              tokens: stepTokens,
+              tokens: stepTokens, duration: 0,
             },
           },
         };
@@ -288,7 +298,7 @@ export class StepRunner {
             result: {
               type: 'waiting-human',
               request: chain.stopResult.phase.request,
-              tokens: stepTokens,
+              tokens: stepTokens, duration: 0,
             },
           },
         };
@@ -301,7 +311,7 @@ export class StepRunner {
           result: {
             type: 'error',
             error: new Error('Stopped by middleware'),
-            tokens: stepTokens,
+            tokens: stepTokens, duration: 0,
           },
         },
       };
@@ -344,14 +354,14 @@ export class StepRunner {
     if (effectiveResult.done && effectiveResult.phase.type === 'completed') {
       return {
         state: currentState,
-        result: { type: 'done', answer: effectiveResult.phase.answer, tokens: stepTokens },
+        result: { type: 'done', answer: effectiveResult.phase.answer, tokens: stepTokens, duration: 0 },
       };
     }
 
     if (effectiveResult.done && effectiveResult.phase.type === 'error') {
       return {
         state: currentState,
-        result: { type: 'error', error: effectiveResult.phase.error, tokens: stepTokens },
+        result: { type: 'error', error: effectiveResult.phase.error, tokens: stepTokens, duration: 0 },
       };
     }
 
@@ -365,7 +375,7 @@ export class StepRunner {
         currentExecState.allActions ?? (currentExecState.action ? [currentExecState.action] : []);
       return {
         state: currentState,
-        result: { type: 'continue', toolResult, actions, tokens: stepTokens },
+        result: { type: 'continue', toolResult, actions, tokens: stepTokens, duration: 0 },
       };
     }
 

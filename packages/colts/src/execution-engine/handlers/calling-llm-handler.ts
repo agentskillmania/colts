@@ -105,10 +105,31 @@ export class CallingLLMHandler implements IPhaseHandler {
       return { state, execState, phase: execState.phase, done: false };
     }
 
+    // Fallback estimation: when the provider did not return usage data
+    // (input/output are 0), estimate locally via tiktoken so the token
+    // accounting pipeline never produces silent zeros.
+    if (roundTokens) {
+      if (roundTokens.input === 0 && estimatedContextSize > 0) {
+        roundTokens = { ...roundTokens, input: estimatedContextSize };
+      }
+      if (roundTokens.output === 0 && accumulatedContent) {
+        roundTokens = { ...roundTokens, output: estimateTokens(accumulatedContent) };
+      }
+    } else {
+      // No done event at all — full estimation fallback
+      roundTokens = {
+        input: estimatedContextSize,
+        output: accumulatedContent ? estimateTokens(accumulatedContent) : 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      };
+    }
+
     // Emit llm:response event after accumulation
     ctx.emit('llm:response', {
       text: accumulatedContent,
       toolCalls: responseToolCalls ?? null,
+      tokens: roundTokens,
       timestamp: Date.now(),
     });
 

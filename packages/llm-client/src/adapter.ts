@@ -388,17 +388,19 @@ export class PiAiAdapter {
    * Convert pi-ai Usage to TokenStats.
    *
    * @param usage - Usage object from pi-ai, or undefined
-   * @returns TokenStats with input and output counts
+   * @returns TokenStats with input, output, and cache counts
    *
    * @internal
    */
   private usageToTokenStats(usage: Usage | undefined): TokenStats {
     if (!usage) {
-      return { input: 0, output: 0 };
+      return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
     }
     return {
       input: usage.input,
       output: usage.output,
+      cacheRead: usage.cacheRead,
+      cacheWrite: usage.cacheWrite,
     };
   }
 

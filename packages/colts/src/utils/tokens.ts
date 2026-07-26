@@ -18,5 +18,7 @@ export function addTokenStats(a?: TokenStats, b?: TokenStats): TokenStats {
   return {
     input: (a?.input ?? 0) + (b?.input ?? 0),
     output: (a?.output ?? 0) + (b?.output ?? 0),
+    cacheRead: (a?.cacheRead ?? 0) + (b?.cacheRead ?? 0),
+    cacheWrite: (a?.cacheWrite ?? 0) + (b?.cacheWrite ?? 0),
   };
 }

@@ -30,6 +30,8 @@ const defaultConfig: AgentConfig = {
 const mockTokens = {
   input: 10,
   output: 5,
+  cacheRead: 0,
+  cacheWrite: 0,
 };
 
 describe('run()', () => {
@@ -125,8 +127,13 @@ describe('run()', () => {
     }
 
     // Token tracking: accumulated across 2 steps
-    expect(result.tokens).toEqual({ input: 20, output: 10 });
-    expect(finalState.context.totalTokens).toEqual({ input: 20, output: 10 });
+    expect(result.tokens).toEqual({ input: 20, output: 10, cacheRead: 0, cacheWrite: 0 });
+    expect(finalState.context.totalTokens).toEqual({
+      input: 20,
+      output: 10,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
 
     expect(finalState.context.stepCount).toBe(2);
     expect(state.context.stepCount).toBe(0);

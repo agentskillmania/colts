@@ -8,13 +8,28 @@ describe('Token utilities', () => {
   });
 
   it('addTokenStats should sum two TokenStats', () => {
-    const a = { input: 10, output: 5 };
-    const b = { input: 3, output: 7 };
-    expect(addTokenStats(a, b)).toEqual({ input: 13, output: 12 });
+    const a = { input: 10, output: 5, cacheRead: 2, cacheWrite: 1 };
+    const b = { input: 3, output: 7, cacheRead: 4, cacheWrite: 0 };
+    expect(addTokenStats(a, b)).toEqual({
+      input: 13,
+      output: 12,
+      cacheRead: 6,
+      cacheWrite: 1,
+    });
   });
 
   it('addTokenStats should handle undefined gracefully', () => {
-    expect(addTokenStats(undefined, undefined)).toEqual({ input: 0, output: 0 });
-    expect(addTokenStats({ input: 5, output: 3 }, undefined)).toEqual({ input: 5, output: 3 });
+    expect(addTokenStats(undefined, undefined)).toEqual({
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
+    expect(addTokenStats({ input: 5, output: 3, cacheRead: 0, cacheWrite: 0 }, undefined)).toEqual({
+      input: 5,
+      output: 3,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
   });
 });

@@ -24,6 +24,8 @@ const defaultConfig: AgentConfig = {
 const mockTokens = {
   input: 10,
   output: 5,
+  cacheRead: 0,
+  cacheWrite: 0,
 };
 
 describe('step()', () => {

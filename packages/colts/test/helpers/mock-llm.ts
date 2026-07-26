@@ -58,7 +58,7 @@ export interface MockLLMOptions {
 const DEFAULT_FALLBACK: LLMResponse = {
   content: 'Default response',
   toolCalls: [],
-  tokens: { input: 10, output: 5 },
+  tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
   stopReason: 'stop',
 };
 
