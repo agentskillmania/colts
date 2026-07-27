@@ -59,6 +59,9 @@ describe('run()', () => {
     expect(result.tokens).toEqual(mockTokens);
     expect(finalState.context.totalTokens).toEqual(mockTokens);
 
+    // Duration tracking
+    expect(result.duration).toBeGreaterThanOrEqual(0);
+
     // Original state is immutable
     expect(state.context.stepCount).toBe(0);
     expect(finalState.context.stepCount).toBe(1);
@@ -134,6 +137,9 @@ describe('run()', () => {
       cacheRead: 0,
       cacheWrite: 0,
     });
+
+    // Duration tracking
+    expect(result.duration).toBeGreaterThanOrEqual(0);
 
     expect(finalState.context.stepCount).toBe(2);
     expect(state.context.stepCount).toBe(0);

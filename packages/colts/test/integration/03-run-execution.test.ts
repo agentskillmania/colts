@@ -65,6 +65,9 @@ describe('User Story: Run Execution with Real LLM', () => {
         expect(finalState.context.totalTokens!.input).toBeGreaterThan(0);
         expect(finalState.context.totalTokens!.output).toBeGreaterThan(0);
 
+        // And: Duration is tracked
+        expect(result.duration).toBeGreaterThanOrEqual(0);
+
         // And: State should be updated
         expect(finalState.context.stepCount).toBeGreaterThanOrEqual(1);
         expect(finalState.context.messages.length).toBeGreaterThan(0);

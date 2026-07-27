@@ -271,6 +271,82 @@ describe('CallingLLMHandler', () => {
     expect(emittedEvents.some((e) => e.type === 'llm:response')).toBe(true);
   });
 
+  it('should estimate tokens when provider returns zero usage', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.preparedMessages = [{ role: 'user', content: 'What is 2+2?' }] as never;
+    const ctx = createMockCtx({
+      llmProvider: {
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          yield { type: 'text', delta: 'The answer is 4.', accumulatedContent: 'The answer is 4.' };
+          // Provider returns zero usage — should trigger fallback estimation
+          yield { type: 'done', roundTotalTokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+        }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
+      } as never,
+    });
+
+    const result = await handler.execute(ctx, state, execState);
+
+    // Fallback estimation should have filled in non-zero tokens
+    expect(result.tokens).toBeDefined();
+    expect(result.tokens!.input).toBeGreaterThan(0); // estimated from estimatedContextSize
+    expect(result.tokens!.output).toBeGreaterThan(0); // estimated from accumulatedContent
+  });
+
+  it('should fully estimate tokens when no done event is emitted', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.preparedMessages = [{ role: 'user', content: 'Hello world test' }] as never;
+    const ctx = createMockCtx({
+      llmProvider: {
+        call: vi.fn(),
+        // Stream ends without a 'done' event — no usage data at all
+        stream: vi.fn().mockImplementation(async function* () {
+          yield { type: 'text', delta: 'Hi!', accumulatedContent: 'Hi!' };
+        }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
+      } as never,
+    });
+
+    const result = await handler.execute(ctx, state, execState);
+
+    // Full estimation fallback — both input and output should be non-zero
+    expect(result.tokens).toBeDefined();
+    expect(result.tokens!.input).toBeGreaterThan(0);
+    expect(result.tokens!.output).toBeGreaterThan(0);
+    expect(result.tokens!.cacheRead).toBe(0);
+    expect(result.tokens!.cacheWrite).toBe(0);
+  });
+
+  it('should emit llm:response with tokens from provider', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.preparedMessages = [{ role: 'user', content: 'hi' }] as never;
+    const emittedEvents: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const ctx = createMockCtx({
+      llmProvider: {
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          yield { type: 'text', delta: 'Hello', accumulatedContent: 'Hello' };
+          yield {
+            type: 'done',
+            roundTotalTokens: { input: 42, output: 7, cacheRead: 3, cacheWrite: 1 },
+          };
+        }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
+      } as never,
+      emit: (type: string, data: Record<string, unknown>) => emittedEvents.push({ type, data }),
+    });
+
+    await handler.execute(ctx, state, execState);
+
+    const responseEvent = emittedEvents.find((e) => e.type === 'llm:response');
+    expect(responseEvent).toBeDefined();
+    expect(responseEvent!.data.tokens).toEqual({ input: 42, output: 7, cacheRead: 3, cacheWrite: 1 });
+  });
+
   it('should emit thinking events when thinking content streams', async () => {
     const state = createMockState();
     const execState = createExecutionState();

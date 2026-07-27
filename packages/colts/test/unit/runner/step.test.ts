@@ -63,6 +63,9 @@ describe('step()', () => {
     expect(result.tokens).toEqual(mockTokens);
     expect(newState.context.totalTokens).toEqual(mockTokens);
 
+    // Duration tracking
+    expect(result.duration).toBeGreaterThanOrEqual(0);
+
     // State should be updated
     expect(newState.context.stepCount).toBe(1);
     expect(newState.context.messages).toHaveLength(1);
