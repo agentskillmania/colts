@@ -131,6 +131,28 @@ describe('Step 0: AgentState', () => {
       state = addUserMessage(state, 'Second');
       expect(state.context.messages[0].id).not.toBe(state.context.messages[1].id);
     });
+
+    it('should throw when content exceeds maxLength', () => {
+      const state = createAgentState(baseConfig);
+      const longContent = 'a'.repeat(101);
+      expect(() => addUserMessage(state, longContent, 100)).toThrow(
+        /maximum length of 100/
+      );
+    });
+
+    it('should accept content exactly at maxLength boundary', () => {
+      const state = createAgentState(baseConfig);
+      const exactContent = 'a'.repeat(100);
+      const newState = addUserMessage(state, exactContent, 100);
+      expect(newState.context.messages).toHaveLength(1);
+    });
+
+    it('should not check length when maxLength is omitted', () => {
+      const state = createAgentState(baseConfig);
+      const hugeContent = 'a'.repeat(1_000_000);
+      const newState = addUserMessage(state, hugeContent);
+      expect(newState.context.messages).toHaveLength(1);
+    });
   });
 
   describe('addAssistantMessage', () => {

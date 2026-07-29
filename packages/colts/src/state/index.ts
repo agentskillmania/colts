@@ -60,13 +60,20 @@ export function updateState(
 }
 
 /**
- * Add a user message to the conversation history
+ * Add a user message to the conversation history.
  *
  * @param state - Current state
  * @param content - Message content
+ * @param maxLength - Optional max character limit. Throws if exceeded.
  * @returns New state with the user message appended
+ * @throws {Error} If content.length > maxLength
  */
-export function addUserMessage(state: AgentState, content: string): AgentState {
+export function addUserMessage(state: AgentState, content: string, maxLength?: number): AgentState {
+  if (maxLength !== undefined && content.length > maxLength) {
+    throw new Error(
+      `Input exceeds maximum length of ${maxLength} characters (got ${content.length})`
+    );
+  }
   return updateState(state, (draft) => {
     draft.context.messages.push({
       id: randomUUID(),
