@@ -158,7 +158,9 @@ You are a literary critic. Analyze the given poem in one brief sentence.`,
         state = r1.state;
 
         // Now ask to load poet again (if LLM decides to do so)
-        const r2 = await runner.run(addUserMessage(state, 'Please load the poet skill again.'), { maxSteps: 5 });
+        const r2 = await runner.run(addUserMessage(state, 'Please load the poet skill again.'), {
+          maxSteps: 5,
+        });
 
         // Should succeed without infinite loop
         expect(r2.result.type).toBe('success');

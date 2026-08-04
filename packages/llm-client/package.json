@@ -2,7 +2,7 @@
   "name": "@agentskillmania/llm-client",
   "version": "0.3.0",
   "type": "module",
-  "description": "A unified LLM client with multi-provider support, concurrency control, priority queuing, and comprehensive token tracking.",
+  "description": "A unified LLM client with multi-provider support, concurrency control, and comprehensive token tracking.",
   "author": {
     "name": "yusangeng",
     "email": "yusangeng@outlook.com"
@@ -45,7 +45,6 @@
   "dependencies": {
     "@mariozechner/pi-ai": "^0.73.1",
     "eventemitter3": "^5.0.4",
-    "p-queue": "^8.0.0",
     "p-retry": "^6.0.0",
     "p-timeout": "^6.0.0"
   },

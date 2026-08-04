@@ -135,9 +135,7 @@ describe('Step 0: AgentState', () => {
     it('should throw when content exceeds maxLength', () => {
       const state = createAgentState(baseConfig);
       const longContent = 'a'.repeat(101);
-      expect(() => addUserMessage(state, longContent, 100)).toThrow(
-        /maximum length of 100/
-      );
+      expect(() => addUserMessage(state, longContent, 100)).toThrow(/maximum length of 100/);
     });
 
     it('should accept content exactly at maxLength boundary', () => {
@@ -149,7 +147,10 @@ describe('Step 0: AgentState', () => {
 
     it('should not check length when maxLength is omitted', () => {
       const state = createAgentState(baseConfig);
-      const hugeContent = 'a'.repeat(1_000_000);
+      // 1M chars would take minutes: js-tiktoken's encode is super-linear and
+      // the test only needs to prove the length check is skipped (1000 chars
+      // already exceeds the default maxLength of 100).
+      const hugeContent = 'a'.repeat(1000);
       const newState = addUserMessage(state, hugeContent);
       expect(newState.context.messages).toHaveLength(1);
     });

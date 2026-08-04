@@ -191,5 +191,4 @@ describe('AbortSignal (Step 16)', () => {
       expect(result.type).toBe('success');
     });
   });
-
 });

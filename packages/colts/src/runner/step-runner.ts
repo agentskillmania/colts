@@ -11,7 +11,7 @@ import type { RunnerContext } from './advance.js';
 import { executeAdvance } from './advance.js';
 import { maybeCompress } from './compression.js';
 import type { RunnerOptions, StepOptions } from './options.js';
-import { createExecutionState, isTerminalPhase, updateExecState } from '../execution/index.js';
+import { createExecutionState, isTerminalPhase } from '../execution/index.js';
 import type {
   StepResult,
   AdvanceResult,
@@ -83,7 +83,10 @@ export class StepRunner {
       while (!isTerminalPhase(currentExecState.phase)) {
         if (options?.signal?.aborted) {
           emit('abort', { step: stepIdx, timestamp: Date.now() });
-          return { state: currentState, result: { type: 'abort', tokens: stepTokens, duration: Date.now() - stepStartTime } };
+          return {
+            state: currentState,
+            result: { type: 'abort', tokens: stepTokens, duration: Date.now() - stepStartTime },
+          };
         }
 
         const from = currentExecState.phase;
@@ -139,7 +142,10 @@ export class StepRunner {
 
         if (options?.signal?.aborted) {
           emit('abort', { step: stepIdx, timestamp: Date.now() });
-          return { state: nextState, result: { type: 'abort', tokens: stepTokens, duration: Date.now() - stepStartTime } };
+          return {
+            state: nextState,
+            result: { type: 'abort', tokens: stepTokens, duration: Date.now() - stepStartTime },
+          };
         }
 
         currentState = await maybeCompress(this.compressor, nextState);
@@ -175,7 +181,12 @@ export class StepRunner {
       // Return error result (consistent with streaming mode)
       return {
         state: currentState,
-        result: { type: 'error', error: err, tokens: stepTokens, duration: Date.now() - stepStartTime },
+        result: {
+          type: 'error',
+          error: err,
+          tokens: stepTokens,
+          duration: Date.now() - stepStartTime,
+        },
       };
     }
   }
@@ -214,7 +225,8 @@ export class StepRunner {
             result: {
               type: 'stopped',
               data: chain.stopResult.phase.answer,
-              tokens: stepTokens, duration: 0,
+              tokens: stepTokens,
+              duration: 0,
             },
           },
         };
@@ -228,7 +240,8 @@ export class StepRunner {
             result: {
               type: 'waiting-human',
               request: chain.stopResult.phase.request,
-              tokens: stepTokens, duration: 0,
+              tokens: stepTokens,
+              duration: 0,
             },
           },
         };
@@ -241,7 +254,8 @@ export class StepRunner {
           result: {
             type: 'error',
             error: new Error('Stopped by middleware'),
-            tokens: stepTokens, duration: 0,
+            tokens: stepTokens,
+            duration: 0,
           },
         },
       };
@@ -284,7 +298,8 @@ export class StepRunner {
             result: {
               type: 'stopped',
               data: chain.stopResult.phase.answer,
-              tokens: stepTokens, duration: 0,
+              tokens: stepTokens,
+              duration: 0,
             },
           },
         };
@@ -298,7 +313,8 @@ export class StepRunner {
             result: {
               type: 'waiting-human',
               request: chain.stopResult.phase.request,
-              tokens: stepTokens, duration: 0,
+              tokens: stepTokens,
+              duration: 0,
             },
           },
         };
@@ -311,7 +327,8 @@ export class StepRunner {
           result: {
             type: 'error',
             error: new Error('Stopped by middleware'),
-            tokens: stepTokens, duration: 0,
+            tokens: stepTokens,
+            duration: 0,
           },
         },
       };
@@ -354,14 +371,24 @@ export class StepRunner {
     if (effectiveResult.done && effectiveResult.phase.type === 'completed') {
       return {
         state: currentState,
-        result: { type: 'done', answer: effectiveResult.phase.answer, tokens: stepTokens, duration: 0 },
+        result: {
+          type: 'done',
+          answer: effectiveResult.phase.answer,
+          tokens: stepTokens,
+          duration: 0,
+        },
       };
     }
 
     if (effectiveResult.done && effectiveResult.phase.type === 'error') {
       return {
         state: currentState,
-        result: { type: 'error', error: effectiveResult.phase.error, tokens: stepTokens, duration: 0 },
+        result: {
+          type: 'error',
+          error: effectiveResult.phase.error,
+          tokens: stepTokens,
+          duration: 0,
+        },
       };
     }
 

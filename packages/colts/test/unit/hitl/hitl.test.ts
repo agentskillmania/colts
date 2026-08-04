@@ -340,7 +340,10 @@ describe('HITL V2: Integration with runner', () => {
           toolCalls: [{ id: 'tc_1', name: 'delete_file', arguments: { path: '/tmp/x' } }],
         }),
         stream: vi.fn().mockImplementation(async function* () {
-          yield { type: 'tool_call', toolCall: { id: 'tc_1', name: 'delete_file', arguments: { path: '/tmp/x' } } };
+          yield {
+            type: 'tool_call',
+            toolCall: { id: 'tc_1', name: 'delete_file', arguments: { path: '/tmp/x' } },
+          };
           yield { type: 'done', roundTotalTokens: { input: 50, output: 20 } };
         }),
       };

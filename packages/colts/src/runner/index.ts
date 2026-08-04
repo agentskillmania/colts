@@ -44,19 +44,13 @@ import { DefaultExecutionPolicy } from '../policy/default-policy.js';
 import { FilesystemSkillProvider } from '../skills/filesystem-provider.js';
 import { createLoadSkillTool } from '../skills/index.js';
 import type { ISkillProvider } from '../skills/types.js';
-import {
-  addUserMessage,
-  addAssistantMessage,
-  incrementStepCount,
-  updateState,
-  updateTotalTokens,
-} from '../state/index.js';
+import { updateState } from '../state/index.js';
 import { getToolsForLLM } from '../tools/llm-format.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { DefaultToolSchemaFormatter } from '../tools/schema-formatter.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
 import { ConfigurationError } from '../types.js';
-import { addTokenStats, estimateTokens } from '../utils/tokens.js';
+import { addTokenStats } from '../utils/tokens.js';
 
 export type { RunnerOptions } from './options.js';
 
@@ -148,7 +142,7 @@ export interface RunnerEventMap {
  *
  * Design decisions:
  * - systemPrompt is set on Runner as a default, merged with AgentConfig.instructions
- * - priority is per-call, allowing dynamic prioritization of different requests
+ * - per-call options allow dynamic configuration of different requests
  *
  * @example
  * Basic usage:
@@ -159,12 +153,9 @@ export interface RunnerEventMap {
  *   systemPrompt: 'You are a helpful assistant.'
  * });
  *
- * // Blocking chat with default priority
+ * // Blocking chat
  * const result = await runner.chat(state, 'Hello!');
  * console.log(result.response);
- *
- * // High priority chat
- * const urgent = await runner.chat(state, 'Urgent!', { priority: 10 });
  *
  * // Streaming chat
  * for await (const chunk of runner.chatStream(state, 'Hello!')) {
@@ -645,7 +636,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         if (chain.state) stepState = chain.state;
         if (chain.stopped) {
           if (chain.result) {
-            return { state: stepState, result: { ...chain.result, duration: Date.now() - stepStartTime } };
+            return {
+              state: stepState,
+              result: { ...chain.result, duration: Date.now() - stepStartTime },
+            };
           }
           return {
             state: stepState,
@@ -776,7 +770,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     try {
       while (totalSteps < runHardLimit) {
         if (options?.signal?.aborted) {
-          const runResult: RunResult = { type: 'abort', totalSteps, tokens: runTokens, duration: 0 };
+          const runResult: RunResult = {
+            type: 'abort',
+            totalSteps,
+            tokens: runTokens,
+            duration: 0,
+          };
           this.emit('abort', { totalSteps, timestamp: Date.now() });
           return finalizeRun(currentState, runResult);
         }
@@ -893,7 +892,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       }
 
       // Hard limit reached (safety net for policy bugs)
-      const runResult: RunResult = { type: 'max_steps', totalSteps, tokens: runTokens, duration: 0 };
+      const runResult: RunResult = {
+        type: 'max_steps',
+        totalSteps,
+        tokens: runTokens,
+        duration: 0,
+      };
       return finalizeRun(currentState, runResult);
       /* c8 ignore next 5 */
     } catch (error) {

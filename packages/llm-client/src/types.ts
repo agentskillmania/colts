@@ -332,8 +332,7 @@ export interface RetryOptions {
  *
  * @remarks
  * These options control all aspects of the request including
- * model selection, streaming behavior, timeouts, retry policy,
- * and request priority.
+ * model selection, streaming behavior, timeouts, and retry policy.
  *
  * @example
  * ```typescript
@@ -341,7 +340,6 @@ export interface RetryOptions {
  *   model: 'gpt-4',
  *   messages: [{ role: 'user', content: 'Hello!' }],
  *   stream: false,
- *   priority: 1,
  *   requestTimeout: 30000,
  *   retryOptions: { retries: 3 }
  * };
@@ -374,17 +372,6 @@ export interface CallOptions {
    * @defaultValue false
    */
   stream?: boolean;
-
-  /**
-   * Request priority in the queue.
-   *
-   * @remarks
-   * Higher priority requests are processed before lower priority ones.
-   * Priority only affects queue ordering, not execution speed.
-   *
-   * @defaultValue 0
-   */
-  priority?: number;
 
   /**
    * Timeout for the actual LLM request in milliseconds.
@@ -687,7 +674,7 @@ export interface LLMResponse {
  */
 export interface ClientStats {
   /**
-   * Current number of requests waiting in the priority queue.
+   * Current number of requests waiting in the queue.
    */
   queueSize: number;
 

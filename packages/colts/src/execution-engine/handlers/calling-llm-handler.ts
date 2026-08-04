@@ -45,9 +45,7 @@ export class CallingLLMHandler implements IPhaseHandler {
         content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       })),
       tools: tools?.map((t) => t.name) ?? [],
-      skill: state.context.skillState
-        ? { current: state.context.skillState.current }
-        : null,
+      skill: state.context.skillState ? { current: state.context.skillState.current } : null,
       timestamp: Date.now(),
     });
 
@@ -64,7 +62,6 @@ export class CallingLLMHandler implements IPhaseHandler {
         model: resolvedModel,
         messages,
         tools,
-        priority: 0,
         requestTimeout: ctx.options.requestTimeout,
         thinkingEnabled: options?.thinkingEnabled ?? ctx.options.thinkingEnabled,
         temperature: options?.temperature ?? ctx.options.temperature,

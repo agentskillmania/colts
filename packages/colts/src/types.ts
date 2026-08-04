@@ -175,7 +175,6 @@ export interface ILLMProvider {
     model: string;
     messages: LLMMessage[];
     tools?: LLMTool[];
-    priority?: number;
     requestTimeout?: number;
     thinkingEnabled?: boolean;
     temperature?: number;
@@ -192,7 +191,6 @@ export interface ILLMProvider {
     model: string;
     messages: LLMMessage[];
     tools?: LLMTool[];
-    priority?: number;
     requestTimeout?: number;
     thinkingEnabled?: boolean;
     temperature?: number;

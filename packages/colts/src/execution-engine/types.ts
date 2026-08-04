@@ -6,12 +6,7 @@
  * registered with the PhaseRouter.
  */
 
-import type {
-  ExecutionState,
-  AdvanceResult,
-  AdvanceOptions,
-  StreamEvent,
-} from '../execution/index.js';
+import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../execution/index.js';
 import type { IMessageAssembler } from '../message-assembler/types.js';
 import type { IExecutionPolicy } from '../policy/types.js';
 import type { ISkillProvider } from '../skills/types.js';

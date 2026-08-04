@@ -257,62 +257,9 @@ describe('LLMClient with default config', () => {
   });
 });
 
-describe('LLMClient priority and retry', () => {
+describe('LLMClient event forwarding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('should pass priority to scheduler', async () => {
-    const client = new LLMClient();
-    mockExecute.mockResolvedValue({
-      content: 'Hi',
-      tokens: { input: 1, output: 1 },
-      stopReason: 'stop',
-    });
-
-    client.registerProvider({ name: 'openai', maxConcurrency: 10 });
-    client.registerApiKey({
-      key: 'sk-test',
-      provider: 'openai',
-      maxConcurrency: 5,
-      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
-    });
-
-    await client.call({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: 'Hi' }],
-      priority: 5,
-    });
-
-    expect(mockExecute).toHaveBeenCalledTimes(1);
-    const callArgs = mockExecute.mock.calls[0];
-    expect(callArgs[1]).toBe(5); // priority
-  });
-
-  it('should use default priority 0', async () => {
-    const client = new LLMClient();
-    mockExecute.mockResolvedValue({
-      content: 'Hi',
-      tokens: { input: 1, output: 1 },
-      stopReason: 'stop',
-    });
-
-    client.registerProvider({ name: 'openai', maxConcurrency: 10 });
-    client.registerApiKey({
-      key: 'sk-test',
-      provider: 'openai',
-      maxConcurrency: 5,
-      models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
-    });
-
-    await client.call({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: 'Hi' }],
-    });
-
-    expect(mockExecute).toHaveBeenCalledTimes(1);
-    const callArgs = mockExecute.mock.calls[0];
-    expect(callArgs[1]).toBe(0); // default priority
   });
 
   it('should forward state events from scheduler', () => {
@@ -356,7 +303,7 @@ describe('LLMClient requestId', () => {
 
     expect(mockExecute).toHaveBeenCalledTimes(1);
     const callArgs = mockExecute.mock.calls[0];
-    expect(callArgs[3]).toBe(customRequestId);
+    expect(callArgs[2]).toBe(customRequestId);
   });
 
   it('should auto-generate requestId when not provided', async () => {
@@ -382,7 +329,7 @@ describe('LLMClient requestId', () => {
 
     expect(mockExecute).toHaveBeenCalledTimes(1);
     const callArgs = mockExecute.mock.calls[0];
-    expect(callArgs[3]).toBeUndefined();
+    expect(callArgs[2]).toBeUndefined();
   });
 
   it('should pass requestId to streaming calls', async () => {
@@ -413,6 +360,6 @@ describe('LLMClient requestId', () => {
 
     expect(mockExecute).toHaveBeenCalledTimes(1);
     const callArgs = mockExecute.mock.calls[0];
-    expect(callArgs[3]).toBe(customRequestId);
+    expect(callArgs[2]).toBe(customRequestId);
   });
 });

@@ -4,7 +4,7 @@
  * @agentskillmania/llm-client
  *
  * A unified LLM client with multi-provider support, concurrency control,
- * priority queuing, and comprehensive token tracking.
+ * and comprehensive token tracking.
  *
  * @remarks
  * This package provides a robust, production-ready client for interacting
@@ -17,9 +17,6 @@
  *
  * - **Three-Level Concurrency Control**: Prevents cascading failures with
  *   independent limits at Provider → API Key → Model levels
- *
- * - **Priority Queue**: Higher priority requests are processed first,
- *   enabling latency-sensitive operations
  *
  * - **Automatic Retries**: Configurable exponential backoff for transient failures
  *
@@ -68,8 +65,7 @@
  * ```typescript
  * for await (const event of client.stream({
  *   model: 'gpt-4',
- *   messages: [{ role: 'user', content: 'Hello!' }],
- *   priority: 1
+ *   messages: [{ role: 'user', content: 'Hello!' }]
  * })) {
  *   if (event.type === 'text') {
  *     process.stdout.write(event.delta);

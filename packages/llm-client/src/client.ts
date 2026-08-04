@@ -37,7 +37,7 @@ export interface LLMClientOptions extends LLMClientConfig {
 
 /**
  * Unified LLM client with multi-provider support, concurrency control,
- * priority queuing, and comprehensive token tracking.
+ * and comprehensive token tracking.
  *
  * @remarks
  * The LLMClient provides a unified interface for interacting with various
@@ -46,7 +46,6 @@ export interface LLMClientOptions extends LLMClientConfig {
  * Key features:
  * - **Multi-provider support**: Register multiple providers and API keys
  * - **Three-level concurrency control**: Provider → API Key → Model
- * - **Priority queuing**: Higher priority requests are processed first
  * - **Automatic retries**: Configurable retry with exponential backoff
  * - **Streaming support**: Real-time token-by-token responses
  * - **Observability**: State events and statistics for monitoring
@@ -228,7 +227,6 @@ export class LLMClient extends EventEmitter {
    *     { role: 'system', content: 'You are helpful.' },
    *     { role: 'user', content: 'Hello!' }
    *   ],
-   *   priority: 1,
    *   requestTimeout: 30000
    * });
    *
@@ -237,7 +235,7 @@ export class LLMClient extends EventEmitter {
    * ```
    */
   async call(options: CallOptions): Promise<LLMResponse> {
-    const { model, priority = 0, totalTimeout, requestId, signal } = options;
+    const { model, totalTimeout, requestId, signal } = options;
 
     const execute = async (ctx: {
       key: { key: string };
@@ -260,7 +258,7 @@ export class LLMClient extends EventEmitter {
       });
     };
 
-    const promise = this.scheduler.execute(model, priority, execute, requestId, signal);
+    const promise = this.scheduler.execute(model, execute, requestId, signal);
 
     if (totalTimeout) {
       return pTimeout(promise, {
@@ -313,7 +311,7 @@ export class LLMClient extends EventEmitter {
    * ```
    */
   async *stream(options: CallOptions): AsyncIterable<StreamEvent> {
-    const { model, priority = 0, totalTimeout, requestId, signal } = options;
+    const { model, totalTimeout, requestId, signal } = options;
 
     // Merge timeout and caller signal into a single abort controller
     // so that totalTimeout covers both queue wait and stream consumption.
@@ -340,7 +338,6 @@ export class LLMClient extends EventEmitter {
       // Create a promise that resolves to the stream
       const streamPromise = this.scheduler.execute(
         model,
-        priority,
         async (ctx: {
           key: { key: string };
           baseUrl?: string;
@@ -408,8 +405,7 @@ export class LLMClient extends EventEmitter {
    *
    * @remarks
    * This method provides real-time visibility into the client's internal state.
-   * Use it for monitoring, debugging, or making dynamic decisions about
-   * request prioritization.
+   * Use it for monitoring or debugging.
    *
    * The returned statistics include:
    * - Queue size: Number of pending requests

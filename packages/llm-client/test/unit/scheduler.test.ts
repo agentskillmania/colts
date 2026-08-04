@@ -84,10 +84,10 @@ describe('RequestScheduler', () => {
         return 'result';
       };
 
-      await scheduler.execute('gpt-4', 0, executor);
-      await scheduler.execute('gpt-4', 0, executor);
-      await scheduler.execute('gpt-4', 0, executor);
-      await scheduler.execute('gpt-4', 0, executor);
+      await scheduler.execute('gpt-4', executor);
+      await scheduler.execute('gpt-4', executor);
+      await scheduler.execute('gpt-4', executor);
+      await scheduler.execute('gpt-4', executor);
 
       // Should have used both keys (4 requests, 2 keys)
       expect(usedKeys.length).toBe(4);
@@ -125,7 +125,7 @@ describe('RequestScheduler', () => {
       await Promise.all(
         Array(5)
           .fill(null)
-          .map(() => scheduler.execute('gpt-4', 0, executor))
+          .map(() => scheduler.execute('gpt-4', executor))
       );
 
       expect(maxRunning).toBeLessThanOrEqual(2);
@@ -150,7 +150,7 @@ describe('RequestScheduler', () => {
         }
       });
 
-      await scheduler.execute('gpt-4', 0, async () => 'result');
+      await scheduler.execute('gpt-4', async () => 'result');
 
       expect(events.length).toBeGreaterThanOrEqual(1);
       expect(events[0].position).toBeGreaterThanOrEqual(0);
@@ -174,7 +174,7 @@ describe('RequestScheduler', () => {
         }
       });
 
-      await scheduler.execute('gpt-4', 0, async () => 'result');
+      await scheduler.execute('gpt-4', async () => 'result');
 
       expect(events.length).toBeGreaterThanOrEqual(1);
       expect(events[0].key).toMatch(/^sk-test/);
@@ -209,7 +209,7 @@ describe('Scheduler error handling', () => {
     });
 
     await expect(
-      scheduler.execute('gpt-4', 0, async () => {
+      scheduler.execute('gpt-4', async () => {
         throw new Error('Executor failed');
       })
     ).rejects.toThrow('Executor failed');
@@ -233,7 +233,7 @@ describe('Scheduler error handling', () => {
     });
 
     await expect(
-      scheduler.execute('gpt-4', 0, async () => {
+      scheduler.execute('gpt-4', async () => {
         throw new Error('Executor failed');
       })
     ).rejects.toThrow('Executor failed');
@@ -260,21 +260,21 @@ describe('Scheduler concurrency pressure', () => {
     const executionLog: string[] = [];
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    const req1 = scheduler.execute('gpt-4', 0, async () => {
+    const req1 = scheduler.execute('gpt-4', async () => {
       executionLog.push('req1-start');
       await delay(50);
       executionLog.push('req1-end');
       return 'r1';
     });
 
-    const req2 = scheduler.execute('gpt-4', 0, async () => {
+    const req2 = scheduler.execute('gpt-4', async () => {
       executionLog.push('req2-start');
       await delay(10);
       executionLog.push('req2-end');
       return 'r2';
     });
 
-    const req3 = scheduler.execute('gpt-4', 0, async () => {
+    const req3 = scheduler.execute('gpt-4', async () => {
       executionLog.push('req3-start');
       executionLog.push('req3-end');
       return 'r3';
@@ -293,48 +293,6 @@ describe('Scheduler concurrency pressure', () => {
     ]);
   });
 
-  it('should respect priority ordering', async () => {
-    const scheduler = new RequestScheduler();
-    scheduler.registerProvider({ name: 'openai', maxConcurrency: 1 });
-    scheduler.registerApiKey({
-      key: 'sk-test',
-      provider: 'openai',
-      maxConcurrency: 1,
-      models: [{ modelId: 'gpt-4', maxConcurrency: 1 }],
-    });
-
-    const executionLog: string[] = [];
-    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-    // Block the semaphore with a slow request so others queue up
-    const blocker = scheduler.execute('gpt-4', 0, async () => {
-      await delay(50);
-      return 'blocker';
-    });
-
-    // These two requests will be queued behind the blocker
-    const lowPriority = scheduler.execute('gpt-4', 5, async () => {
-      executionLog.push('low');
-      return 'low';
-    });
-
-    const highPriority = scheduler.execute('gpt-4', 10, async () => {
-      executionLog.push('high');
-      return 'high';
-    });
-
-    await Promise.all([blocker, lowPriority, highPriority]);
-
-    // NOTE: Current scheduler uses p-queue with infinite concurrency,
-    // so all tasks start immediately and block on semaphore.
-    // Priority only affects p-queue ordering, not semaphore acquisition (FIFO).
-    // This is a known design issue — priority does not affect execution order
-    // when semaphore is the bottleneck.
-    // For now, we verify both tasks execute after blocker.
-    expect(executionLog).toEqual(expect.arrayContaining(['low', 'high']));
-    expect(executionLog.length).toBe(2);
-  });
-
   it('should release semaphore when executor throws', async () => {
     const scheduler = new RequestScheduler();
     scheduler.registerProvider({ name: 'openai', maxConcurrency: 1 });
@@ -348,13 +306,13 @@ describe('Scheduler concurrency pressure', () => {
     const executionLog: string[] = [];
 
     // First request throws
-    const req1 = scheduler.execute('gpt-4', 0, async () => {
+    const req1 = scheduler.execute('gpt-4', async () => {
       executionLog.push('req1');
       throw new Error('Failed');
     });
 
     // Second request should still execute after semaphore is released
-    const req2 = scheduler.execute('gpt-4', 0, async () => {
+    const req2 = scheduler.execute('gpt-4', async () => {
       executionLog.push('req2');
       return 'ok';
     });
@@ -433,7 +391,7 @@ describe('concurrent request cleanup (CR T4)', () => {
     // Create multiple concurrent requests
     const requests = [];
     for (let i = 0; i < 5; i++) {
-      requests.push(scheduler.execute('gpt-4', 0, async () => `response-${i}`));
+      requests.push(scheduler.execute('gpt-4', async () => `response-${i}`));
     }
 
     await Promise.all(requests);
@@ -455,7 +413,7 @@ describe('AbortSignal support', () => {
     scheduler = new RequestScheduler();
   });
 
-  it('should reject immediately when signal is already aborted (PQueue early check)', async () => {
+  it('should reject immediately when signal is already aborted (early check)', async () => {
     scheduler.registerProvider({ name: 'openai', maxConcurrency: 10 });
     scheduler.registerApiKey({
       key: 'sk-test',
@@ -468,7 +426,7 @@ describe('AbortSignal support', () => {
     controller.abort();
 
     await expect(
-      scheduler.execute('gpt-4', 0, async () => 'result', undefined, controller.signal)
+      scheduler.execute('gpt-4', async () => 'result', undefined, controller.signal)
     ).rejects.toThrow('The operation was aborted');
   });
 
@@ -488,7 +446,7 @@ describe('AbortSignal support', () => {
     });
 
     // Fill all concurrency slots
-    const running = scheduler.execute('gpt-4', 0, async () => {
+    const running = scheduler.execute('gpt-4', async () => {
       await blockPromise;
       return 'blocked';
     });
@@ -496,7 +454,6 @@ describe('AbortSignal support', () => {
     // Queue and abort later
     const abortPromise = scheduler.execute(
       'gpt-4',
-      0,
       async () => 'should-not-reach',
       undefined,
       controller.signal
@@ -535,7 +492,7 @@ describe('AbortSignal support', () => {
     });
 
     // Fill up
-    const running = scheduler.execute('gpt-4', 0, async () => {
+    const running = scheduler.execute('gpt-4', async () => {
       await blockPromise;
       return 'blocked';
     });
@@ -543,12 +500,12 @@ describe('AbortSignal support', () => {
     // Abort queued request
     const abortPromise = scheduler.execute(
       'gpt-4',
-      0,
       async () => 'should-not-reach',
       undefined,
       controller.signal
     );
 
+    // Wait long enough for the request to enter semaphore waiting state.
     await new Promise((r) => setTimeout(r, 50));
     controller.abort();
     await expect(abortPromise).rejects.toThrow('The operation was aborted');
@@ -558,7 +515,7 @@ describe('AbortSignal support', () => {
     await running;
 
     // Subsequent request should execute normally
-    const result = await scheduler.execute('gpt-4', 0, async () => 'ok');
+    const result = await scheduler.execute('gpt-4', async () => 'ok');
     expect(result).toBe('ok');
 
     // activeRequests should return to zero
@@ -579,7 +536,7 @@ describe('AbortSignal support', () => {
       models: [{ modelId: 'gpt-4', maxConcurrency: 3 }],
     });
 
-    const result = await scheduler.execute('gpt-4', 0, async () => 'result');
+    const result = await scheduler.execute('gpt-4', async () => 'result');
     expect(result).toBe('result');
   });
 
@@ -610,7 +567,6 @@ describe('AbortSignal support', () => {
     // Fill sk-test slots
     const running = scheduler.execute(
       'gpt-4',
-      0,
       async () => {
         await blockPromise;
         return 'blocked';
@@ -621,7 +577,6 @@ describe('AbortSignal support', () => {
     // Queue for sk-test slot, then abort
     const abortPromise = scheduler.execute(
       'gpt-4',
-      0,
       async () => 'should-not-reach',
       undefined,
       controller.signal
@@ -682,7 +637,7 @@ describe('AbortSignal support', () => {
         return 'result';
       };
 
-      await scheduler.execute('gpt-4', 0, executor);
+      await scheduler.execute('gpt-4', executor);
     });
   });
 
@@ -713,7 +668,7 @@ describe('AbortSignal support', () => {
       });
 
       // req1: selectKey round-robins to keyA (index 0), acquires it (now full)
-      const req1 = scheduler.execute('gpt-4', 0, async (ctx) => {
+      const req1 = scheduler.execute('gpt-4', async (ctx) => {
         usedKeys.push(ctx.key.key);
         await keyAHeld; // hold this request open so keyA stays full
         return 'result1';
@@ -722,7 +677,7 @@ describe('AbortSignal support', () => {
       await new Promise((r) => setTimeout(r, 50));
 
       // req2: round-robin goes to keyB (index 1), acquires it
-      await scheduler.execute('gpt-4', 0, async (ctx) => {
+      await scheduler.execute('gpt-4', async (ctx) => {
         usedKeys.push(ctx.key.key);
         return 'result2';
       });
@@ -730,7 +685,7 @@ describe('AbortSignal support', () => {
       // req3: round-robin goes BACK to keyA (index 0 again).
       // CONC1: keyA is full (activeCount=1=maxConcurrency), keyB has capacity.
       // The fix should route req3 to keyB, NOT block on keyA.
-      const req3Promise = scheduler.execute('gpt-4', 0, async (ctx) => {
+      const req3Promise = scheduler.execute('gpt-4', async (ctx) => {
         usedKeys.push(ctx.key.key);
         return 'result3';
       });
@@ -771,18 +726,18 @@ describe('AbortSignal support', () => {
       });
 
       // Fill both keys
-      const req1 = scheduler.execute('gpt-4', 0, async () => {
+      const req1 = scheduler.execute('gpt-4', async () => {
         await gate;
         return 'r1';
       });
-      const req2 = scheduler.execute('gpt-4', 0, async () => {
+      const req2 = scheduler.execute('gpt-4', async () => {
         await gate;
         return 'r2';
       });
       await new Promise((r) => setTimeout(r, 50)); // let them acquire
 
       // req3: both keys full — should queue (not crash, not busy-loop)
-      const req3 = scheduler.execute('gpt-4', 0, async () => 'r3');
+      const req3 = scheduler.execute('gpt-4', async () => 'r3');
 
       // req3 should be pending (not completed yet)
       const req3State = await Promise.race([

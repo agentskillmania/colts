@@ -35,7 +35,6 @@ export class ToolResultHandler implements IPhaseHandler {
     const resultKeys = Object.keys(results);
     // Use first result for skill signal detection and backward compatibility
     const result = resultKeys.length > 0 ? results[resultKeys[0]] : undefined;
-    const action = execState.action;
     let currentState = state;
 
     // 1. Skill signal processing — sole call site of applySkillSignal

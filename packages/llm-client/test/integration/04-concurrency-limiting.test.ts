@@ -92,32 +92,92 @@ describe('Integration: Concurrency Limiting (User Story 4)', () => {
   itif(testConfig.enabled)(
     'should show real-time concurrency stats',
     async () => {
-      // Given: Multiple concurrent requests
-      const promises = Array.from({ length: 3 }, (_, i) =>
+      // Given: A way to track how many requests have entered the active slot.
+      // With key/model maxConcurrency=2 and 3 concurrent requests, we expect
+      // 2 in-flight and 1 queued while the requests are running.
+      const startedIds: string[] = [];
+      client.on('state', (event) => {
+        if (event.type === 'started') {
+          startedIds.push(event.requestId);
+        }
+      });
+
+      // Fire 3 requests simultaneously (3 > 2 -> the 3rd must queue).
+      const requestIds = ['stats-req-1', 'stats-req-2', 'stats-req-3'];
+      const promises = requestIds.map((id, i) =>
         client.call({
+          requestId: id,
           model: testConfig.testModel,
           messages: [{ role: 'user' as const, content: `Stats test ${i + 1}` }],
           requestTimeout: 60000,
         })
       );
 
-      // When: Check stats mid-flight (best effort)
+      // Wait for at least 2 requests to actually enter the active slot.
+      // The client.call() promises resolve synchronously up to the first
+      // await on the network only after the scheduler dequeues them, so a
+      // plain Promise.all(...) would block until everything is done and we
+      // would miss the in-flight window entirely.
+      const startedDeadline = Date.now() + 5000;
+      while (startedIds.length < 2 && Date.now() < startedDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      // Yield to the event loop so the scheduler has a chance to enqueue the
+      // overflowing 3rd request and bump queueSize/activeRequests counters.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // When: Snapshot stats WHILE requests are still in flight.
       const midFlightStats = client.getStats();
       console.log('Stats during execution:', {
         queueSize: midFlightStats.queueSize,
         activeRequests: midFlightStats.activeRequests,
+        startedSoFar: startedIds.length,
       });
 
-      await Promise.all(promises);
+      // At least 2 requests should have become active by now.
+      expect(startedIds.length).toBeGreaterThanOrEqual(2);
 
-      // Then: Final stats should show completed
+      // The whole point of this test: stats must reflect live load, not an
+      // empty snapshot taken before any request was scheduled. We assert the
+      // sum of active + queued is non-zero (i.e. there is real in-flight
+      // work). We avoid over-asserting exact numbers because timing is
+      // inherently racy, but active+queued > 0 proves the snapshot was taken
+      // mid-flight rather than before/after.
+      const inFlight = midFlightStats.activeRequests + midFlightStats.queueSize;
+      expect(inFlight).toBeGreaterThan(0);
+
+      // When the network is very fast the 3rd request may have already
+      // drained, so queueSize can be 0; that is acceptable as long as
+      // activeRequests shows live work.
+      if (midFlightStats.queueSize > 0) {
+        // If there is a queue, it should be within the expected overflow
+        // range for 3 requests against a concurrency limit of 2.
+        expect(midFlightStats.queueSize).toBeLessThanOrEqual(1);
+      }
+
+      // Use allSettled so a single request failure (e.g. a transient upstream
+      // timeout) does not prevent us from asserting that the scheduler itself
+      // drains completely. The final-stats assertions are about scheduler
+      // hygiene, not about every LLM call succeeding.
+      const outcomes = await Promise.allSettled(promises);
+      const rejected = outcomes.filter((o): o is PromiseRejectedResult => o.status === 'rejected');
+      if (rejected.length > 0) {
+        console.log(
+          `[stats] ${rejected.length}/${outcomes.length} request(s) rejected ` +
+            '(upstream/timeout); still asserting scheduler drains.'
+        );
+      }
+
+      // Then: Final stats should show everything completed. Even if some
+      // requests errored, the scheduler must release their slots.
       const finalStats = client.getStats();
-      expect(finalStats.queueSize).toBe(0); // Queue should be empty
-      expect(finalStats.activeRequests).toBe(0); // All done
+      expect(finalStats.queueSize).toBe(0); // Queue drained
+      expect(finalStats.activeRequests).toBe(0); // No in-flight work left
 
       console.log('Final stats:', finalStats);
     },
-    90000
+    240000
   );
 
   itif(testConfig.enabled)(

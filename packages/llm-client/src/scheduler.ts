@@ -1,5 +1,5 @@
 /**
- * @fileoverview Request scheduler with three-level semaphore and priority queue.
+ * @fileoverview Request scheduler with three-level semaphore.
  *
  * @module
  * @remarks
@@ -9,7 +9,6 @@
  */
 
 import { EventEmitter } from 'eventemitter3';
-import PQueue from 'p-queue';
 
 import type {
   ProviderConfig,
@@ -34,6 +33,7 @@ import type {
  * @internal
  */
 class Semaphore {
+  debugName: string;
   /** Current number of acquired permits. */
   private count = 0;
 
@@ -48,8 +48,9 @@ class Semaphore {
    *
    * @param max - Maximum number of concurrent permits
    */
-  constructor(max: number) {
+  constructor(max: number, debugName = '?') {
     this.max = max;
+    this.debugName = debugName;
   }
 
   /**
@@ -144,11 +145,6 @@ class Semaphore {
  * - API Key level: Limits concurrent requests per API key
  * - Model level: Limits concurrent requests per (key, model) pair
  *
- * **Priority Queue**:
- * - Requests are queued with priority values
- * - Higher priority requests are processed first
- * - FIFO ordering for requests with equal priority
- *
  * **Round-Robin Key Selection**:
  * - When multiple keys support the same model, requests are distributed evenly
  * - Keys are selected at execution time to account for changing availability
@@ -180,7 +176,6 @@ class Semaphore {
  * // Execute a request
  * const result = await scheduler.execute(
  *   'gpt-4',
- *   1, // priority
  *   async ({ key, baseUrl }) => {
  *     // Make the actual API call using the selected key and its resolved baseUrl
  *     return await callOpenAI(key.key, baseUrl, messages);
@@ -207,8 +202,11 @@ export class RequestScheduler extends EventEmitter {
   /** Map of API keys to tracked key data. */
   private apiKeys = new Map<string, TrackedApiKey>();
 
-  /** Priority queue for pending requests. */
-  private queue: PQueue;
+  /** Number of requests currently waiting to acquire a slot. */
+  private waitingCount = 0;
+
+  /** Number of requests currently executing. */
+  private activeCount = 0;
 
   /** Round-robin index for key selection. */
   private keyIndex = 0;
@@ -223,11 +221,6 @@ export class RequestScheduler extends EventEmitter {
    * Creates a new RequestScheduler.
    *
    * @param config - Default concurrency configuration
-   *
-   * @remarks
-   * The scheduler uses p-queue for priority queuing but manages concurrency
-   * internally via semaphores. The p-queue is configured with infinite
-   * concurrency because semaphore acquisition happens inside queue tasks.
    */
   constructor(config?: Required<LLMClientConfig>) {
     super();
@@ -236,9 +229,6 @@ export class RequestScheduler extends EventEmitter {
       defaultKeyConcurrency: 5,
       defaultModelConcurrency: 3,
     };
-    this.queue = new PQueue({
-      concurrency: Infinity, // We handle concurrency via semaphores
-    });
   }
 
   /**
@@ -265,7 +255,10 @@ export class RequestScheduler extends EventEmitter {
       maxConcurrency,
       activeCount: 0,
     });
-    this.providerSemaphores.set(config.name, new Semaphore(maxConcurrency));
+    this.providerSemaphores.set(
+      config.name,
+      new Semaphore(maxConcurrency, 'provider:' + config.name)
+    );
   }
 
   /**
@@ -308,12 +301,12 @@ export class RequestScheduler extends EventEmitter {
       lastUsed: Date.now(),
     });
 
-    this.keySemaphores.set(key, new Semaphore(keyConcurrency));
+    this.keySemaphores.set(key, new Semaphore(keyConcurrency, 'key:' + key));
 
     // Create model semaphores
     for (const model of models) {
       const modelKey = `${key}:${model.modelId}`;
-      this.modelSemaphores.set(modelKey, new Semaphore(model.maxConcurrency));
+      this.modelSemaphores.set(modelKey, new Semaphore(model.maxConcurrency, 'model:' + modelKey));
     }
   }
 
@@ -395,9 +388,9 @@ export class RequestScheduler extends EventEmitter {
    * Execute a request with three-level semaphore control.
    *
    * @param modelId - Model identifier
-   * @param priority - Request priority (higher = processed first)
    * @param executor - Function to execute when resources are available
    * @param requestId - Optional external request ID for tracing
+   * @param signal - Optional AbortSignal to cancel the request
    * @returns Promise resolving to the executor's result
    * @throws Error if no API key supports the model, or on execution failure
    *
@@ -405,12 +398,13 @@ export class RequestScheduler extends EventEmitter {
    * This method implements the core scheduling logic:
    *
    * 1. **Validation**: Checks that at least one key supports the model
-   * 2. **Queueing**: Adds the request to the priority queue
+   * 2. **Queueing**: Records the request as waiting (FIFO via semaphore)
    * 3. **Key Selection**: Uses round-robin to select an available key
    * 4. **Semaphore Acquisition**: Acquires provider → key → model semaphores
    * 5. **Execution**: Runs the executor function with the selected key
    * 6. **Cleanup**: Releases semaphores and updates statistics
    *
+   * The semaphores themselves provide FIFO ordering for waiting requests.
    * Semaphores are acquired in a specific order (provider → key → model)
    * to prevent deadlocks. They are released in reverse order.
    *
@@ -420,7 +414,6 @@ export class RequestScheduler extends EventEmitter {
    * ```typescript
    * const result = await scheduler.execute(
    *   'gpt-4',
-   *   1,
    *   async ({ key, baseUrl }) => {
    *     return await callOpenAI(key.key, baseUrl, messages);
    *   },
@@ -430,7 +423,6 @@ export class RequestScheduler extends EventEmitter {
    */
   async execute<T>(
     modelId: string,
-    priority: number,
     executor: (ctx: {
       key: TrackedApiKey;
       baseUrl?: string;
@@ -448,7 +440,7 @@ export class RequestScheduler extends EventEmitter {
     }
 
     // Emit queued event
-    const queueSize = this.queue.size;
+    const queueSize = this.waitingCount;
     this.emit('state', {
       type: 'queued',
       requestId: finalRequestId,
@@ -456,125 +448,128 @@ export class RequestScheduler extends EventEmitter {
       estimatedWait: queueSize * 1000, // Rough estimate
     } as SchedulerEvent);
 
-    const result = await this.queue.add(
-      async (): Promise<T> => {
-        // Early abort check — fail fast to avoid unnecessary semaphore acquisition
-        if (signal?.aborted) {
-          const err = new Error('The operation was aborted');
-          err.name = 'AbortError';
-          throw err;
-        }
+    this.waitingCount++;
+    let acquired = false;
+    try {
+      // Early abort check — fail fast to avoid unnecessary semaphore acquisition
+      if (signal?.aborted) {
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
 
-        // Select key at execution time (round-robin)
-        const selectedKey = this.selectKey(modelId);
-        if (!selectedKey) {
-          throw new Error(`No API key available for model ${modelId}`);
-        }
+      // Select key at execution time (round-robin)
+      const selectedKey = this.selectKey(modelId);
+      if (!selectedKey) {
+        throw new Error(`No API key available for model ${modelId}`);
+      }
 
-        const provider = this.providers.get(selectedKey.provider);
-        if (!provider) {
-          throw new Error(`Provider ${selectedKey.provider} not found`);
-        }
+      const provider = this.providers.get(selectedKey.provider);
+      if (!provider) {
+        throw new Error(`Provider ${selectedKey.provider} not found`);
+      }
 
-        const providerSem = this.providerSemaphores.get(selectedKey.provider)!;
-        const keySem = this.keySemaphores.get(selectedKey.key)!;
-        const modelKey = `${selectedKey.key}:${modelId}`;
-        const modelSem = this.modelSemaphores.get(modelKey);
+      const providerSem = this.providerSemaphores.get(selectedKey.provider)!;
+      const keySem = this.keySemaphores.get(selectedKey.key)!;
+      const modelKey = `${selectedKey.key}:${modelId}`;
+      const modelSem = this.modelSemaphores.get(modelKey);
 
-        if (!modelSem) {
-          throw new Error(
-            `Model ${modelId} not available for key ${selectedKey.key.slice(0, 8)}...`
-          );
-        }
+      if (!modelSem) {
+        throw new Error(`Model ${modelId} not available for key ${selectedKey.key.slice(0, 8)}...`);
+      }
 
-        // Atomically acquire all three semaphores
-        // Note: We acquire in order: provider -> key -> model to avoid deadlock
-        await providerSem.acquire(signal);
-        let providerReleased = false;
+      // Atomically acquire all three semaphores
+      // Note: We acquire in order: provider -> key -> model to avoid deadlock
+      await providerSem.acquire(signal);
+      let providerReleased = false;
+      try {
+        await keySem.acquire(signal);
         try {
-          await keySem.acquire(signal);
+          await modelSem.acquire(signal);
           try {
-            await modelSem.acquire(signal);
-            try {
-              // Update active counts
-              provider.activeCount++;
-              selectedKey.activeCount++;
-              selectedKey.lastUsed = Date.now();
+            // All three semaphores acquired: waiting → active.
+            this.waitingCount--;
+            this.activeCount++;
+            acquired = true;
+            provider.activeCount++;
+            selectedKey.activeCount++;
+            selectedKey.lastUsed = Date.now();
 
-              // Emit started event
+            // Emit started event
+            this.emit('state', {
+              type: 'started',
+              requestId: finalRequestId,
+              key: selectedKey.key.slice(0, 8) + '...',
+              model: modelId,
+            } as SchedulerEvent);
+
+            const startTime = Date.now();
+
+            // Resolve baseUrl: key-level override > provider-level > none (client applies global default)
+            const baseUrl = selectedKey.baseUrl ?? provider.baseUrl;
+            // Resolve model constraint for the requested model
+            const modelConstraint = selectedKey.models.find((m) => m.modelId === modelId);
+
+            try {
+              const result = await executor({ key: selectedKey, baseUrl, modelConstraint });
+
+              // Update stats
+              provider.activeCount--;
+              selectedKey.activeCount--;
+              selectedKey.successCount++;
+
+              // Emit completed event
               this.emit('state', {
-                type: 'started',
+                type: 'completed',
                 requestId: finalRequestId,
+                duration: Date.now() - startTime,
+              } as SchedulerEvent);
+
+              return result;
+            } catch (error) {
+              // Update stats
+              provider.activeCount--;
+              selectedKey.activeCount--;
+              selectedKey.failCount++;
+              selectedKey.lastError = error instanceof Error ? error.message : String(error);
+
+              // Emit failed event
+              this.emit('state', {
+                type: 'failed',
+                requestId: finalRequestId,
+                error: error instanceof Error ? error.message : String(error),
                 key: selectedKey.key.slice(0, 8) + '...',
                 model: modelId,
               } as SchedulerEvent);
 
-              const startTime = Date.now();
-
-              // Resolve baseUrl: key-level override > provider-level > none (client applies global default)
-              const baseUrl = selectedKey.baseUrl ?? provider.baseUrl;
-              // Resolve model constraint for the requested model
-              const modelConstraint = selectedKey.models.find((m) => m.modelId === modelId);
-
-              try {
-                const result = await executor({ key: selectedKey, baseUrl, modelConstraint });
-
-                // Update stats
-                provider.activeCount--;
-                selectedKey.activeCount--;
-                selectedKey.successCount++;
-
-                // Emit completed event
-                this.emit('state', {
-                  type: 'completed',
-                  requestId: finalRequestId,
-                  duration: Date.now() - startTime,
-                } as SchedulerEvent);
-
-                return result;
-              } catch (error) {
-                // Update stats
-                provider.activeCount--;
-                selectedKey.activeCount--;
-                selectedKey.failCount++;
-                selectedKey.lastError = error instanceof Error ? error.message : String(error);
-
-                // Emit failed event
-                this.emit('state', {
-                  type: 'failed',
-                  requestId: finalRequestId,
-                  error: error instanceof Error ? error.message : String(error),
-                  key: selectedKey.key.slice(0, 8) + '...',
-                  model: modelId,
-                } as SchedulerEvent);
-
-                throw error;
-              } finally {
-                // Release semaphores in reverse order
-                modelSem.release();
-              }
+              throw error;
             } finally {
-              keySem.release();
+              // Release semaphores in reverse order
+              modelSem.release();
             }
           } finally {
-            providerSem.release();
-            providerReleased = true;
+            keySem.release();
           }
         } finally {
-          // Release provider if keySem.acquire() threw before entering inner try/finally
-          if (!providerReleased) {
-            providerSem.release();
-          }
+          providerSem.release();
+          providerReleased = true;
+          // Execution finished (success or failure) once we reach here, so the
+          // request is no longer active.
+          this.activeCount--;
         }
-      },
-      { priority, throwOnTimeout: true }
-    );
-
-    if (result === undefined) {
-      throw new Error('Queue returned undefined');
+      } finally {
+        // Release provider if keySem.acquire() threw before entering inner try/finally
+        if (!providerReleased) {
+          providerSem.release();
+        }
+      }
+    } finally {
+      // Abort before all semaphores were acquired: the request never became
+      // active, so it must still be dropped from the waiting count.
+      if (!acquired) {
+        this.waitingCount--;
+      }
     }
-
-    return result;
   }
 
   /**
@@ -607,7 +602,7 @@ export class RequestScheduler extends EventEmitter {
    *
    * @remarks
    * Returns real-time statistics useful for monitoring and debugging:
-   * - queueSize: Number of pending requests in the priority queue
+   * - queueSize: Number of requests waiting to acquire a slot
    * - activeRequests: Number of requests currently executing
    * - keyHealth: Success/failure counts per API key (masked)
    * - providerActiveCounts: Active request count per provider
@@ -634,8 +629,8 @@ export class RequestScheduler extends EventEmitter {
     }
 
     return {
-      queueSize: this.queue.size,
-      activeRequests: this.queue.pending,
+      queueSize: this.waitingCount,
+      activeRequests: this.activeCount,
       keyHealth,
       providerActiveCounts,
       keyActiveCounts,

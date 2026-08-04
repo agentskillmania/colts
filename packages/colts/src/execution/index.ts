@@ -68,7 +68,13 @@ export type Phase =
  * Result of a single step (one ReAct cycle)
  */
 export type StepResult =
-  | { type: 'continue'; toolResult: unknown; actions: Action[]; tokens: TokenStats; duration: number }
+  | {
+      type: 'continue';
+      toolResult: unknown;
+      actions: Action[];
+      tokens: TokenStats;
+      duration: number;
+    }
   | { type: 'done'; answer: string; tokens: TokenStats; duration: number }
   | { type: 'error'; error: Error; tokens: TokenStats; duration: number }
   | { type: 'abort'; tokens: TokenStats; duration: number }
@@ -115,10 +121,7 @@ export type StreamEvent =
 /**
  * Options for advance execution
  */
-export interface AdvanceOptions extends PerRequestOptions {
-  /** Priority for LLM call (default: 0) */
-  priority?: number;
-}
+export type AdvanceOptions = PerRequestOptions;
 
 /**
  * Result of advance() call
@@ -229,7 +232,13 @@ export type RunResult =
   | { type: 'error'; error: Error; totalSteps: number; tokens: TokenStats; duration: number }
   | { type: 'abort'; totalSteps: number; tokens: TokenStats; duration: number }
   | { type: 'stopped'; data?: string; totalSteps: number; tokens: TokenStats; duration: number }
-  | { type: 'waiting-human'; request: HumanRequest; totalSteps: number; tokens: TokenStats; duration: number };
+  | {
+      type: 'waiting-human';
+      request: HumanRequest;
+      totalSteps: number;
+      tokens: TokenStats;
+      duration: number;
+    };
 
 /**
  * Events emitted during runStream()

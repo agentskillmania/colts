@@ -281,7 +281,10 @@ describe('CallingLLMHandler', () => {
         stream: vi.fn().mockImplementation(async function* () {
           yield { type: 'text', delta: 'The answer is 4.', accumulatedContent: 'The answer is 4.' };
           // Provider returns zero usage — should trigger fallback estimation
-          yield { type: 'done', roundTotalTokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+          yield {
+            type: 'done',
+            roundTotalTokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          };
         }),
         getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
       } as never,
@@ -344,7 +347,12 @@ describe('CallingLLMHandler', () => {
 
     const responseEvent = emittedEvents.find((e) => e.type === 'llm:response');
     expect(responseEvent).toBeDefined();
-    expect(responseEvent!.data.tokens).toEqual({ input: 42, output: 7, cacheRead: 3, cacheWrite: 1 });
+    expect(responseEvent!.data.tokens).toEqual({
+      input: 42,
+      output: 7,
+      cacheRead: 3,
+      cacheWrite: 1,
+    });
   });
 
   it('should emit thinking events when thinking content streams', async () => {

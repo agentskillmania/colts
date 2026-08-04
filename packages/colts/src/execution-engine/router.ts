@@ -7,11 +7,7 @@
  */
 
 import type { IPhaseHandler, PhaseHandlerContext } from './types.js';
-import type {
-  ExecutionState,
-  AdvanceResult,
-  AdvanceOptions,
-} from '../execution/index.js';
+import type { ExecutionState, AdvanceResult, AdvanceOptions } from '../execution/index.js';
 import { updateExecState } from '../execution/index.js';
 import type { AgentState, IToolRegistry } from '../types.js';
 
