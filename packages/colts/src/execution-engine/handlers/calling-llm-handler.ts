@@ -44,7 +44,13 @@ export class CallingLLMHandler implements IPhaseHandler {
         role: m.role,
         content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       })),
-      tools: tools?.map((t) => t.name) ?? [],
+      // Send name + description so dashboards can show tool tooltips.
+      // (RunnerEventMap types `tools` as string[] for back-compat; consumers
+      // that only read .name still work, and the description is opt-in.)
+      tools: (tools?.map((t) => ({
+        name: t.name,
+        description: t.description,
+      })) ?? []) as unknown as string[],
       skill: state.context.skillState ? { current: state.context.skillState.current } : null,
       timestamp: Date.now(),
     });
