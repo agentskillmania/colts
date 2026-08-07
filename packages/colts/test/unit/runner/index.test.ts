@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMClient, LLMResponse, TokenStats } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../../src/runner/index.js';
+import { z } from 'zod';
 import { createAgentState, addUserMessage, addAssistantMessage } from '../../../src/state/index.js';
 import type { AgentConfig, IContextCompressor, CompressResult } from '../../../src/types.js';
 import type { ISkillProvider, SkillManifest } from '../../../src/skills/types.js';
@@ -590,6 +591,129 @@ describe('AgentRunner', () => {
 
       const tools = runner.getToolRegistry().toToolSchemas();
       expect(tools.some((t) => t.function.name === 'load_skill')).toBe(false);
+    });
+  });
+
+  describe('todo:list events', () => {
+    // Minimal inline todo list on agent context (same convention as wrangler's
+    // todolist middleware: context.todoList = { items, nextId }).
+    const readTodo = (state: { context: Record<string, unknown> }) =>
+      (state.context.todoList as { items: unknown[] })?.items ?? [];
+    const withTodo = (state: { context: Record<string, unknown> }, items: unknown[]) => ({
+      ...state,
+      context: { ...state.context, todoList: { items, nextId: items.length + 1 } },
+    });
+
+    it('emits todo:list only when the list changed during a step', async () => {
+      const client = createMockClient();
+      let stepNo = 0;
+      vi.mocked(client.stream).mockImplementation(async function* () {
+        stepNo++;
+        // Step 1-2: tool call (continue the loop); step 3: final answer (stop).
+        if (stepNo < 3) {
+          yield {
+            type: 'tool_call',
+            toolCall: { id: `c${stepNo}`, name: 'fake_todo', arguments: {} },
+          };
+        }
+        yield { type: 'done', roundTotalTokens: { input: 5, output: 5 } };
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        tools: [
+          {
+            name: 'fake_todo',
+            description: 'fake todo tool',
+            parameters: z.object({}),
+            execute: async () => ({ ok: true }),
+          } as never,
+        ],
+        middleware: [
+          {
+            name: 'todo-stub',
+            beforeStep: async (ctx: { state: { context: Record<string, unknown> } }) => {
+              if (!ctx.state.context.todoList) {
+                return { state: withTodo(ctx.state, []) };
+              }
+              return;
+            },
+            afterStep: async (ctx: { state: { context: Record<string, unknown> } }) => {
+              // Add one item on the first step only; later steps leave the
+              // list unchanged so we can assert no duplicate emission.
+              const items = readTodo(ctx.state);
+              if (items.length === 0) {
+                return {
+                  state: withTodo(ctx.state, [{ id: 1, subject: 'item-1', status: 'pending' }]),
+                };
+              }
+              return;
+            },
+          },
+        ],
+      });
+
+      const emitted: Array<{ items: unknown[] }> = [];
+      runner.on('todo:list', (e) => emitted.push(e));
+
+      await runner.run(createAgentState(defaultConfig));
+
+      // Step 1: list 0 → 1 item, emit once. Steps 2-3: unchanged, no emission.
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].items).toEqual([{ id: 1, subject: 'item-1', status: 'pending' }]);
+    });
+
+    it('emits updated snapshots as the list grows', async () => {
+      const client = createMockClient();
+      let stepNo = 0;
+      vi.mocked(client.stream).mockImplementation(async function* () {
+        stepNo++;
+        if (stepNo < 3) {
+          yield {
+            type: 'tool_call',
+            toolCall: { id: `c${stepNo}`, name: 'fake_todo', arguments: {} },
+          };
+        }
+        yield { type: 'done', roundTotalTokens: { input: 5, output: 5 } };
+      });
+
+      const runner = new AgentRunner({
+        model: 'gpt-4',
+        llmClient: client,
+        tools: [
+          {
+            name: 'fake_todo',
+            description: 'fake todo tool',
+            parameters: z.object({}),
+            execute: async () => ({ ok: true }),
+          } as never,
+        ],
+        middleware: [
+          {
+            name: 'todo-stub',
+            afterStep: async (ctx: { state: { context: Record<string, unknown> } }) => {
+              const items = readTodo(ctx.state);
+              return {
+                state: withTodo(ctx.state, [
+                  ...items,
+                  { id: items.length + 1, subject: `item-${items.length + 1}`, status: 'pending' },
+                ]),
+              };
+            },
+          },
+        ],
+      });
+
+      const emitted: Array<{ items: unknown[] }> = [];
+      runner.on('todo:list', (e) => emitted.push(e));
+
+      await runner.run(createAgentState(defaultConfig));
+
+      // Step 1 emits [item-1]; step 2 emits [item-1, item-2]; the final
+      // step's afterStep adds item-3, so a last [item-1, item-2, item-3]
+      // snapshot is emitted before the run stops.
+      expect(emitted.map((e) => e.items.length)).toEqual([1, 2, 3]);
     });
   });
 });

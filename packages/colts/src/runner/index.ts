@@ -127,6 +127,15 @@ export interface RunnerEventMap {
   };
   /** Thinking/reasoning content during streaming */
   thinking: { content: string; timestamp: number };
+
+  // ── Todo list (middleware-provided, aligned with Rust RunnerEvent::TodoList) ──
+  /**
+   * Snapshot of the todo list carried on `state.context.todoList` (e.g. by
+   * wrangler's todolist middleware). Emitted by the run loop after a step
+   * whenever the list changed; the daemon maps it to the `todo-list` SSE
+   * event so the UI can show live todo progress.
+   */
+  'todo:list': { items: unknown[]; timestamp: number };
 }
 
 /**
@@ -184,6 +193,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   private middlewareExecutor: MiddlewareExecutor;
   private hasMiddleware: boolean;
   private options: RunnerOptions;
+  /** JSON of the last `todo:list` items emitted; only changes are emitted. */
+  private lastTodoItemsJson: string | undefined;
 
   /** Get the Skill provider (used by the CLI layer for the /skill command) */
   get skillProvider(): ISkillProvider | undefined {
@@ -743,6 +754,8 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     }
 
     this.emit('run:start', { state: currentState, timestamp: Date.now() });
+    // Fresh run — drop the previous run's todo snapshot baseline.
+    this.lastTodoItemsJson = undefined;
     const registry = toolRegistry ?? this.toolRegistry;
     const maxSteps = options?.maxSteps ?? this.options.maxSteps ?? DEFAULT_RUNNER_MAX_STEPS;
     let totalSteps = 0;
@@ -812,6 +825,23 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
 
         currentState = newState;
         totalSteps++;
+
+        // Emit a todo-list snapshot whenever the list changed during this
+        // step (the todolist middleware applies its updates in afterStep).
+        // Only changes are emitted, so consumers get a clean stream of
+        // updates instead of a per-step heartbeat — same contract as the
+        // Rust daemon's RunnerEvent::TodoList.
+        const todoList = (currentState.context as { todoList?: { items?: unknown[] } }).todoList;
+        if (todoList) {
+          const itemsJson = JSON.stringify(todoList.items ?? []);
+          if (itemsJson !== this.lastTodoItemsJson) {
+            this.lastTodoItemsJson = itemsJson;
+            this.emit('todo:list', {
+              items: (todoList.items ?? []).slice(),
+              timestamp: Date.now(),
+            });
+          }
+        }
 
         const decision = this.executionPolicy.shouldStop(currentState, result, {
           stepCount: totalSteps,
