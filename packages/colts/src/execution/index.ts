@@ -30,7 +30,7 @@ export type ToolPostEffect =
   | { type: 'skill:start'; name: string; task: string; state: AgentState; timestamp: number }
   | { type: 'skill:end'; name: string; result: string; state: AgentState; timestamp: number }
   // Tool completion
-  | { type: 'tool:end'; result: unknown; callId?: string; timestamp: number }
+  | { type: 'tool:end'; result: unknown; callId: string; timestamp: number }
   | { type: 'tools:end'; results: Record<string, unknown>; timestamp: number }
   // Error
   | { type: 'error'; error: Error; context: { step: number }; timestamp: number };
@@ -90,7 +90,7 @@ export type StreamEvent =
   | { type: 'phase-change'; from: Phase; to: Phase; timestamp: number }
   | { type: 'token'; token: string; timestamp: number }
   | { type: 'tool:start'; action: Action; timestamp: number }
-  | { type: 'tool:end'; result: unknown; callId?: string; timestamp: number }
+  | { type: 'tool:end'; result: unknown; callId: string; timestamp: number }
   | { type: 'tools:start'; actions: Action[]; timestamp: number }
   | { type: 'tools:end'; results: Record<string, unknown>; timestamp: number }
   | { type: 'error'; error: Error; context: { toolName?: string; step: number }; timestamp: number }

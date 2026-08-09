@@ -72,7 +72,11 @@ describe('ToolResultHandler — plain tool results', () => {
     expect(result.done).toBe(false);
     expect(result.phase.type).toBe('tool-result');
     expect(result.effects).toHaveLength(1);
-    expect(result.effects![0]).toMatchObject({ type: 'tool:end', result: '42' });
+    expect(result.effects![0]).toMatchObject({
+      type: 'tool:end',
+      callId: 'tc1',
+      result: '42',
+    });
   });
 
   it('should produce tools:end effect for multiple results', async () => {

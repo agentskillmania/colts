@@ -33,8 +33,18 @@ export class ToolResultHandler implements IPhaseHandler {
     const effects: ToolPostEffect[] = [];
     const results = phase.results;
     const resultKeys = Object.keys(results);
+    // Guard: never emit tool:end without a call id. Unreachable in practice —
+    // ExecutingToolHandler only transitions to tool-result with ≥1 action
+    // result, so a tool-result phase with no results is an invariant violation.
+    if (resultKeys.length === 0) {
+      return { state, execState, phase: execState.phase, done: false, effects };
+    }
     // Use first result for skill signal detection and backward compatibility
-    const result = resultKeys.length > 0 ? results[resultKeys[0]] : undefined;
+    const result = results[resultKeys[0]];
+    // First result's call id — tool:end must always carry it so downstream
+    // consumers (daemon SSE mapping, UI reducers) can pair tool:start→tool:end
+    // precisely instead of falling back to first-streaming matching.
+    const firstCallId = resultKeys[0];
     let currentState = state;
 
     // 1. Skill signal processing — sole call site of applySkillSignal
@@ -71,6 +81,7 @@ export class ToolResultHandler implements IPhaseHandler {
           effects.push({
             type: 'tool:end',
             timestamp: Date.now(),
+            callId: firstCallId,
             result: formatSkillToolResult(result),
           });
           const nextExec = updateExecState(execState, (draft) => {
@@ -89,6 +100,7 @@ export class ToolResultHandler implements IPhaseHandler {
           effects.push({
             type: 'tool:end',
             timestamp: Date.now(),
+            callId: firstCallId,
             result: `Skill '${sigResult.currentSkill}' is already active`,
           });
           return { state: currentState, execState, phase: execState.phase, done: false, effects };
@@ -115,9 +127,9 @@ export class ToolResultHandler implements IPhaseHandler {
       }
     }
 
-    // 3. Plain tool result
-    if (resultKeys.length <= 1) {
-      effects.push({ type: 'tool:end', timestamp: Date.now(), result });
+    // 3. Plain tool result — exactly one result carries its call id.
+    if (resultKeys.length === 1) {
+      effects.push({ type: 'tool:end', timestamp: Date.now(), callId: firstCallId, result });
     } else {
       effects.push({ type: 'tools:end', timestamp: Date.now(), results });
     }

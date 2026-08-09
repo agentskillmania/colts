@@ -82,8 +82,8 @@ export interface RunnerEventMap {
   token: { token: string; timestamp: number };
   /** Tool execution started */
   'tool:start': { action: Action; timestamp: number };
-  /** Tool execution completed */
-  'tool:end': { result: unknown; callId?: string; timestamp: number };
+  /** Tool execution completed — callId pairs it with the tool:start that created the call */
+  'tool:end': { result: unknown; callId: string; timestamp: number };
   /** Parallel tool execution started */
   'tools:start': { actions: Action[]; timestamp: number };
   /** Parallel tool execution completed */
