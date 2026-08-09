@@ -269,6 +269,12 @@ describe('CallingLLMHandler', () => {
     // Should also emit llm:request and llm:response
     expect(emittedEvents.some((e) => e.type === 'llm:request')).toBe(true);
     expect(emittedEvents.some((e) => e.type === 'llm:response')).toBe(true);
+
+    // llm:request should carry the resolved model + contextWindow
+    const llmReq = emittedEvents.find((e) => e.type === 'llm:request');
+    expect(llmReq?.data).toHaveProperty('model');
+    expect(llmReq?.data).toHaveProperty('contextWindow');
+    expect(typeof (llmReq?.data as Record<string, unknown>).contextWindow).toBe('number');
   });
 
   it('should estimate tokens when provider returns zero usage', async () => {

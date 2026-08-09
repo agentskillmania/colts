@@ -42,6 +42,7 @@ function createMockClient(responses: LLMResponse[]) {
       }
       yield { type: 'done' as const, roundTotalTokens: resp.tokens };
     }),
+    getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
   } as unknown as import('@agentskillmania/llm-client').LLMClient;
 }
 

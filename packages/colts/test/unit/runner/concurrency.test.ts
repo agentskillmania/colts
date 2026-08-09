@@ -146,6 +146,7 @@ describe('Step 14: Concurrency isolation', () => {
       stream: vi.fn().mockImplementation(async function* () {
         throw new Error('API exploded');
       }),
+      getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
     } as unknown as LLMClient;
 
     const successClient = createMockLLMClient([

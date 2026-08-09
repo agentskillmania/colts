@@ -346,6 +346,7 @@ describe('HITL V2: Integration with runner', () => {
           };
           yield { type: 'done', roundTotalTokens: { input: 50, output: 20 } };
         }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
       };
 
       const runner = new AgentRunner({
@@ -429,6 +430,7 @@ describe('HITL V2: Integration with runner', () => {
         }
         yield { type: 'done', roundTotalTokens: response.tokens };
       }),
+      getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
     };
 
     const runner = new AgentRunner({

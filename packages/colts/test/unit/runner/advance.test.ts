@@ -201,6 +201,7 @@ describe('advance()', () => {
         // eslint-disable-next-line no-throw-literal
         throw 'string error';
       }),
+      getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
     } as unknown as LLMClient;
     const throwRunner = new AgentRunner({ model: 'gpt-4', llmClient: throwClient });
 

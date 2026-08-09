@@ -24,6 +24,7 @@ function createMockClient() {
       yield { type: 'text', delta: mockResponse.content, accumulatedContent: mockResponse.content };
       yield { type: 'done', roundTotalTokens: mockResponse.tokens };
     }),
+    getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
   } as unknown as LLMClient;
 }
 

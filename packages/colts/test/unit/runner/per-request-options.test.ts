@@ -47,6 +47,7 @@ function createCapturingClient(responses: LLMResponse[]) {
       };
       yield { type: 'done' as const, roundTotalTokens: response.tokens };
     }),
+    getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
   };
 
   return {

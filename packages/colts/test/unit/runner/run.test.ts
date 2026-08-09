@@ -187,6 +187,7 @@ describe('run()', () => {
       stream: vi.fn().mockImplementation(async function* () {
         throw new Error('API error');
       }),
+      getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
     } as unknown as LLMClient;
 
     const runner = new AgentRunner({ model: 'gpt-4', llmClient: client });

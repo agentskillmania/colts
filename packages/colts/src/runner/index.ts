@@ -115,6 +115,10 @@ export interface RunnerEventMap {
     messages: Array<{ role: string; content: string }>;
     tools: string[];
     skill: { current: string | null } | null;
+    /** The model actually used for this LLM call (may differ from session default if overridden per-request). */
+    model: string;
+    /** Context window size (tokens) of the model used for this call. */
+    contextWindow: number;
     timestamp: number;
   };
   /** After LLM response is received */

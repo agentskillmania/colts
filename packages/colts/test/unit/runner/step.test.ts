@@ -164,6 +164,7 @@ describe('step()', () => {
       stream: vi.fn().mockImplementation(async function* () {
         throw new Error('LLM API error');
       }),
+      getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
     } as unknown as LLMClient;
 
     const runner = new AgentRunner({

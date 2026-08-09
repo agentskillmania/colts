@@ -38,6 +38,11 @@ export class CallingLLMHandler implements IPhaseHandler {
     const resolvedModel = options?.model ?? ctx.options.model;
     const signal = options?.signal;
 
+    // Resolve model metadata (contextWindow) for the llm:request event so
+    // downstream consumers (dashboards) know the real denominator without
+    // re-reading config. getModelMeta is safe — always returns a ModelMeta.
+    const modelMeta = ctx.llmProvider.getModelMeta(resolvedModel);
+
     // Emit llm:request event before LLM call
     ctx.emit('llm:request', {
       messages: messages.map((m) => ({
@@ -52,6 +57,8 @@ export class CallingLLMHandler implements IPhaseHandler {
         description: t.description,
       })) ?? []) as unknown as string[],
       skill: state.context.skillState ? { current: state.context.skillState.current } : null,
+      model: resolvedModel,
+      contextWindow: modelMeta.contextWindow,
       timestamp: Date.now(),
     });
 
