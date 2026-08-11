@@ -5,8 +5,6 @@
  * - All update operations return new state, original state remains unchanged
  */
 
-import { randomUUID } from 'node:crypto';
-
 import { produce, Draft } from 'immer';
 
 import type { AgentState, AgentConfig, Message, TokenStats } from '../types.js';
@@ -76,7 +74,7 @@ export function addUserMessage(state: AgentState, content: string, maxLength?: n
   }
   return updateState(state, (draft) => {
     draft.context.messages.push({
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role: 'user',
       content,
       timestamp: Date.now(),
@@ -103,7 +101,7 @@ export function addAssistantMessage(
 ): AgentState {
   return updateState(state, (draft) => {
     const msg: Message = {
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role: 'assistant',
       content,
       type: options?.type ?? 'text',
@@ -135,7 +133,7 @@ export function addToolMessage(
 ): AgentState {
   return updateState(state, (draft) => {
     const msg: Message = {
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role: 'tool',
       content,
       type: 'tool-result',

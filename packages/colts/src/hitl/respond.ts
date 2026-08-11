@@ -5,8 +5,6 @@
  * can continue from where it left off.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import { produce } from 'immer';
 
 import type { AgentState } from '../types.js';
@@ -54,7 +52,7 @@ function respondToQuestion(
 
   return produce(state, (draft) => {
     draft.context.messages.push({
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role: 'tool',
       content,
       toolCallId,
@@ -81,7 +79,7 @@ function rejectTool(state: AgentState, request: HumanRequest): AgentState {
 
   return produce(state, (draft) => {
     draft.context.messages.push({
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role: 'tool',
       content,
       toolCallId,

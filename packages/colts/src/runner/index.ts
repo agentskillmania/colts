@@ -7,7 +7,6 @@
 
 import type { TokenStats } from '@agentskillmania/llm-client';
 import { LLMClient } from '@agentskillmania/llm-client';
-import type { Message, Tool } from '@mariozechner/pi-ai';
 import { EventEmitter } from 'eventemitter3';
 
 import type { RunnerContext } from './advance.js';
@@ -45,7 +44,6 @@ import { FilesystemSkillProvider } from '../skills/filesystem-provider.js';
 import { createLoadSkillTool } from '../skills/index.js';
 import type { ISkillProvider } from '../skills/types.js';
 import { updateState } from '../state/index.js';
-import { getToolsForLLM } from '../tools/llm-format.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { DefaultToolSchemaFormatter } from '../tools/schema-formatter.js';
 import type { IToolSchemaFormatter } from '../tools/schema-formatter.js';
@@ -422,30 +420,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   /**
    * Build messages array for LLM call from current state
    *
-   * @param state - Current agent state
-   * @returns Array of messages in LLM format
-   *
-   * @private
-   */
-  private buildMessages(state: AgentState): Message[] {
-    return this.messageAssembler.build(state, {
-      systemPrompt: this.options.systemPrompt,
-      model: this.options.model,
-      skillProvider: this._skillProvider,
-    });
-  }
-
-  /**
-   * Get tools formatted for LLM calls
-   *
-   * @param registry - Optional tool registry
-   * @returns Array of tools in pi-ai format
-   * @private
-   */
-  private getToolsForLLM(registry?: IToolRegistry): Tool[] | undefined {
-    return getToolsForLLM(registry, this.toolSchemaFormatter);
-  }
-
   /**
    * Ensure skill state is initialized in the given AgentState.
    *

@@ -39,14 +39,14 @@
     "@types/node": "^20.0.0",
     "@types/yaml": "^1.9.7",
     "@vitest/coverage-v8": "^2.0.0",
-    "immer": "^11.1.4",
+    "dotenv": "^16.4.0",
     "typescript": "^5.0.0",
     "vitest": "^2.0.0"
   },
   "dependencies": {
     "@agentskillmania/llm-client": "workspace:*",
-    "dotenv": "^16.4.0",
     "eventemitter3": "^5.0.4",
+    "immer": "^11.1.4",
     "js-tiktoken": "^1.0.21",
     "yaml": "^2.8.3",
     "zod": "^3.25.76",

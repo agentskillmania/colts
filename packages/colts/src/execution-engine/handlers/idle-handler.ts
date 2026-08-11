@@ -6,8 +6,6 @@
  * to preparing phase.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
 import type { AgentState, Message as LocalMessage, MessageRole } from '../../types.js';
@@ -25,7 +23,7 @@ export class IdleHandler implements IPhaseHandler {
       skillProvider: ctx.skillProvider,
     });
     const displayMessages: LocalMessage[] = messages.map((m) => ({
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role: m.role as MessageRole,
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       timestamp: Date.now(),

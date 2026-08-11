@@ -62,12 +62,12 @@ importers:
       '@agentskillmania/llm-client':
         specifier: workspace:*
         version: link:../llm-client
-      dotenv:
-        specifier: ^16.4.0
-        version: 16.6.1
       eventemitter3:
         specifier: ^5.0.4
         version: 5.0.4
+      immer:
+        specifier: ^11.1.4
+        version: 11.1.4
       js-tiktoken:
         specifier: ^1.0.21
         version: 1.0.21
@@ -93,9 +93,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^2.0.0
         version: 2.1.9(vitest@2.1.9(@types/node@20.19.39))
-      immer:
-        specifier: ^11.1.4
-        version: 11.1.4
+      dotenv:
+        specifier: ^16.4.0
+        version: 16.6.1
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
