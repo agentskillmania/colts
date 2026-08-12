@@ -64,6 +64,13 @@ export interface RunnerEventMap {
   'run:start': { state: AgentState; timestamp: number };
   /** Run ended */
   'run:end': { state: AgentState; result: RunResult; timestamp: number };
+  /**
+   * Conversation was reset (`/clear`): messages went from non-empty to empty
+   * during the run. Frontends should drop their local message view. Mirrors the
+   * Rust port's `RunnerEvent::SessionCleared`. Emitted before the terminal
+   * `complete` so the wire order is `session-cleared` → `done`.
+   */
+  'session-cleared': { timestamp: number };
 
   // ── Lifecycle (step-level, aligned with RunStreamEvent) ──
   /** Step started */
@@ -703,6 +710,9 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Initialize skill state if needed
     let currentState = this.initializeSkillState(state);
     const runStartTime = Date.now();
+    // Capture the pre-run message count so finalizeRun can detect a `/clear`
+    // reset (messages → empty) and emit `session-cleared`.
+    const initialMessageCount = currentState.context.messages.length;
 
     // ── beforeRun ──
     if (this.hasMiddleware) {
@@ -747,6 +757,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     ): Promise<{ state: AgentState; result: RunResult }> => {
       const resultWithDuration = { ...runResult, duration: Date.now() - runStartTime };
       this.emit('run:end', { state: runState, result: resultWithDuration, timestamp: Date.now() });
+      // `/clear` reset the conversation: messages went from non-empty to empty.
+      // Notify clients to drop their local view BEFORE the terminal `complete`
+      // so the wire order is `session-cleared` → `done` (mirrors Rust
+      // `RunnerEvent::SessionCleared`). `/compact` keeps messages non-empty
+      // (it compresses), so it does not trigger this.
+      if (runState.context.messages.length === 0 && initialMessageCount > 0) {
+        this.emit('session-cleared', { timestamp: Date.now() });
+      }
       this.emit('complete', { result: resultWithDuration, timestamp: Date.now() });
       if (this.hasMiddleware) {
         await this.middlewareExecutor.runAfterRun({

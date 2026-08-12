@@ -170,6 +170,23 @@ export class DefaultContextCompressor {
       }
     }
 
+    // Ensure the anchor never splits an assistant `toolCalls` message from its
+    // following `tool` result(s). If the message immediately before the anchor
+    // is an assistant message carrying toolCalls, back the anchor up to include
+    // it in the sent window. Otherwise the assembler would emit an orphan
+    // `role:"tool"` whose toolCallId points at a dropped assistant message —
+    // rejected by the LLM as "Messages with role 'tool' must be a response to a
+    // preceding message with 'tool_calls'". Mirrors the Rust port
+    // (crates/colts/src/compressor.rs).
+    while (anchor > existingAnchor && anchor > 0) {
+      const prev = messages[anchor - 1];
+      if (prev.role === 'assistant' && prev.toolCalls && prev.toolCalls.length > 0) {
+        anchor -= 1;
+        continue;
+      }
+      break;
+    }
+
     // Nothing to compress
     if (anchor <= existingAnchor) {
       return {
