@@ -19,7 +19,7 @@ import type { Message, Tool } from '@mariozechner/pi-ai';
  * @example
  * ```typescript
  * const config: LLMClientConfig = {
- *   defaultProviderConcurrency: 10,  // Max 10 concurrent requests per provider
+ *   defaultProviderConcurrency: 5,  // Max 5 concurrent requests per provider
  *   defaultKeyConcurrency: 5,        // Max 5 concurrent requests per API key
  *   defaultModelConcurrency: 3       // Max 3 concurrent requests per model
  * };
@@ -29,7 +29,7 @@ export interface LLMClientConfig {
   /**
    * Default maximum number of concurrent requests allowed per provider.
    *
-   * @defaultValue 10
+   * @defaultValue 5
    */
   defaultProviderConcurrency?: number;
 

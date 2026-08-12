@@ -122,7 +122,7 @@ export class LLMClient extends EventEmitter {
    * @example
    * ```typescript
    * const client = new LLMClient({
-   *   defaultProviderConcurrency: 10,
+   *   defaultProviderConcurrency: 5,
    *   defaultKeyConcurrency: 5,
    *   defaultModelConcurrency: 3,
    *   baseUrl: 'https://custom-api.example.com/v1'
@@ -132,7 +132,7 @@ export class LLMClient extends EventEmitter {
   constructor(config?: LLMClientOptions) {
     super();
     this.config = {
-      defaultProviderConcurrency: config?.defaultProviderConcurrency ?? 10,
+      defaultProviderConcurrency: config?.defaultProviderConcurrency ?? 5,
       defaultKeyConcurrency: config?.defaultKeyConcurrency ?? 5,
       defaultModelConcurrency: config?.defaultModelConcurrency ?? 3,
     };
