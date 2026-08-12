@@ -35,7 +35,7 @@ export interface ISkillProvider {
    * @param name - Skill name
    * @returns Skill manifest, or undefined if not found
    */
-  getManifest(name: string): SkillManifest | undefined;
+  getManifest(name: string): Promise<SkillManifest | undefined>;
 
   /**
    * Load a skill's instruction content (SKILL.md body section)
@@ -61,12 +61,12 @@ export interface ISkillProvider {
    *
    * @returns Array of all skill manifests
    */
-  listSkills(): SkillManifest[];
+  listSkills(): Promise<SkillManifest[]>;
 
   /**
    * Rescan directories and refresh skill cache
    */
-  refresh(): void;
+  refresh(): Promise<void>;
 }
 
 /**

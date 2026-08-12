@@ -19,7 +19,6 @@ export type { SkillState } from '../types.js';
 export { FilesystemSkillProvider } from './filesystem-provider.js';
 
 export { createLoadSkillTool } from './load-skill-tool.js';
-
 export {
   applySkillSignal,
   formatSkillToolResult,

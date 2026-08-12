@@ -54,7 +54,7 @@ function createMockCtx(overrides?: Partial<PhaseHandlerContext>): PhaseHandlerCo
     } as never,
     toolRegistry: createMockToolRegistry(),
     messageAssembler: {
-      build: vi.fn().mockReturnValue([
+      build: vi.fn().mockResolvedValue([
         { role: 'system', content: 'You are a test assistant.' },
         { role: 'user', content: 'Hello' },
       ]),
@@ -106,12 +106,12 @@ describe('IdleHandler', () => {
     expect(handler.canHandle('preparing')).toBe(false);
   });
 
-  it('should assemble messages and transition to preparing', () => {
+  it('should assemble messages and transition to preparing', async () => {
     const state = createMockState();
     const execState = createExecutionState();
     const ctx = createMockCtx();
 
-    const result = handler.execute(ctx, state, execState);
+    const result = await handler.execute(ctx, state, execState);
 
     expect(result.phase.type).toBe('preparing');
     expect(result.done).toBe(false);
@@ -119,16 +119,16 @@ describe('IdleHandler', () => {
     expect(result.execState.preparedMessages!.length).toBeGreaterThan(0);
   });
 
-  it('should pass skillProvider to assembler', () => {
+  it('should pass skillProvider to assembler', async () => {
     const state = createMockState();
     const execState = createExecutionState();
-    const build = vi.fn().mockReturnValue([{ role: 'user', content: 'hi' }]);
+    const build = vi.fn().mockResolvedValue([{ role: 'user', content: 'hi' }]);
     const ctx = createMockCtx({
       messageAssembler: { build } as never,
       skillProvider: {} as never,
     });
 
-    handler.execute(ctx, state, execState);
+    await handler.execute(ctx, state, execState);
 
     expect(build).toHaveBeenCalledWith(state, {
       systemPrompt: undefined,
@@ -231,7 +231,7 @@ describe('CallingLLMHandler', () => {
     const state = createMockState();
     const execState = createExecutionState();
     // No preparedMessages set
-    const build = vi.fn().mockReturnValue([{ role: 'user', content: 'hello' }]);
+    const build = vi.fn().mockResolvedValue([{ role: 'user', content: 'hello' }]);
     const ctx = createMockCtx({
       messageAssembler: { build } as never,
     });

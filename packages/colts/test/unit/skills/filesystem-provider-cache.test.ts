@@ -85,7 +85,7 @@ describe('FilesystemSkillProvider cache coverage', () => {
     createSkillDir(tempDir, 'missing', 'name: missing\ndescription: Test', '# Body');
 
     const provider = new FilesystemSkillProvider([tempDir]);
-    provider.refresh(); // Load manifest
+    await provider.refresh(); // Load manifest
 
     // Delete file without priming cache
     rmSync(join(tempDir, 'missing', 'SKILL.md'));
@@ -132,7 +132,7 @@ describe('FilesystemSkillProvider cache coverage', () => {
     writeFileSync(join(tempDir, 'res-missing', 'data.txt'), 'data');
 
     const provider = new FilesystemSkillProvider([tempDir]);
-    provider.refresh();
+    await provider.refresh();
 
     rmSync(join(tempDir, 'res-missing', 'data.txt'));
 

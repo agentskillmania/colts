@@ -120,7 +120,7 @@ describe('AgentRunner', () => {
       mockStreamResponse(client, mockResponse);
 
       const customAssembler: IMessageAssembler = {
-        build: vi.fn().mockReturnValue([
+        build: vi.fn().mockResolvedValue([
           { role: 'user', content: 'custom-system', timestamp: Date.now() },
           { role: 'user', content: 'Hi there!', timestamp: Date.now() },
         ]),
@@ -413,15 +413,15 @@ describe('AgentRunner', () => {
     const createMockSkillProvider = (skills: SkillManifest[]): ISkillProvider => {
       const manifestMap = new Map(skills.map((s) => [s.name, s]));
       return {
-        getManifest: vi.fn((name: string) => manifestMap.get(name)),
+        getManifest: vi.fn(async (name: string) => manifestMap.get(name)),
         loadInstructions: vi.fn(async (name: string) => {
           const m = manifestMap.get(name);
           if (!m) throw new Error(`Skill not found: ${name}`);
           return `Instructions for ${name}`;
         }),
         loadResource: vi.fn(async () => ''),
-        listSkills: vi.fn(() => Array.from(manifestMap.values())),
-        refresh: vi.fn(),
+        listSkills: vi.fn(async () => Array.from(manifestMap.values())),
+        refresh: vi.fn(async () => {}),
       };
     };
 

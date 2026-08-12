@@ -32,7 +32,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
    * @param opts - Message building options
    * @returns Array of messages formatted for pi-ai LLM calls
    */
-  build(state: AgentState, opts: BuildMessagesOptions): PiAIMessage[] {
+  async build(state: AgentState, opts: BuildMessagesOptions): Promise<PiAIMessage[]> {
     const messages: PiAIMessage[] = [];
     const now = Date.now();
 
@@ -51,7 +51,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
 
     // Skill catalog — static, skills don't change during a session
     if (opts.skillProvider) {
-      const skills = opts.skillProvider.listSkills();
+      const skills = await opts.skillProvider.listSkills();
       if (skills.length > 0) {
         const skillLines = skills.map((s) => `- ${s.name}: ${s.description}`);
         systemParts.push(

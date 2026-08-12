@@ -14,7 +14,7 @@ import type { AgentState } from '../../../src/types.js';
 import type { RunnerContext } from '../../../src/runner/advance.js';
 
 describe('createRouter', () => {
-  it('should create a new PhaseRouter when customHandlers are provided', () => {
+  it('should create a new PhaseRouter when customHandlers are provided', async () => {
     const customHandler: IPhaseHandler = {
       canHandle: (type: string) => type === 'idle',
       execute: vi.fn().mockResolvedValue({
@@ -34,7 +34,7 @@ describe('createRouter', () => {
     expect(router1).not.toBe(router2);
   });
 
-  it('should return the singleton when no customHandlers are provided', () => {
+  it('should return the singleton when no customHandlers are provided', async () => {
     const router1 = createRouter();
     const router2 = createRouter();
 
@@ -44,7 +44,7 @@ describe('createRouter', () => {
 });
 
 describe('buildMessagesFromCtx', () => {
-  it('should delegate to messageAssembler.build with correct options', () => {
+  it('should delegate to messageAssembler.build with correct options', async () => {
     const mockBuild = vi.fn().mockReturnValue([
       { role: 'system', content: 'Test system' },
       { role: 'user', content: 'Hello' },
@@ -64,7 +64,7 @@ describe('buildMessagesFromCtx', () => {
       skillProvider: undefined,
     } as unknown as RunnerContext;
 
-    const messages = buildMessagesFromCtx(ctx, mockState);
+    const messages = await buildMessagesFromCtx(ctx, mockState);
 
     expect(mockBuild).toHaveBeenCalledWith(mockState, {
       systemPrompt: 'Custom system prompt',
@@ -76,7 +76,7 @@ describe('buildMessagesFromCtx', () => {
     expect(messages[0].role).toBe('system');
   });
 
-  it('should pass skillProvider when present', () => {
+  it('should pass skillProvider when present', async () => {
     const mockBuild = vi.fn().mockReturnValue([]);
     const mockSkillProvider = { listSkills: vi.fn() };
 
@@ -92,7 +92,7 @@ describe('buildMessagesFromCtx', () => {
       skillProvider: mockSkillProvider,
     } as unknown as RunnerContext;
 
-    buildMessagesFromCtx(ctx, {} as AgentState);
+    await buildMessagesFromCtx(ctx, {} as AgentState);
 
     expect(mockBuild).toHaveBeenCalledWith(
       expect.anything(),

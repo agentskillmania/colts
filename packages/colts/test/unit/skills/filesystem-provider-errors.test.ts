@@ -51,7 +51,7 @@ describe('FilesystemSkillProvider error branches', () => {
     }
   });
 
-  it('should warn and skip when SKILL.md cannot be read', () => {
+  it('should warn and skip when SKILL.md cannot be read', async () => {
     // Create a directory with a SKILL.md that exists but is unreadable
     const skillDir = join(tempDir, 'unreadable-skill');
     mkdirSync(skillDir, { recursive: true });
@@ -63,7 +63,7 @@ describe('FilesystemSkillProvider error branches', () => {
       chmodSync(skillFile, 0o000);
 
       const provider = new FilesystemSkillProvider([tempDir]);
-      const skills = provider.listSkills();
+      const skills = await provider.listSkills();
 
       // Should warn about unreadable file and skip the skill
       expect(warnings).toEqual(expect.arrayContaining([expect.stringContaining('Cannot read')]));
@@ -78,7 +78,7 @@ describe('FilesystemSkillProvider error branches', () => {
     }
   });
 
-  it('should skip entries when statSync fails in collectFiles', () => {
+  it('should skip entries when statSync fails in collectFiles', async () => {
     // Create a valid skill directory with a broken symlink
     const skillDir = join(tempDir, 'stat-fail-skill');
     mkdirSync(skillDir, { recursive: true });
@@ -91,7 +91,7 @@ describe('FilesystemSkillProvider error branches', () => {
     symlinkSync(join(skillDir, 'nonexistent.txt'), join(skillDir, 'broken-link.txt'));
 
     const provider = new FilesystemSkillProvider([tempDir]);
-    const manifest = provider.getManifest('stat-fail');
+    const manifest = await provider.getManifest('stat-fail');
 
     // Should still find the skill (SKILL.md read succeeds)
     expect(manifest).toEqual(expect.objectContaining({ name: 'stat-fail' }));
@@ -99,7 +99,7 @@ describe('FilesystemSkillProvider error branches', () => {
     expect(manifest?.resources).toBeUndefined();
   });
 
-  it('should skip entries when statSync fails in scanDirectory', () => {
+  it('should skip entries when statSync fails in scanDirectory', async () => {
     // Create a valid skill directory
     const skillDir = join(tempDir, 'valid-skill');
     mkdirSync(skillDir, { recursive: true });
@@ -110,13 +110,13 @@ describe('FilesystemSkillProvider error branches', () => {
     symlinkSync(join(tempDir, 'nonexistent'), join(tempDir, 'broken-symlink'));
 
     const provider = new FilesystemSkillProvider([tempDir]);
-    const skills = provider.listSkills();
+    const skills = await provider.listSkills();
 
     // Should find only the valid skill (broken symlink skipped)
     expect(skills.map((s) => s.name)).toEqual(['valid']);
   });
 
-  it('should return empty manifests when readdirSync fails on a directory', () => {
+  it('should return empty manifests when readdirSync fails on a directory', async () => {
     // Create a subdirectory that will be unreadable
     const unreadableDir = join(tempDir, 'unreadable');
     mkdirSync(unreadableDir, { recursive: true });
@@ -125,7 +125,7 @@ describe('FilesystemSkillProvider error branches', () => {
     chmodSync(tempDir, 0o000);
 
     const provider = new FilesystemSkillProvider([tempDir]);
-    const skills = provider.listSkills();
+    const skills = await provider.listSkills();
 
     // Should return empty because readdirSync threw on tempDir
     expect(skills).toHaveLength(0);

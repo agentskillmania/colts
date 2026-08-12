@@ -56,7 +56,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
   });
 
   describe('Directory scanning', () => {
-    it('should scan directories containing SKILL.md and return SkillManifest', () => {
+    it('should scan directories containing SKILL.md and return SkillManifest', async () => {
       createSkillDir(
         tempDir,
         'my-skill',
@@ -65,7 +65,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       );
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const skills = provider.listSkills();
+      const skills = await provider.listSkills();
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe('my-skill');
@@ -73,7 +73,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       expect(skills[0].source).toBe(join(tempDir, 'my-skill'));
     });
 
-    it('should scan multiple directories', () => {
+    it('should scan multiple directories', async () => {
       const dir1 = join(tempDir, 'dir1');
       const dir2 = join(tempDir, 'dir2');
       mkdirSync(dir1, { recursive: true });
@@ -83,21 +83,21 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       createSkillDir(dir2, 'skill-b', 'name: skill-b\ndescription: Skill B', 'Body B');
 
       provider = new FilesystemSkillProvider([dir1, dir2]);
-      const skills = provider.listSkills();
+      const skills = await provider.listSkills();
 
       expect(skills).toHaveLength(2);
       const names = skills.map((s) => s.name).sort();
       expect(names).toEqual(['skill-a', 'skill-b']);
     });
 
-    it('subdirectories without SKILL.md should be ignored', () => {
+    it('subdirectories without SKILL.md should be ignored', async () => {
       createSkillDir(tempDir, 'valid-skill', 'name: valid\ndescription: Valid', 'Body');
       const noSkillDir = join(tempDir, 'no-skill');
       mkdirSync(noSkillDir, { recursive: true });
       writeFileSync(join(noSkillDir, 'README.md'), 'Not a skill');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const skills = provider.listSkills();
+      const skills = await provider.listSkills();
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe('valid');
@@ -105,7 +105,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
   });
 
   describe('YAML frontmatter parsing', () => {
-    it('should parse name and description', () => {
+    it('should parse name and description', async () => {
       createSkillDir(
         tempDir,
         'test',
@@ -114,13 +114,13 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       );
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('my-awesome-skill');
+      const manifest = await provider.getManifest('my-awesome-skill');
 
       expect(manifest).toEqual(expect.objectContaining({ name: 'my-awesome-skill' }));
       expect(manifest!.description).toMatch(/^This is an awesome skill\n?$/);
     });
 
-    it('should parse multi-line descriptions (| syntax)', () => {
+    it('should parse multi-line descriptions (| syntax)', async () => {
       const frontmatter = [
         'name: multi-line-skill',
         'description: |',
@@ -131,12 +131,12 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       createSkillDir(tempDir, 'multi', frontmatter, '# Body');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('multi-line-skill');
+      const manifest = await provider.getManifest('multi-line-skill');
 
       expect(manifest!.description).toMatch(/^This is a multi-line\ndescription for testing\n?$/);
     });
 
-    it('should parse multi-line descriptions (> folded syntax)', () => {
+    it('should parse multi-line descriptions (> folded syntax)', async () => {
       const frontmatter = [
         'name: folded-skill',
         'description: >',
@@ -147,12 +147,12 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       createSkillDir(tempDir, 'folded', frontmatter, '# Body');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('folded-skill');
+      const manifest = await provider.getManifest('folded-skill');
 
       expect(manifest!.description).toMatch(/^This is a folded description\n?$/);
     });
 
-    it('should parse descriptions containing special characters', () => {
+    it('should parse descriptions containing special characters', async () => {
       const frontmatter = [
         'name: special-skill',
         'description: "Skill with: colons, \\"quotes\\", and [brackets]"',
@@ -161,12 +161,12 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       createSkillDir(tempDir, 'special', frontmatter, '# Body');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('special-skill');
+      const manifest = await provider.getManifest('special-skill');
 
       expect(manifest!.description).toMatch(/^Skill with: colons, "quotes", and \[brackets\]\n?$/);
     });
 
-    it('should handle YAML parsing failures', () => {
+    it('should handle YAML parsing failures', async () => {
       // Create an invalid YAML frontmatter
       const frontmatter = [
         'name: invalid-yaml',
@@ -178,14 +178,14 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       // Should not throw, but return empty frontmatter
       provider = new FilesystemSkillProvider([tempDir]);
-      const skills = provider.listSkills();
+      const skills = await provider.listSkills();
 
       // Because YAML parsing failed, name and description may be empty, causing validation failure
       // So this skill may not be loaded
       expect(skills.length).toBe(0); // filtered out because name and description are empty
     });
 
-    it('should parse frontmatter containing numbers and booleans', () => {
+    it('should parse frontmatter containing numbers and booleans', async () => {
       const frontmatter = [
         'name: numeric-skill',
         'description: Version 2.5 skill',
@@ -196,7 +196,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       createSkillDir(tempDir, 'numeric', frontmatter, '# Body');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('numeric-skill');
+      const manifest = await provider.getManifest('numeric-skill');
 
       expect(manifest!.name).toBe('numeric-skill');
       expect(manifest!.description).toMatch(/^Version 2\.5 skill\n?$/);
@@ -283,16 +283,16 @@ describe('FilesystemSkillProvider (Step 7)', () => {
   });
 
   describe('getManifest', () => {
-    it('should return undefined for non-existent Skill', () => {
+    it('should return undefined for non-existent Skill', async () => {
       provider = new FilesystemSkillProvider([tempDir]);
-      expect(provider.getManifest('nonexistent')).toBeUndefined();
+      expect(await provider.getManifest('nonexistent')).toBeUndefined();
     });
 
-    it('should return correct SkillManifest', () => {
+    it('should return correct SkillManifest', async () => {
       createSkillDir(tempDir, 'test', 'name: test-skill\ndescription: Desc', 'Body');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('test-skill');
+      const manifest = await provider.getManifest('test-skill');
 
       expect(manifest).toEqual({
         name: 'test-skill',
@@ -301,7 +301,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       } satisfies SkillManifest);
     });
 
-    it('resource files should appear in manifest', () => {
+    it('resource files should appear in manifest', async () => {
       createSkillDir(
         tempDir,
         'with-resources',
@@ -314,7 +314,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       );
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('res-skill');
+      const manifest = await provider.getManifest('res-skill');
 
       expect(manifest!.resources).toEqual(['data.txt', 'helper.js']);
       expect(manifest!.scripts).toEqual(['helper.js']);
@@ -322,19 +322,19 @@ describe('FilesystemSkillProvider (Step 7)', () => {
   });
 
   describe('Empty directory handling', () => {
-    it('empty directory should not throw, returns empty list', () => {
+    it('empty directory should not throw, returns empty list', async () => {
       provider = new FilesystemSkillProvider([tempDir]);
-      expect(provider.listSkills()).toEqual([]);
+      expect(await provider.listSkills()).toEqual([]);
     });
 
-    it('empty directory list should not throw', () => {
+    it('empty directory list should not throw', async () => {
       provider = new FilesystemSkillProvider([]);
-      expect(provider.listSkills()).toEqual([]);
+      expect(await provider.listSkills()).toEqual([]);
     });
   });
 
   describe('Invalid SKILL.md handling', () => {
-    it('SKILL.md missing name should be skipped with warning', () => {
+    it('SKILL.md missing name should be skipped with warning', async () => {
       const skillDir = join(tempDir, 'no-name');
       mkdirSync(skillDir, { recursive: true });
       writeFileSync(join(skillDir, 'SKILL.md'), '---\ndescription: Only description\n---\nBody');
@@ -345,7 +345,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       try {
         provider = new FilesystemSkillProvider([tempDir]);
-        expect(provider.listSkills()).toEqual([]);
+        expect(await provider.listSkills()).toEqual([]);
         expect(warnSpy.length).toBeGreaterThan(0);
         expect(warnSpy).toEqual(expect.arrayContaining([[expect.stringContaining('name')]]));
       } finally {
@@ -353,7 +353,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       }
     });
 
-    it('SKILL.md missing description should be skipped with warning', () => {
+    it('SKILL.md missing description should be skipped with warning', async () => {
       const skillDir = join(tempDir, 'no-desc');
       mkdirSync(skillDir, { recursive: true });
       writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: only-name\n---\nBody');
@@ -364,7 +364,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       try {
         provider = new FilesystemSkillProvider([tempDir]);
-        expect(provider.listSkills()).toEqual([]);
+        expect(await provider.listSkills()).toEqual([]);
         expect(warnSpy.length).toBeGreaterThan(0);
         expect(warnSpy).toEqual(expect.arrayContaining([[expect.stringContaining('description')]]));
       } finally {
@@ -372,7 +372,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       }
     });
 
-    it('SKILL.md without frontmatter should be skipped', () => {
+    it('SKILL.md without frontmatter should be skipped', async () => {
       const skillDir = join(tempDir, 'no-fm');
       mkdirSync(skillDir, { recursive: true });
       writeFileSync(join(skillDir, 'SKILL.md'), 'Just plain markdown content');
@@ -383,7 +383,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       try {
         provider = new FilesystemSkillProvider([tempDir]);
-        expect(provider.listSkills()).toEqual([]);
+        expect(await provider.listSkills()).toEqual([]);
         // Missing name and description, should have warnings
         expect(warnSpy.length).toBeGreaterThan(0);
       } finally {
@@ -393,55 +393,55 @@ describe('FilesystemSkillProvider (Step 7)', () => {
   });
 
   describe('refresh', () => {
-    it('should discover newly added Skills', () => {
+    it('should discover newly added Skills', async () => {
       provider = new FilesystemSkillProvider([tempDir]);
-      expect(provider.listSkills()).toEqual([]);
+      expect(await provider.listSkills()).toEqual([]);
 
       // Add new Skill
       createSkillDir(tempDir, 'new-skill', 'name: new-skill\ndescription: New', '# New');
 
-      provider.refresh();
-      const skills = provider.listSkills();
+      await provider.refresh();
+      const skills = await provider.listSkills();
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe('new-skill');
     });
 
-    it('should clear deleted Skills', () => {
+    it('should clear deleted Skills', async () => {
       createSkillDir(tempDir, 'temp-skill', 'name: temp-skill\ndescription: Temp', '# Temp');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      expect(provider.listSkills()).toHaveLength(1);
+      expect(await provider.listSkills()).toHaveLength(1);
 
       // Delete Skill directory
       rmSync(join(tempDir, 'temp-skill'), { recursive: true, force: true });
 
-      provider.refresh();
-      expect(provider.listSkills()).toEqual([]);
+      await provider.refresh();
+      expect(await provider.listSkills()).toEqual([]);
     });
   });
 
   describe('Non-existent directories', () => {
-    it('non-existent directories should be silently ignored', () => {
+    it('non-existent directories should be silently ignored', async () => {
       const nonExistent = join(tempDir, 'does-not-exist');
       provider = new FilesystemSkillProvider([nonExistent]);
-      expect(provider.listSkills()).toEqual([]);
+      expect(await provider.listSkills()).toEqual([]);
     });
 
-    it('mix of existing and non-existent directories should work normally', () => {
+    it('mix of existing and non-existent directories should work normally', async () => {
       createSkillDir(tempDir, 'existing', 'name: existing\ndescription: Exists', '# Body');
 
       const nonExistent = join(tempDir, 'nope');
       provider = new FilesystemSkillProvider([nonExistent, tempDir]);
 
-      const skills = provider.listSkills();
+      const skills = await provider.listSkills();
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe('existing');
     });
   });
 
   describe('frontmatter edge cases', () => {
-    it('should be treated as no frontmatter when there is opening --- but no closing ---', () => {
+    it('should be treated as no frontmatter when there is opening --- but no closing ---', async () => {
       const skillDir = join(tempDir, 'open-only');
       mkdirSync(skillDir, { recursive: true });
       // Only opening ---, no closing
@@ -454,7 +454,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       try {
         provider = new FilesystemSkillProvider([tempDir]);
         // Missing closing ---, entire content treated as body, name/description missing
-        expect(provider.listSkills()).toEqual([]);
+        expect(await provider.listSkills()).toEqual([]);
       } finally {
         console.warn = originalWarn;
       }
@@ -467,7 +467,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: empty-skill\ndescription: Empty\n---');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('empty-skill');
+      const manifest = await provider.getManifest('empty-skill');
       expect(manifest).toEqual(expect.objectContaining({ name: 'empty-skill' }));
       expect(manifest!.description).toMatch(/^Empty\n?$/);
 
@@ -475,7 +475,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       expect(instructions).toBe('');
     });
 
-    it('should correctly parse frontmatter with multi-line description followed by new key-value pairs', () => {
+    it('should correctly parse frontmatter with multi-line description followed by new key-value pairs', async () => {
       const frontmatter = [
         'name: complex-skill',
         'description: |',
@@ -487,13 +487,13 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       createSkillDir(tempDir, 'complex', frontmatter, '# Body');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('complex-skill');
+      const manifest = await provider.getManifest('complex-skill');
 
       expect(manifest).toEqual(expect.objectContaining({ name: 'complex-skill' }));
       expect(manifest!.description).toMatch(/^Line one\nLine two\n?$/);
     });
 
-    it('should correctly parse multi-line description followed by empty line then key-value pairs', () => {
+    it('should correctly parse multi-line description followed by empty line then key-value pairs', async () => {
       const frontmatter = [
         'name: gap-skill',
         'description: |',
@@ -505,7 +505,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       createSkillDir(tempDir, 'gap', frontmatter, '# Body');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const manifest = provider.getManifest('gap-skill');
+      const manifest = await provider.getManifest('gap-skill');
 
       expect(manifest).toEqual(expect.objectContaining({ name: 'gap-skill' }));
       expect(manifest!.description).toMatch(/^First line\n?$/);
@@ -513,14 +513,14 @@ describe('FilesystemSkillProvider (Step 7)', () => {
   });
 
   describe('Mixed files and directories', () => {
-    it('regular files in directory (non-directory items) should be ignored', () => {
+    it('regular files in directory (non-directory items) should be ignored', async () => {
       // Create a regular file under the scan directory
       writeFileSync(join(tempDir, 'regular-file.txt'), 'not a skill');
 
       createSkillDir(tempDir, 'real-skill', 'name: real\ndescription: Real', '# Body');
 
       provider = new FilesystemSkillProvider([tempDir]);
-      const skills = provider.listSkills();
+      const skills = await provider.listSkills();
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe('real');
@@ -587,14 +587,14 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       writeFileSync(skillPath, '---\nname: refresh-test\ndescription: Test\n---\n# Updated');
 
       // After refresh should return new content (refresh clears cache and manifest, rescans)
-      provider.refresh();
+      await provider.refresh();
       const content2 = await provider.loadInstructions('refresh-test');
       expect(content2).toBe('# Updated');
     });
   });
 
   describe('Tilde path expansion', () => {
-    it('should expand ~/ paths to HOME directory and scan correctly', () => {
+    it('should expand ~/ paths to HOME directory and scan correctly', async () => {
       const home = process.env.HOME!;
       // Create skill in a temporary location under HOME
       const testSubDir = `.colts-test-tilde-${Date.now()}`;
@@ -605,7 +605,7 @@ describe('FilesystemSkillProvider (Step 7)', () => {
 
       // Reference with ~/ prefix
       provider = new FilesystemSkillProvider([`~/${testSubDir}`]);
-      const skills = provider.listSkills();
+      const skills = await provider.listSkills();
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe('tilde-skill');
@@ -613,9 +613,9 @@ describe('FilesystemSkillProvider (Step 7)', () => {
       rmSync(fullDir, { recursive: true, force: true });
     });
 
-    it('non-existent ~/ paths should be silently ignored', () => {
+    it('non-existent ~/ paths should be silently ignored', async () => {
       provider = new FilesystemSkillProvider(['~/__colts_nonexistent_test__']);
-      expect(provider.listSkills()).toEqual([]);
+      expect(await provider.listSkills()).toEqual([]);
     });
   });
 });

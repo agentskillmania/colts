@@ -48,5 +48,5 @@ export interface IMessageAssembler {
    * @param opts - Message building options
    * @returns Array of messages formatted for pi-ai LLM calls
    */
-  build(state: AgentState, opts: BuildMessagesOptions): PiAIMessage[];
+  build(state: AgentState, opts: BuildMessagesOptions): Promise<PiAIMessage[]>;
 }

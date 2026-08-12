@@ -120,6 +120,12 @@ export {
 
 // Skills
 export { FilesystemSkillProvider, createLoadSkillTool } from './skills/index.js';
+export type { SkillFsOps } from './skills/fs-ops.js';
+export { setDefaultSkillFsOps, getDefaultSkillFsOps } from './skills/fs-ops.js';
+
+// NOTE: nodeFsOps is intentionally NOT exported from the main entry — it
+// imports node:fs and would drag node: stubs into browser bundles. Import it
+// from the '@agentskillmania/colts/skills/node-fs-ops' subpath instead.
 
 // Execution Engine
 export type { IPhaseHandler, PhaseHandlerContext } from './execution-engine/index.js';

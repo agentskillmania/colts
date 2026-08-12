@@ -23,9 +23,9 @@ function makeState(): AgentState {
 }
 
 describe('BUG4: enablePromptThinking injects valid tag syntax', () => {
-  it('uses <think></think> tags, not placeholder text', () => {
+  it('uses <think></think> tags, not placeholder text', async () => {
     const assembler = new DefaultMessageAssembler();
-    const messages = assembler.build(makeState(), {
+    const messages = await assembler.build(makeState(), {
       systemPrompt: 'You are helpful.',
       model: 'test-model',
       enablePromptThinking: true,
@@ -48,9 +48,9 @@ describe('BUG4: enablePromptThinking injects valid tag syntax', () => {
     expect(content).not.toContain('<think...');
   });
 
-  it('does not inject thinking guidance when enablePromptThinking is false', () => {
+  it('does not inject thinking guidance when enablePromptThinking is false', async () => {
     const assembler = new DefaultMessageAssembler();
-    const messages = assembler.build(makeState(), {
+    const messages = await assembler.build(makeState(), {
       systemPrompt: 'You are helpful.',
       model: 'test-model',
     });
@@ -70,7 +70,7 @@ describe('BUG4: enablePromptThinking injects valid tag syntax', () => {
 // ── ERR2: assembler must propagate isError from tool-result messages ──
 
 describe('ERR2: assembler propagates isError flag on tool results', () => {
-  it('maps a tool message with isError:true to toolResult.isError:true', () => {
+  it('maps a tool message with isError:true to toolResult.isError:true', async () => {
     const state: AgentState = {
       id: 'test',
       config: { name: 'test', instructions: '', tools: [] },
@@ -93,7 +93,7 @@ describe('ERR2: assembler propagates isError flag on tool results', () => {
     } as unknown as AgentState;
 
     const assembler = new DefaultMessageAssembler();
-    const messages = assembler.build(state, {
+    const messages = await assembler.build(state, {
       systemPrompt: 'You are helpful.',
       model: 'test-model',
     });
@@ -103,7 +103,7 @@ describe('ERR2: assembler propagates isError flag on tool results', () => {
     expect(toolResult!.isError).toBe(true);
   });
 
-  it('defaults isError to false for normal tool results', () => {
+  it('defaults isError to false for normal tool results', async () => {
     const state: AgentState = {
       id: 'test',
       config: { name: 'test', instructions: '', tools: [] },
@@ -125,7 +125,7 @@ describe('ERR2: assembler propagates isError flag on tool results', () => {
     } as unknown as AgentState;
 
     const assembler = new DefaultMessageAssembler();
-    const messages = assembler.build(state, {
+    const messages = await assembler.build(state, {
       systemPrompt: 'You are helpful.',
       model: 'test-model',
     });

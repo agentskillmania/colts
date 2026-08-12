@@ -33,7 +33,12 @@ export class CallingLLMHandler implements IPhaseHandler {
     options?: AdvanceOptions
   ): Promise<AdvanceResult> {
     const registry = toolRegistry ?? ctx.toolRegistry;
-    const { tools, messages, estimatedContextSize } = this.prepare(ctx, state, execState, registry);
+    const { tools, messages, estimatedContextSize } = await this.prepare(
+      ctx,
+      state,
+      execState,
+      registry
+    );
 
     const resolvedModel = options?.model ?? ctx.options.model;
     const signal = options?.signal;
@@ -172,25 +177,25 @@ export class CallingLLMHandler implements IPhaseHandler {
 
   // ── Shared helpers ──
 
-  private prepare(
+  private async prepare(
     ctx: PhaseHandlerContext,
     state: AgentState,
     execState: ExecutionState,
     registry: IToolRegistry
-  ): {
+  ): Promise<{
     tools: ReturnType<typeof getToolsForLLM>;
     messages: Message[];
     estimatedContextSize: number;
-  } {
+  }> {
     const tools = getToolsForLLM(registry, ctx.toolSchemaFormatter);
     const messages =
       execState.preparedMessages ??
-      ctx.messageAssembler.build(state, {
+      (await ctx.messageAssembler.build(state, {
         systemPrompt: ctx.options.systemPrompt,
         model: ctx.options.model,
         skillProvider: ctx.skillProvider,
         enablePromptThinking: ctx.options.enablePromptThinking,
-      });
+      }));
 
     const estimatedContextSize = messages.reduce(
       (sum, m) =>

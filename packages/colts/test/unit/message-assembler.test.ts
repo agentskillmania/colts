@@ -33,13 +33,13 @@ describe('DefaultMessageAssembler', () => {
   const assembler = new DefaultMessageAssembler();
 
   describe('Skill mode guides', () => {
-    it('should not include system-reminder when no skillState', () => {
+    it('should not include system-reminder when no skillState', async () => {
       const state = createMockState(undefined);
       withMessages(state, [
         { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
       ]);
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
@@ -48,7 +48,7 @@ describe('DefaultMessageAssembler', () => {
       expect(content).not.toContain('<system-reminder>');
     });
 
-    it('should not include system-reminder when skillState has no current', () => {
+    it('should not include system-reminder when skillState has no current', async () => {
       const state = createMockState({
         current: null,
       });
@@ -56,14 +56,14 @@ describe('DefaultMessageAssembler', () => {
         { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
       ]);
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
       expect(content).not.toContain('<system-reminder>');
     });
 
-    it('should not inject dynamic skill reminder even when a skill is current', () => {
+    it('should not inject dynamic skill reminder even when a skill is current', async () => {
       // Skill instructions now persist in history (as load_skill tool results),
       // so an active skill must NOT trigger a <system-reminder> in the default
       // assembler.
@@ -72,7 +72,7 @@ describe('DefaultMessageAssembler', () => {
         { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: Date.now() },
       ]);
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
@@ -83,7 +83,7 @@ describe('DefaultMessageAssembler', () => {
   });
 
   describe('Conversation history', () => {
-    it('should include user and assistant messages in order', () => {
+    it('should include user and assistant messages in order', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -97,7 +97,7 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
 
       // Filter out system messages, keep conversation
       const conv = messages.filter((m) => m.role === 'user' || m.role === 'assistant');
@@ -107,7 +107,7 @@ describe('DefaultMessageAssembler', () => {
       expect(userMsgs).toHaveLength(1);
     });
 
-    it('should handle tool result messages', () => {
+    it('should handle tool result messages', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -124,13 +124,13 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
       const toolResult = messages.find((m) => m.role === 'toolResult');
       expect(toolResult).toEqual(expect.any(Object));
       expect(toolResult?.role).toBe('toolResult');
     });
 
-    it('should respect compression boundary', () => {
+    it('should respect compression boundary', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -148,7 +148,7 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
 
       // Should contain summary but not old messages
       const hasSummary = messages.some(
@@ -164,14 +164,14 @@ describe('DefaultMessageAssembler', () => {
   });
 
   describe('System prompt', () => {
-    it('should prepend custom system prompt', () => {
+    it('should prepend custom system prompt', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: 'Base instructions.', tools: [] },
         context: { messages: [], stepCount: 0 },
       };
 
-      const messages = assembler.build(state, {
+      const messages = await assembler.build(state, {
         model: 'gpt-4',
         systemPrompt: 'Custom system prompt.',
       });
@@ -182,21 +182,21 @@ describe('DefaultMessageAssembler', () => {
       expect(first.content).toContain('Base instructions.');
     });
 
-    it('should work with no system prompt or instructions', () => {
+    it('should work with no system prompt or instructions', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
         context: { messages: [], stepCount: 0 },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
       // No system parts means no system messages
       expect(messages).toHaveLength(0);
     });
   });
 
   describe('Thought message handling', () => {
-    it('should include same-turn thought in output messages', () => {
+    it('should include same-turn thought in output messages', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -214,7 +214,7 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
 
       // Same-turn thought (after last user) should appear as assistant message
       const hasThought = messages.some(
@@ -235,7 +235,7 @@ describe('DefaultMessageAssembler', () => {
       expect(hasReply).toBe(true);
     });
 
-    it('should skip cross-turn thought messages', () => {
+    it('should skip cross-turn thought messages', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -253,7 +253,7 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
 
       // Cross-turn thought (before last user) should NOT appear
       const hasOldThought = messages.some(
@@ -265,7 +265,7 @@ describe('DefaultMessageAssembler', () => {
       expect(hasOldThought).toBe(false);
     });
 
-    it('should include multiple same-turn thoughts', () => {
+    it('should include multiple same-turn thoughts', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -286,7 +286,7 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
 
       // Both same-turn thoughts should appear
       const hasThought1 = messages.some(
@@ -305,7 +305,7 @@ describe('DefaultMessageAssembler', () => {
       expect(hasThought2).toBe(true);
     });
 
-    it('should handle mixed same-turn and cross-turn thoughts', () => {
+    it('should handle mixed same-turn and cross-turn thoughts', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -328,7 +328,7 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
 
       // Cross-turn thought should NOT appear
       const hasOldThought = messages.some(
@@ -349,7 +349,7 @@ describe('DefaultMessageAssembler', () => {
       expect(hasNewThought).toBe(true);
     });
 
-    it('should include same-turn thought even when it is the last message', () => {
+    it('should include same-turn thought even when it is the last message', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -366,7 +366,7 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
 
       // Thought is same-turn and last message — should still appear
       const hasThought = messages.some(
@@ -378,7 +378,7 @@ describe('DefaultMessageAssembler', () => {
       expect(hasThought).toBe(true);
     });
 
-    it('should preserve regular assistant messages when no thoughts exist', () => {
+    it('should preserve regular assistant messages when no thoughts exist', async () => {
       const state: AgentState = {
         id: 'test',
         config: { name: 'test', instructions: '', tools: [] },
@@ -393,7 +393,7 @@ describe('DefaultMessageAssembler', () => {
         },
       };
 
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
 
       const assistantMsgs = messages.filter((m) => m.role === 'assistant');
       expect(assistantMsgs).toHaveLength(2);
@@ -401,9 +401,9 @@ describe('DefaultMessageAssembler', () => {
   });
 
   describe('enablePromptThinking', () => {
-    it('should inject thinking guidance when enabled', () => {
+    it('should inject thinking guidance when enabled', async () => {
       const state = createMockState();
-      const messages = assembler.build(state, {
+      const messages = await assembler.build(state, {
         model: 'gpt-4',
         enablePromptThinking: true,
       });
@@ -414,9 +414,9 @@ describe('DefaultMessageAssembler', () => {
       expect(systemMessage?.content).toContain('think step by step');
     });
 
-    it('should not inject thinking guidance when disabled', () => {
+    it('should not inject thinking guidance when disabled', async () => {
       const state = createMockState();
-      const messages = assembler.build(state, {
+      const messages = await assembler.build(state, {
         model: 'gpt-4',
         enablePromptThinking: false,
       });
@@ -427,9 +427,9 @@ describe('DefaultMessageAssembler', () => {
       expect(systemMessage?.content).not.toContain('think step by step');
     });
 
-    it('should not inject thinking guidance when option is absent', () => {
+    it('should not inject thinking guidance when option is absent', async () => {
       const state = createMockState();
-      const messages = assembler.build(state, { model: 'gpt-4' });
+      const messages = await assembler.build(state, { model: 'gpt-4' });
       const systemMessage = messages.find(
         (m) => m.role === 'user' && typeof m.content === 'string'
       );

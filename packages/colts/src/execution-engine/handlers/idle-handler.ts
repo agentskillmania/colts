@@ -16,8 +16,12 @@ export class IdleHandler implements IPhaseHandler {
     return phaseType === 'idle';
   }
 
-  execute(ctx: PhaseHandlerContext, state: AgentState, execState: ExecutionState): AdvanceResult {
-    const messages = ctx.messageAssembler.build(state, {
+  async execute(
+    ctx: PhaseHandlerContext,
+    state: AgentState,
+    execState: ExecutionState
+  ): Promise<AdvanceResult> {
+    const messages = await ctx.messageAssembler.build(state, {
       systemPrompt: ctx.options.systemPrompt,
       model: ctx.options.model,
       skillProvider: ctx.skillProvider,

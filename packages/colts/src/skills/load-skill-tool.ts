@@ -24,9 +24,9 @@ export function createLoadSkillTool(skillProvider: ISkillProvider): Tool {
       task: z.string().optional().describe('Specific task description for the sub-skill'),
     }),
     execute: async ({ name, task }): Promise<SkillSignal | string> => {
-      const manifest = skillProvider.getManifest(name);
+      const manifest = await skillProvider.getManifest(name);
       if (!manifest) {
-        const availableSkills = skillProvider.listSkills();
+        const availableSkills = await skillProvider.listSkills();
         return {
           type: 'SKILL_NOT_FOUND',
           requested: name,

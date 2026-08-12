@@ -22,7 +22,7 @@ function createMockProvider(
   const manifestMap = new Map(skills.map((s) => [s.name, s]));
 
   return {
-    getManifest: vi.fn((name: string) => manifestMap.get(name)),
+    getManifest: vi.fn(async (name: string) => manifestMap.get(name)),
     loadInstructions: vi.fn(async (name: string) => {
       const content = instructions[name];
       if (content === undefined) {
@@ -31,8 +31,8 @@ function createMockProvider(
       return content;
     }),
     loadResource: vi.fn(),
-    listSkills: vi.fn(() => skills),
-    refresh: vi.fn(),
+    listSkills: vi.fn(async () => skills),
+    refresh: vi.fn(async () => {}),
   } as unknown as ISkillProvider;
 }
 
