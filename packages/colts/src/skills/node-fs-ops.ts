@@ -11,8 +11,8 @@
  */
 
 import { readFile, readdir, stat, access } from 'node:fs/promises';
-import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import type { SkillFsOps } from './fs-ops.js';
 

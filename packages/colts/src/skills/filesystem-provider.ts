@@ -9,9 +9,9 @@
 
 import { parse as parseYaml } from 'yaml';
 
-import type { SkillManifest, ISkillProvider } from './types.js';
-import type { SkillFsOps } from './fs-ops.js';
 import { getDefaultSkillFsOps } from './fs-ops.js';
+import type { SkillFsOps } from './fs-ops.js';
+import type { SkillManifest, ISkillProvider } from './types.js';
 
 /**
  * SKILL.md filename constant
@@ -378,7 +378,9 @@ export class FilesystemSkillProvider implements ISkillProvider {
       const description = frontmatter['description'];
 
       if (!name || !description) {
-        console.warn(`[colts] ${skillFilePath} missing required name or description field, skipping`);
+        console.warn(
+          `[colts] ${skillFilePath} missing required name or description field, skipping`
+        );
         continue;
       }
 

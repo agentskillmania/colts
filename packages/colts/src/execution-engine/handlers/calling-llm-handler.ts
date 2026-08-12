@@ -104,6 +104,15 @@ export class CallingLLMHandler implements IPhaseHandler {
           if (event.roundTotalTokens) {
             roundTokens = event.roundTotalTokens;
           }
+        } else if (event.type === 'error') {
+          // LLM 流内部错误——显式抛出，让外层 catch 统一处理（emit error + error phase），
+          // 而不是静默忽略导致"空气泡"
+          const rawError = (event as { error?: unknown }).error;
+          const errMsg =
+            typeof rawError === 'object' && rawError !== null
+              ? ((rawError as { errorMessage?: string }).errorMessage ?? JSON.stringify(rawError))
+              : String(rawError ?? 'LLM stream error');
+          throw new Error(errMsg);
         }
       }
     } catch (error) {

@@ -104,7 +104,10 @@ export async function executeAdvance(
  * @returns Array of messages formatted for pi-ai LLM calls
  * @internal
  */
-export async function buildMessagesFromCtx(ctx: RunnerContext, state: AgentState): Promise<Message[]> {
+export async function buildMessagesFromCtx(
+  ctx: RunnerContext,
+  state: AgentState
+): Promise<Message[]> {
   return await ctx.messageAssembler.build(state, {
     systemPrompt: ctx.options.systemPrompt,
     model: ctx.options.model,
