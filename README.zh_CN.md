@@ -32,24 +32,17 @@ pnpm install
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/colts/llm';   // 内置 LLM 入口（可选）
 
-// 1. 创建 runner —— llmClient 注入（主入口不捆绑任何 LLM 运行时）
 const runner = new AgentRunner({
   model: 'gpt-4o',
   llmClient: LLMClient.quickInit({ providers: [{ name: 'openai', apiKey, models: [{ modelId: 'gpt-4o' }] }] }),
-  tools: [],              // ColtsTool[]
-  systemPrompt: 'You are a helpful assistant.',
 });
 
-// 2. 创建状态、添加用户消息并运行
 let state = createAgentState({ name: 'agent', instructions: '...', tools: [] });
 state = addUserMessage(state, '你好');
-const { state: finalState, result } = await runner.run(state);
-
-// 3. result 是可辨识联合类型
-if (result.type === 'success') {
-  console.log('Answer:', result.answer);
-}
+const { result } = await runner.run(state);
 ```
+
+完整 API（三级执行控制、工具、技能、事件、状态管理）见 [colts 包 README](./packages/colts/README.zh_CN.md)。
 
 ### 分层：平台无关核心 + 按需后端
 
@@ -64,28 +57,11 @@ if (result.type === 'success') {
 
 ### 技能（Skills）
 
-技能是包含 `SKILL.md`（YAML frontmatter + 指令）的目录。`FilesystemSkillProvider` 通过 `SkillFsOps` 抽象扫描技能目录：
-
-- **Node**：启动时注册一次默认后端 —— `setDefaultSkillFsOps(nodeFsOps)` —— 然后 `new FilesystemSkillProvider(dirs)` 即可使用
-- **浏览器**：注入基于 OPFS 的 `SkillFsOps`（本模块从不导入 `node:` 模块，可运行在任何环境）
-
-```typescript
-import { FilesystemSkillProvider } from '@agentskillmania/colts';
-// Node：启动时执行一次 setDefaultSkillFsOps(nodeFsOps)
-const provider = new FilesystemSkillProvider(['./skills']);
-const manifests = await provider.listSkills();
-```
+技能（`SKILL.md` 指令集）通过可注入的 `ISkillProvider` 加载，后端是平台无关的 `SkillFsOps`——完整用法（注入模式、Node/浏览器后端、`skillDirs` 便捷路径）见 [colts 包 README](./packages/colts/README.zh_CN.md#skill-系统)。
 
 ### 事件
 
-runner 是 `EventEmitter`。在调用 `run()` 之前订阅：
-
-```typescript
-runner.on('step:start', ({ step }) => console.log('step', step));
-runner.on('token', ({ token }) => process.stdout.write(token));
-runner.on('tool:start', ({ action }) => console.log('tool', action.tool));
-runner.on('llm:request', ({ model }) => console.log('llm call:', model));
-```
+runner 是 `EventEmitter`（token / thinking / 工具 / 相位变更 / 技能 / 子代理事件）——见 [colts 包 README](./packages/colts/README.zh_CN.md#事件系统)。
 
 ## 开发
 

@@ -184,17 +184,43 @@ const runner = new AgentRunner({
 
 ## Skill 系统
 
-Skill 是从 `SKILL.md` 文件加载的领域专属指令集：
+Skill 是从 `SKILL.md` 文件加载的领域专属指令集。Runner 接受可注入的 `ISkillProvider`——技能存哪、怎么读由宿主决定。
+
+### 注入 provider（推荐）
 
 ```typescript
+import { AgentRunner, FilesystemSkillProvider, setDefaultSkillFsOps } from '@agentskillmania/colts';
+import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';   // Node 后端（按需子路径）
+
+// Node：启动时注册一次默认 SkillFsOps，然后构造 provider
+setDefaultSkillFsOps(nodeFsOps);
+const skillProvider = new FilesystemSkillProvider(['./skills']);
+
 const runner = new AgentRunner({
-  model: 'glm-4',
+  model: 'gpt-4o',
   llmClient,
-  skillDirs: ['./skills', '~/.agentskillmania/colts/skills'],
+  skillProvider,   // 注入——任意后端均可
 });
 ```
 
-`SKILL.md` 格式：
+`FilesystemSkillProvider` 本身不导入任何 `node:` 模块——它通过 `SkillFsOps` 抽象读写：
+
+- **Node**：启动时 `setDefaultSkillFsOps(nodeFsOps)`（来自 `node-fs-ops` 子路径），然后 `new FilesystemSkillProvider(dirs)` 即可
+- **浏览器等宿主**：基于自己的存储（如 OPFS）实现 `SkillFsOps` 并传给构造器——本模块可运行在任何环境
+
+### `skillDirs` 便捷路径（仅 Node）
+
+`skillDirs` 会在内部用全局注册的默认 `SkillFsOps` 构造 `FilesystemSkillProvider`——Node 下方便，但不可移植：未注册默认值的宿主上会抛错。
+
+```typescript
+const runner = new AgentRunner({
+  model: 'gpt-4o',
+  llmClient,
+  skillDirs: ['./skills'],
+});
+```
+
+### `SKILL.md` 格式
 
 ```markdown
 ---
@@ -207,7 +233,7 @@ description: Perform comprehensive code reviews
 You are a code review expert...
 ```
 
-Runner 会自动注册 `load_skill` 工具，支持运行时切换 Skill。
+存在技能 provider 时 Runner 会自动注册 `load_skill` 工具，支持运行时切换 Skill。
 
 ## 上下文压缩
 

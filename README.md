@@ -32,24 +32,17 @@ pnpm install
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/colts/llm';   // built-in LLM entry (optional)
 
-// 1. Create the runner — llmClient is injected (the main entry has no LLM runtime dependency)
 const runner = new AgentRunner({
   model: 'gpt-4o',
   llmClient: LLMClient.quickInit({ providers: [{ name: 'openai', apiKey, models: [{ modelId: 'gpt-4o' }] }] }),
-  tools: [],              // ColtsTool[]
-  systemPrompt: 'You are a helpful assistant.',
 });
 
-// 2. Create state, add a user message, and run
 let state = createAgentState({ name: 'agent', instructions: '...', tools: [] });
 state = addUserMessage(state, '你好');
-const { state: finalState, result } = await runner.run(state);
-
-// 3. The result is a discriminated union
-if (result.type === 'success') {
-  console.log('Answer:', result.answer);
-}
+const { result } = await runner.run(state);
 ```
+
+Full API (three-level execution control, tools, skills, events, state management) lives in the [colts package README](./packages/colts/README.md).
 
 ### Layering: platform-neutral core, opt-in backends
 
@@ -64,28 +57,11 @@ Injecting your own `ILLMProvider` (e.g. a browser-native fetch implementation) o
 
 ### Skills
 
-Skills are directories containing a `SKILL.md` (YAML frontmatter + instructions). The `FilesystemSkillProvider` scans skill directories through a `SkillFsOps` abstraction:
-
-- **Node**: register the default backend once — `setDefaultSkillFsOps(nodeFsOps)` — then `new FilesystemSkillProvider(dirs)` just works
-- **Browser**: inject an OPFS-backed `SkillFsOps` (this module never imports `node:` modules, so it runs anywhere)
-
-```typescript
-import { FilesystemSkillProvider } from '@agentskillmania/colts';
-// Node: setDefaultSkillFsOps(nodeFsOps) once at startup
-const provider = new FilesystemSkillProvider(['./skills']);
-const manifests = await provider.listSkills();
-```
+Skills (`SKILL.md` instruction sets) load through an injectable `ISkillProvider` with a platform-neutral `SkillFsOps` backend — full usage (injection pattern, Node/browser backends, `skillDirs` shorthand) lives in the [colts package README](./packages/colts/README.md#skill-system).
 
 ### Events
 
-The runner is an `EventEmitter`. Subscribe before calling `run()`:
-
-```typescript
-runner.on('step:start', ({ step }) => console.log('step', step));
-runner.on('token', ({ token }) => process.stdout.write(token));
-runner.on('tool:start', ({ action }) => console.log('tool', action.tool));
-runner.on('llm:request', ({ model }) => console.log('llm call:', model));
-```
+The runner is an `EventEmitter` (token / thinking / tool / phase-change / skill / subagent events) — see the [colts package README](./packages/colts/README.md#events).
 
 ## Development
 

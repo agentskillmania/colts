@@ -175,17 +175,43 @@ const runner = new AgentRunner({
 
 ## Skill System
 
-Skills are domain-specific instructions loaded from `SKILL.md` files:
+Skills are domain-specific instruction sets loaded from `SKILL.md` files. The runner takes an injectable `ISkillProvider` — the platform decides how skills are stored and read.
+
+### Inject a provider (recommended)
+
+```typescript
+import { AgentRunner, FilesystemSkillProvider, setDefaultSkillFsOps } from '@agentskillmania/colts';
+import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';   // Node backend (opt-in subpath)
+
+// Node: register the default SkillFsOps once at startup, then construct the provider
+setDefaultSkillFsOps(nodeFsOps);
+const skillProvider = new FilesystemSkillProvider(['./skills']);
+
+const runner = new AgentRunner({
+  model: 'gpt-4o',
+  llmClient,
+  skillProvider,   // injected — works with any backend
+});
+```
+
+`FilesystemSkillProvider` itself never imports `node:` modules — it reads through a `SkillFsOps` abstraction:
+
+- **Node**: `setDefaultSkillFsOps(nodeFsOps)` once (from the `node-fs-ops` subpath), then `new FilesystemSkillProvider(dirs)` just works
+- **Browser / other hosts**: implement `SkillFsOps` over your own storage (e.g. OPFS) and pass it to the constructor — the module runs anywhere
+
+### `skillDirs` shorthand (Node only)
+
+`skillDirs` constructs a `FilesystemSkillProvider` internally using the globally registered default `SkillFsOps` — convenient in Node, but not portable: on hosts without a registered default it will throw.
 
 ```typescript
 const runner = new AgentRunner({
   model: 'gpt-4o',
   llmClient,
-  skillDirs: ['./skills', '~/.agentskillmania/colts/skills'],
+  skillDirs: ['./skills'],
 });
 ```
 
-`SKILL.md` format:
+### `SKILL.md` format
 
 ```markdown
 ---
@@ -198,7 +224,7 @@ description: Perform comprehensive code reviews
 You are a code review expert...
 ```
 
-The runner auto-registers the `load_skill` tool for runtime skill switching.
+The runner auto-registers the `load_skill` tool when a skill provider is present, enabling runtime skill switching.
 
 ## Context Compression
 
