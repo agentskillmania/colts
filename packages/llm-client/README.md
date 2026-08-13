@@ -4,13 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](./README.zh_CN.md)
 
-A unified LLM client with three-level concurrency control, multi-key load balancing, priority queuing, and built-in retry. Works with OpenAI, Anthropic, Google, and any OpenAI-compatible endpoint out of the box.
+A unified LLM client with three-level concurrency control, multi-key load balancing, and built-in retry. Works with OpenAI, Anthropic, Google, and any OpenAI-compatible endpoint out of the box.
 
 ## Highlights
 
 - **Three-Level Concurrency Control** — Independent limits at Provider → API Key → Model to prevent cascading failures
 - **Multi-Key Load Balancing** — Round-robin across multiple API keys for the same model
-- **Priority Queue** — Higher-priority requests are processed first
 - **Auto Retry** — Exponential backoff on rate limits (429), server errors (5xx), and network failures
 - **Streaming** — Real-time token-by-token responses with `delta` and accumulated content
 - **Thinking / Reasoning** — Native thinking support for reasoning-capable models (e.g. Claude)
@@ -88,14 +87,13 @@ client.registerApiKey({
 for await (const event of client.stream({
   model: 'gpt-4o',
   messages: [{ role: 'user', content: 'Tell me a story' }],
-  priority: 1,
 })) {
   switch (event.type) {
     case 'text':
       process.stdout.write(event.delta);
       break;
     case 'thinking':
-      console.log('Thinking:', event.thinking);
+      console.log('Thinking:', event.delta);
       break;
     case 'tool_call':
       console.log('Tool call:', event.toolCall);
@@ -128,7 +126,7 @@ for await (const event of client.stream({
   thinkingEnabled: true,
 })) {
   if (event.type === 'thinking') {
-    console.log('Reasoning:', event.thinking);
+    console.log('Reasoning:', event.delta);
   }
 }
 ```
@@ -209,13 +207,12 @@ client.registerApiKey({
 });
 ```
 
-## Priority and Timeouts
+## Timeouts and Retry
 
 ```typescript
 const response = await client.call({
   model: 'gpt-4o',
   messages: [...],
-  priority: 5,              // Higher values first
   requestTimeout: 30000,    // API call timeout
   totalTimeout: 60000,      // Total including queue wait
   retryOptions: {
@@ -252,6 +249,7 @@ new LLMClient(options?: { baseUrl?, defaultProviderConcurrency?, defaultKeyConcu
 ```
 
 Methods:
+- `LLMClient.quickInit(config, options?)` — Static one-call assembly (providers + keys + models)
 - `registerProvider(config)` — Register a provider with concurrency limits and optional `baseUrl`
 - `registerApiKey(config)` — Register an API key with model-level concurrency limits and optional per-key `baseUrl` override
 - `call(options): Promise<LLMResponse>` — Non-streaming completion

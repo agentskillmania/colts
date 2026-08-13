@@ -4,13 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
-统一 LLM 客户端。三级并发控制、多 Key 负载均衡、优先级队列、内置重试。开箱即用支持 OpenAI、Anthropic、Google 及所有 OpenAI 兼容端点。
+统一 LLM 客户端。三级并发控制、多 Key 负载均衡、内置重试。开箱即用支持 OpenAI、Anthropic、Google 及所有 OpenAI 兼容端点。
 
 ## 特色
 
 - **三级并发控制** — Provider → API Key → Model 三级独立限制，防止级联故障
 - **多 Key 负载均衡** — 同一模型的多个 API Key 轮询分配
-- **优先级队列** — 高优先级请求优先处理
 - **自动重试** — 针对速率限制（429）、服务端错误（5xx）和网络错误指数退避重试
 - **流式输出** — 实时逐 token 响应，包含 `delta` 和累积内容
 - **Thinking / 推理** — 原生推理支持，适用于推理能力模型（如 Claude）
@@ -86,14 +85,13 @@ client.registerApiKey({
 for await (const event of client.stream({
   model: 'glm-4',
   messages: [{ role: 'user', content: '讲个故事' }],
-  priority: 1,
 })) {
   switch (event.type) {
     case 'text':
       process.stdout.write(event.delta);
       break;
     case 'thinking':
-      console.log('推理中:', event.thinking);
+      console.log('推理中:', event.delta);
       break;
     case 'tool_call':
       console.log('工具调用:', event.toolCall);
@@ -126,7 +124,7 @@ for await (const event of client.stream({
   thinkingEnabled: true,
 })) {
   if (event.type === 'thinking') {
-    console.log('推理:', event.thinking);
+    console.log('推理:', event.delta);
   }
 }
 ```
@@ -207,13 +205,12 @@ client.registerApiKey({
 });
 ```
 
-## 优先级与超时
+## 超时与重试
 
 ```typescript
 const response = await client.call({
   model: 'glm-4',
   messages: [...],
-  priority: 5,              // 数值越大优先级越高
   requestTimeout: 30000,    // API 调用超时
   totalTimeout: 60000,      // 包含队列等待的总超时
   retryOptions: {
@@ -250,6 +247,7 @@ new LLMClient(options?: { baseUrl?, defaultProviderConcurrency?, defaultKeyConcu
 ```
 
 方法：
+- `LLMClient.quickInit(config, options?)` — 静态便捷装配（providers + keys + models）
 - `registerProvider(config)` — 注册提供商，设置并发限制和可选的 `baseUrl`
 - `registerApiKey(config)` — 注册 API Key，设置模型级并发限制和可选的 per-key `baseUrl` 覆盖
 - `call(options): Promise<LLMResponse>` — 非流式补全
