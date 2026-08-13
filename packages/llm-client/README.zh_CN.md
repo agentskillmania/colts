@@ -34,9 +34,36 @@ pnpm add @agentskillmania/llm-client
 
 ## 快速开始
 
+最快的方式是 `LLMClient.quickInit` —— 一次调用完成 provider、key、模型的装配：
+
 ```typescript
 import { LLMClient } from '@agentskillmania/llm-client';
 
+const client = LLMClient.quickInit({
+  providers: [
+    {
+      name: 'openai',
+      apiKey: process.env.OPENAI_API_KEY!,
+      models: [{ modelId: 'gpt-4o', maxConcurrency: 2 }],
+    },
+  ],
+});
+
+const response = await client.call({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: '你好！' }],
+});
+
+console.log(response.content);    // "你好！有什么可以帮你的？"
+console.log(response.tokens);     // { input: 9, output: 8 }
+console.log(response.stopReason); // "stop"
+```
+
+### 手动注册
+
+需要精细控制时，可显式注册 provider 与 key（与 quickInit 的调用/流式用法一致）：
+
+```typescript
 const client = new LLMClient({
   baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
 });
@@ -47,16 +74,11 @@ client.registerApiKey({
   provider: 'openai',
   models: [{ modelId: 'glm-4', maxConcurrency: 2 }],
 });
-
-const response = await client.call({
-  model: 'glm-4',
-  messages: [{ role: 'user', content: '你好！' }],
-});
-
-console.log(response.content);    // "你好！有什么可以帮你的？"
-console.log(response.tokens);     // { input: 9, output: 8 }
-console.log(response.stopReason); // "stop"
 ```
+
+## 平台无关类型
+
+`Message`、`LLMTool`、`StreamEvent`、`LLMResponse`、`TokenStats` 都是本包的一等类型——不依赖任何 provider SDK。pi-ai 适配器（OpenAI/Anthropic/Google 的运行时后端）只是这条边界之后的实现细节；消费方可以基于这些类型实现自己的 `ILLMProvider`（例如浏览器原生的 fetch 实现），零 cast 对接。
 
 ## 流式输出
 

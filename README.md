@@ -30,11 +30,12 @@ pnpm install
 
 ```typescript
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/colts/llm';   // built-in LLM entry (optional)
 
-// 1. Create the runner (llmClient: any ILLMProvider)
+// 1. Create the runner — llmClient is injected (the main entry has no LLM runtime dependency)
 const runner = new AgentRunner({
   model: 'gpt-4o',
-  llmClient,              // your ILLMProvider implementation
+  llmClient: LLMClient.quickInit({ providers: [{ name: 'openai', apiKey, models: [{ modelId: 'gpt-4o' }] }] }),
   tools: [],              // ColtsTool[]
   systemPrompt: 'You are a helpful assistant.',
 });
@@ -49,6 +50,17 @@ if (result.type === 'success') {
   console.log('Answer:', result.answer);
 }
 ```
+
+### Layering: platform-neutral core, opt-in backends
+
+The main entry (`@agentskillmania/colts`) is platform-neutral — it has no `node:` imports and no LLM runtime bundled:
+
+| Capability | Main entry | Opt-in entry |
+|------------|-----------|--------------|
+| Built-in LLM client | not bundled | `@agentskillmania/colts/llm` (re-exports `LLMClient`; resolves llm-client + its pi-ai adapter only when imported) |
+| Node skill filesystem | not bundled | `@agentskillmania/colts/skills/node-fs-ops` (`nodeFsOps`) |
+
+Injecting your own `ILLMProvider` (e.g. a browser-native fetch implementation) or your own `SkillFsOps` (e.g. OPFS-backed) requires no casts — all interface types (`Message`, `LLMTool`, `StreamEvent`, `SkillFsOps`) are first-class in this monorepo and platform-neutral.
 
 ### Skills
 

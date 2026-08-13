@@ -34,6 +34,35 @@ pnpm add @agentskillmania/llm-client
 
 ## Quick Start
 
+The fastest way to get a working client is `LLMClient.quickInit` — one call assembles providers, keys, and models:
+
+```typescript
+import { LLMClient } from '@agentskillmania/llm-client';
+
+const client = LLMClient.quickInit({
+  providers: [
+    {
+      name: 'openai',
+      apiKey: process.env.OPENAI_API_KEY!,
+      models: [{ modelId: 'gpt-4o', maxConcurrency: 2 }],
+    },
+  ],
+});
+
+const response = await client.call({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello!' }],
+});
+
+console.log(response.content);    // "Hello! How can I help you?"
+console.log(response.tokens);     // { input: 9, output: 8 }
+console.log(response.stopReason); // "stop"
+```
+
+### Manual registration
+
+Need fine-grained control? Register providers and keys explicitly:
+
 ```typescript
 import { LLMClient } from '@agentskillmania/llm-client';
 
@@ -46,15 +75,12 @@ client.registerApiKey({
   models: [{ modelId: 'gpt-4o', maxConcurrency: 2 }],
 });
 
-const response = await client.call({
-  model: 'gpt-4o',
-  messages: [{ role: 'user', content: 'Hello!' }],
-});
-
-console.log(response.content);    // "Hello! How can I help you?"
-console.log(response.tokens);     // { input: 9, output: 8 }
-console.log(response.stopReason); // "stop"
+// ... same call/stream usage as quickInit above
 ```
+
+## Platform-Neutral Types
+
+`Message`, `LLMTool`, `StreamEvent`, `LLMResponse`, and `TokenStats` are first-class types of this package — they do not depend on any provider SDK. The pi-ai adapter (the runtime backend for OpenAI/Anthropic/Google) stays an implementation detail behind this boundary, so consumers can implement their own `ILLMProvider` (e.g. a browser-native fetch provider) against these types with zero casts.
 
 ## Streaming
 

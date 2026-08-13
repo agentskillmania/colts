@@ -30,11 +30,12 @@ pnpm install
 
 ```typescript
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/colts/llm';   // 内置 LLM 入口（可选）
 
-// 1. 创建 runner（llmClient 可以是任意 ILLMProvider 实现）
+// 1. 创建 runner —— llmClient 注入（主入口不捆绑任何 LLM 运行时）
 const runner = new AgentRunner({
   model: 'gpt-4o',
-  llmClient,              // 你的 ILLMProvider 实现
+  llmClient: LLMClient.quickInit({ providers: [{ name: 'openai', apiKey, models: [{ modelId: 'gpt-4o' }] }] }),
   tools: [],              // ColtsTool[]
   systemPrompt: 'You are a helpful assistant.',
 });
@@ -49,6 +50,17 @@ if (result.type === 'success') {
   console.log('Answer:', result.answer);
 }
 ```
+
+### 分层：平台无关核心 + 按需后端
+
+主入口（`@agentskillmania/colts`）平台无关——没有 `node:` 导入、不捆绑 LLM 运行时：
+
+| 能力 | 主入口 | 按需入口 |
+|------|--------|----------|
+| 内置 LLM 客户端 | 不捆绑 | `@agentskillmania/colts/llm`（re-export `LLMClient`；仅 import 时才解析 llm-client 及其 pi-ai 适配器） |
+| Node 技能文件系统 | 不捆绑 | `@agentskillmania/colts/skills/node-fs-ops`（`nodeFsOps`） |
+
+注入自己的 `ILLMProvider`（如浏览器原生 fetch 实现）或自己的 `SkillFsOps`（如 OPFS 实现）无需任何 cast——所有接口类型（`Message`、`LLMTool`、`StreamEvent`、`SkillFsOps`）都是本 monorepo 的一等平台无关类型。
 
 ### 技能（Skills）
 
