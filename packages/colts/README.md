@@ -12,7 +12,7 @@ A stateless ReAct agent framework with three-level execution control, event-driv
 - **Three-Level Execution** — `run()` (auto-loop), `step()` (one ReAct cycle), `advance()` (one phase).
 - **Event-Driven Observability** — `AgentRunner` extends `EventEmitter`. All execution events (tokens, thinking, tool calls, phase changes, sub-agent activity) are emitted via `runner.on(...)`. Tokens are streamed internally through `llmProvider.stream()` and emitted to the EventEmitter.
 - **Thinking / Reasoning** — Native thinking (Claude-style) and prompt-level thinking (`<think/>` tags). Configurable per request.
-- **Skill System** — Runtime skill loading from `SKILL.md` files. Supports nested skill calls with `load_skill` / `return_skill`.
+- **Skill System** — Runtime skill loading from `SKILL.md` files via an injectable `ISkillProvider` (platform-neutral; Node/browser backends via `SkillFsOps`).
 - **Subagent Delegation** — Delegate tasks to specialized sub-agents with independent configs, tools, state, and optional timeout. Sub-agent events bubble up to the parent runner's EventEmitter for real-time visibility.
 - **Context Compression** — Two strategies (`truncate`, `summarize`). Messages are never deleted.
 - **Pluggable Message Assembly** — `IMessageAssembler` interface for custom RAG, memory, or prompt strategies without forking the runner.
@@ -28,10 +28,13 @@ pnpm add @agentskillmania/colts
 
 ```typescript
 import { AgentRunner, createAgentState, calculatorTool } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/colts/llm';
 
 const runner = new AgentRunner({
   model: 'gpt-4o',
-  llm: { apiKey: 'sk-...', provider: 'openai' },
+  llmClient: LLMClient.quickInit({
+    providers: [{ name: 'openai', apiKey: 'sk-...', models: [{ modelId: 'gpt-4o' }] }],
+  }),
   tools: [calculatorTool],
   maxSteps: 10,
 });
@@ -177,7 +180,7 @@ Skills are domain-specific instructions loaded from `SKILL.md` files:
 const runner = new AgentRunner({
   model: 'gpt-4o',
   llmClient,
-  skillDirectories: ['./skills', '~/.agentskillmania/colts/skills'],
+  skillDirs: ['./skills', '~/.agentskillmania/colts/skills'],
 });
 ```
 
@@ -194,7 +197,7 @@ description: Perform comprehensive code reviews
 You are a code review expert...
 ```
 
-The runner auto-registers `load_skill` and `return_skill` tools for runtime skill switching and nested skill calls.
+The runner auto-registers the `load_skill` tool for runtime skill switching.
 
 ## Context Compression
 
@@ -215,35 +218,11 @@ const runner = new AgentRunner({
 
 Strategies: `truncate`, `summarize`. The `summarize` strategy calls the LLM to generate summaries. You can also set `summaryModel` or `summaryProvider` to use a dedicated model for summarization.
 
-## Subagent System
+## Subagent Delegation
 
-Delegate tasks to specialized sub-agents. Each sub-agent has independent instructions, tools, state, an optional step limit, and an optional timeout:
+Sub-agent delegation (`delegate` tool + `SubAgentConfig[]`, `subagent:*` events) is provided by **wrangler** on top of colts — see the wrangler README.
 
-```typescript
-const runner = new AgentRunner({
-  model: 'gpt-4o',
-  llmClient,
-  subAgents: [{
-    name: 'researcher',
-    description: 'Research specialist',
-    config: { name: 'researcher', instructions: 'Research topics thoroughly.', tools: [] },
-    maxSteps: 5,
-    timeout: 60_000, // ms — sub-agent is aborted if exceeded
-    // Tool & skill inheritance (default true):
-    inheritParentTools: true,   // copies every tool from the parent registry
-                                // (delegate and load_skill are filtered out to
-                                // avoid recursion and double-registration)
-    inheritParentSkills: true,  // forwards the parent's skillProvider so the
-                                // sub-agent can call load_skill
-  }],
-});
-```
-
-By default a sub-agent inherits the parent runner's full tool set and skill provider, so it can read files, run shell, search the web, and load skills without you redeclaring every tool per agent. Set either flag to `false` to opt out — the sub-agent then only sees the tools explicitly listed in `config.tools`.
-
-The `delegate` tool is auto-registered, allowing the parent agent to invoke sub-agents. The tool returns a `DelegateResult` discriminated union (`status: 'success' | 'error' | 'max_steps' | 'abort' | 'timeout'`) so the parent can branch on outcome.
-
-### Sub-agent event bubbling
+## Sub-agent event bubbling
 
 Sub-agent events bubble up to the parent runner's EventEmitter with a `subagent:` prefix, so frontends can observe sub-agent work in real time:
 
@@ -263,17 +242,11 @@ Each event carries `subtaskId` and `subagentName` for routing when multiple sub-
 `AgentState` is pure data — serializable, immutable, and cloneable.
 
 ```typescript
-import {
-  createAgentState,
-  addUserMessage,
-  createSnapshot,
-  serializeState,
-} from '@agentskillmania/colts';
+import { createAgentState, addUserMessage, serializeState } from '@agentskillmania/colts';
 
 let state = createAgentState({ name: 'agent', instructions: '...', tools: [] });
 state = addUserMessage(state, 'Hello');
 
-const snapshot = createSnapshot(state);
 const json = serializeState(state);
 ```
 

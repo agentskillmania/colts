@@ -12,7 +12,7 @@
 - **三级执行控制** — `run()`（自动循环）、`step()`（一个 ReAct 周期）、`advance()`（一个阶段）。
 - **事件驱动可观测性** — `AgentRunner` 继承 `EventEmitter`。所有执行事件（token、思考、工具调用、阶段变更、子代理活动）均通过 `runner.on(...)` 发出。token 在内部通过 `llmProvider.stream()` 流式拉取后逐个 emit 到 EventEmitter。
 - **Thinking / 推理模式** — 原生推理（Claude 风格）和提示词级推理（`<think/>` 标签）。可按请求配置。
-- **Skill 系统** — 运行时从 `SKILL.md` 文件动态加载领域指令。支持 `load_skill` / `return_skill` 嵌套调用。
+- **Skill 系统** — 运行时通过可注入的 `ISkillProvider` 从 `SKILL.md` 加载领域指令（平台无关；Node/浏览器后端走 `SkillFsOps`）。
 - **Subagent 委托** — 将任务委托给具有独立配置、工具、状态和可选超时的专用子代理。子代理事件冒泡到父 Runner 的 EventEmitter，可实时观察。
 - **上下文压缩** — 两种策略（`truncate`、`summarize`）。消息永不删除。
 - **可插拔消息组装** — `IMessageAssembler` 接口，支持自定义 RAG、记忆或提示词策略，无需 fork Runner。
@@ -28,14 +28,20 @@ pnpm add @agentskillmania/colts
 
 ```typescript
 import { AgentRunner, createAgentState, calculatorTool } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/colts/llm';
 
 const runner = new AgentRunner({
   model: 'glm-4',
-  llm: {
-    apiKey: 'your-api-key',
-    provider: 'openai',
-    baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
-  },
+  llmClient: LLMClient.quickInit({
+    providers: [
+      {
+        name: 'openai',
+        apiKey: 'your-api-key',
+        baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+        models: [{ modelId: 'glm-4' }],
+      },
+    ],
+  }),
   tools: [calculatorTool],
   maxSteps: 10,
 });
@@ -183,7 +189,7 @@ Skill 是从 `SKILL.md` 文件加载的领域专属指令集：
 const runner = new AgentRunner({
   model: 'glm-4',
   llmClient,
-  skillDirectories: ['./skills', '~/.agentskillmania/colts/skills'],
+  skillDirs: ['./skills', '~/.agentskillmania/colts/skills'],
 });
 ```
 
@@ -200,7 +206,7 @@ description: Perform comprehensive code reviews
 You are a code review expert...
 ```
 
-Runner 会自动注册 `load_skill` 和 `return_skill` 工具，支持运行时切换 Skill 和嵌套 Skill 调用。
+Runner 会自动注册 `load_skill` 工具，支持运行时切换 Skill。
 
 ## 上下文压缩
 
@@ -221,35 +227,11 @@ const runner = new AgentRunner({
 
 策略：`truncate`、`summarize`。其中 `summarize` 会调用 LLM 生成摘要，也可通过 `summaryModel` 或 `summaryProvider` 指定专用模型负责摘要。
 
-## Subagent 系统
+## 子代理委托
 
-将任务委托给专用子代理。每个子代理拥有独立的指令、工具、状态，可选的步数上限和超时：
+子代理委托（`delegate` 工具 + `SubAgentConfig[]`、`subagent:*` 事件）由 **wrangler** 在 colts 之上提供 —— 见 wrangler README。
 
-```typescript
-const runner = new AgentRunner({
-  model: 'glm-4',
-  llmClient,
-  subAgents: [{
-    name: 'researcher',
-    description: 'Research specialist',
-    config: { name: 'researcher', instructions: 'Research topics thoroughly.', tools: [] },
-    maxSteps: 5,
-    timeout: 60_000, // 毫秒，超出则中断子代理
-    // 工具与技能继承（默认开启）：
-    inheritParentTools: true,   // 复制父注册表中的全部工具
-                                //（delegate 和 load_skill 会被过滤掉，
-                                // 避免递归和重复注册）
-    inheritParentSkills: true,  // 转发父 Runner 的 skillProvider，
-                                // 让子代理能调用 load_skill
-  }],
-});
-```
-
-子代理默认继承父 Runner 的完整工具集和技能提供者，因此无需在每个 agent 上重复声明 file_read、shell、web_search 等工具就能读文件、跑 shell、搜网页、加载技能。将任一标志设为 `false` 可关闭继承——此时子代理只能使用 `config.tools` 中显式列出的工具。
-
-`delegate` 工具会自动注册，使父代理能够调用子代理。工具返回一个判别联合 `DelegateResult`（`status: 'success' | 'error' | 'max_steps' | 'abort' | 'timeout'`），父代理可据此分支处理。
-
-### 子代理事件冒泡
+## 子代理事件冒泡
 
 子代理事件以 `subagent:` 前缀冒泡到父 Runner 的 EventEmitter，前端可实时观察子代理工作：
 
@@ -269,17 +251,11 @@ runner.on('subagent:end', (e) => console.log(`[${e.subtaskId}] 完成:`, e.resul
 `AgentState` 是纯数据 — 可序列化、不可变、可克隆。
 
 ```typescript
-import {
-  createAgentState,
-  addUserMessage,
-  createSnapshot,
-  serializeState,
-} from '@agentskillmania/colts';
+import { createAgentState, addUserMessage, serializeState } from '@agentskillmania/colts';
 
 let state = createAgentState({ name: 'agent', instructions: '...', tools: [] });
 state = addUserMessage(state, 'Hello');
 
-const snapshot = createSnapshot(state);
 const json = serializeState(state);
 ```
 
