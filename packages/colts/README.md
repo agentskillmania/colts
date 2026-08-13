@@ -10,10 +10,9 @@ A stateless ReAct agent framework with three-level execution control, event-driv
 
 - **Stateless Runner** — One `AgentRunner` instance, multiple `AgentState` instances. Thread-safe by design.
 - **Three-Level Execution** — `run()` (auto-loop), `step()` (one ReAct cycle), `advance()` (one phase).
-- **Event-Driven Observability** — `AgentRunner` extends `EventEmitter`. All execution events (tokens, thinking, tool calls, phase changes, sub-agent activity) are emitted via `runner.on(...)`. Tokens are streamed internally through `llmProvider.stream()` and emitted to the EventEmitter.
+- **Event-Driven Observability** — `AgentRunner` extends `EventEmitter`. All execution events (tokens, thinking, tool calls, phase changes) are emitted via `runner.on(...)`. Tokens are streamed internally through `llmProvider.stream()` and emitted to the EventEmitter.
 - **Thinking / Reasoning** — Native thinking (Claude-style) and prompt-level thinking (`<think/>` tags). Configurable per request.
 - **Skill System** — Runtime skill loading from `SKILL.md` files via an injectable `ISkillProvider` (platform-neutral; Node/browser backends via `SkillFsOps`).
-- **Subagent Delegation** — Delegate tasks to specialized sub-agents with independent configs, tools, state, and optional timeout. Sub-agent events bubble up to the parent runner's EventEmitter for real-time visibility.
 - **Context Compression** — Two strategies (`truncate`, `summarize`). Messages are never deleted.
 - **Pluggable Message Assembly** — `IMessageAssembler` interface for custom RAG, memory, or prompt strategies without forking the runner.
 - **Tool System** — Zod-based parameter validation with automatic JSON Schema generation.
@@ -86,7 +85,7 @@ runner.on('token', (e) => process.stdout.write(e.token));
 runner.on('complete', (e) => console.log('Done:', e.result));
 
 const { state: finalState, result } = await runner.run(state, { maxSteps: 15 });
-// result.type: 'success' | 'max_steps' | 'error' | 'abort'
+// result.type: 'success' | 'stopped' | 'max_steps' | 'error' | 'abort' | 'waiting-human'
 ```
 
 ### Step — one ReAct cycle
@@ -120,7 +119,7 @@ runner.on('run:start', (e) => console.log('Run started'));
 runner.on('step:start', (e) => console.log(`Step ${e.step}`));
 runner.on('token', (e) => process.stdout.write(e.token));
 runner.on('thinking', (e) => process.stderr.write(e.content));
-runner.on('tool:start', (e) => console.log('Tool:', e.action.name));
+runner.on('tool:start', (e) => console.log('Tool:', e.action.tool));
 runner.on('tool:end', (e) => console.log('Tool result:', e.result));
 runner.on('phase-change', (e) => console.log(`${e.from.type} → ${e.to.type}`));
 runner.on('compressing', () => console.log('Compressing context...'));
@@ -248,21 +247,6 @@ Strategies: `truncate`, `summarize`. The `summarize` strategy calls the LLM to g
 ## Subagent Delegation
 
 Sub-agent delegation (`delegate` tool + `SubAgentConfig[]`, `subagent:*` events) is provided by **wrangler** on top of colts — see the wrangler README.
-
-## Sub-agent event bubbling
-
-Sub-agent events bubble up to the parent runner's EventEmitter with a `subagent:` prefix, so frontends can observe sub-agent work in real time:
-
-```typescript
-runner.on('subagent:start', (e) => console.log(`[${e.subtaskId}] delegated to ${e.name}: ${e.task}`));
-runner.on('subagent:token', (e) => process.stdout.write(e.token)); // live sub-agent text
-runner.on('subagent:thinking', (e) => process.stderr.write(e.content));
-runner.on('subagent:tool:start', (e) => console.log('Sub-agent tool:', (e.action as { name?: string })?.name));
-runner.on('subagent:tool:end', (e) => console.log('Sub-agent tool result:', e.result));
-runner.on('subagent:end', (e) => console.log(`[${e.subtaskId}] finished:`, e.result.status));
-```
-
-Each event carries `subtaskId` and `subagentName` for routing when multiple sub-agents run.
 
 ## State Management
 
