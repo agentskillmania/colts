@@ -122,4 +122,35 @@ export type {
   ModelMeta,
   /** Resolved model capabilities with all fields required. */
   ModelCapabilities,
+  // ── 自有消息/工具/配置类型（平台无关，独立于 pi-ai）──
+  /** 会话消息联合（user / assistant / toolResult）。 */
+  Message,
+  /** 用户消息。 */
+  UserMessage,
+  /** 助手消息。 */
+  AssistantMessage,
+  /** 工具结果消息。 */
+  ToolResultMessage,
+  /** 文本内容块。 */
+  TextContent,
+  /** 思考内容块。 */
+  ThinkingContent,
+  /** 图片内容块。 */
+  ImageContent,
+  /** 工具调用内容块。 */
+  ToolCallContent,
+  /** ToolCallContent 的兼容别名。 */
+  ToolCall,
+  /** 供给 LLM 的工具定义。 */
+  LLMTool,
+  /** Token 用量（与 pi-ai Usage 兼容）。 */
+  Usage,
+  /** 停止原因。 */
+  StopReason,
+  /** LLM 快速初始化配置。 */
+  LLMQuickInit,
+  /** 单个 provider 条目。 */
+  LLMProviderEntry,
+  /** 单个模型条目。 */
+  ModelEntry,
 } from './types.js';

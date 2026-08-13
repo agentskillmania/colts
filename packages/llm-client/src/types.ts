@@ -7,7 +7,144 @@
  * @module
  */
 
-import type { Message, Tool } from '@mariozechner/pi-ai';
+// ─── 自有消息/工具类型（平台无关，独立于 pi-ai）──────────────────
+// 形状与 pi-ai 兼容：adapter 边界处可直接转换；上层不依赖 pi-ai 类型。
+
+/** 文本内容块 */
+export interface TextContent {
+  type: 'text';
+  text: string;
+  textSignature?: string;
+}
+
+/** 思考内容块（原生 reasoning） */
+export interface ThinkingContent {
+  type: 'thinking';
+  thinking: string;
+  thinkingSignature?: string;
+  /** 被安全过滤时置真（密文存 thinkingSignature 供多轮续传） */
+  redacted?: boolean;
+}
+
+/** 图片内容块 */
+export interface ImageContent {
+  type: 'image';
+  data: string;
+  mimeType: string;
+}
+
+/** 工具调用内容块（别名 ToolCall 供兼容引用） */
+export interface ToolCallContent {
+  type: 'toolCall';
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  thoughtSignature?: string;
+}
+
+/** 兼容别名（同 ToolCallContent） */
+export type ToolCall = ToolCallContent;
+
+/** 用户消息 */
+export interface UserMessage {
+  role: 'user';
+  content: string | (TextContent | ImageContent)[];
+  timestamp: number;
+}
+
+/** Token 用量（与 pi-ai Usage 形状兼容） */
+export interface Usage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  cost: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+}
+
+/** 停止原因 */
+export type StopReason = 'stop' | 'length' | 'toolUse' | 'error' | 'aborted';
+
+/** 助手消息 */
+export interface AssistantMessage {
+  role: 'assistant';
+  content: (TextContent | ThinkingContent | ToolCallContent)[];
+  /** 兼容字段：pi-ai 适配器填充（api/provider/model），调用方可忽略 */
+  api?: string;
+  provider?: string;
+  model?: string;
+  responseModel?: string;
+  responseId?: string;
+  usage?: Usage;
+  stopReason?: StopReason;
+  errorMessage?: string;
+  timestamp: number;
+}
+
+/** 工具结果消息 */
+export interface ToolResultMessage<TDetails = unknown> {
+  role: 'toolResult';
+  toolCallId: string;
+  toolName: string;
+  content: (TextContent | ImageContent)[];
+  details?: TDetails;
+  isError: boolean;
+  timestamp: number;
+}
+
+/** 会话消息联合（自有形状） */
+export type Message = UserMessage | AssistantMessage | ToolResultMessage;
+
+/** 供给 LLM 的工具定义（JSON Schema 参数） */
+export interface LLMTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+// ─── LLM 快速初始化配置（原定义于 colts，下放至此）──────────────
+
+/** 单个模型条目 */
+export interface ModelEntry {
+  /** 模型标识 */
+  modelId: string;
+  /** 该模型在对应 API key 下的最大并发 */
+  maxConcurrency?: number;
+  /** 上下文窗口（token 数，覆盖 adapter 默认） */
+  contextWindow?: number;
+  /** 每次请求最大输出 token（覆盖 adapter 默认） */
+  maxTokens?: number;
+  /** 是否支持原生推理 */
+  reasoning?: boolean;
+  /** 支持的输入模态 */
+  input?: string[];
+}
+
+/** 单个 provider 条目（一个 apiKey 对应一个 provider） */
+export interface LLMProviderEntry {
+  /** Provider 名 */
+  name: string;
+  /** 自定义 Base URL（可选） */
+  baseUrl?: string;
+  /** API key */
+  apiKey: string;
+  /** 该 provider 的最大并发（默认 5） */
+  maxConcurrency?: number;
+  /** 该 key 下可用的模型列表 */
+  models: ModelEntry[];
+}
+
+/** 快速初始化：多 provider 配置（每 provider 一个 apiKey） */
+export interface LLMQuickInit {
+  /** 多个 LLM provider 配置 */
+  providers: LLMProviderEntry[];
+}
 
 /**
  * Configuration options for LLMClient instance.
@@ -419,7 +556,7 @@ export interface CallOptions {
    * Tool calls are included in the response and must be handled
    * by the caller.
    */
-  tools?: Tool[];
+  tools?: LLMTool[];
 
   /**
    * Sampling temperature for this request.

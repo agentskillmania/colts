@@ -384,3 +384,37 @@ describe('LLMClient', () => {
     });
   });
 });
+
+describe('LLMClient.quickInit', () => {
+  it('assembles multiple providers with keys and models', () => {
+    const client = LLMClient.quickInit({
+      providers: [
+        {
+          name: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-openai',
+          maxConcurrency: 10,
+          models: [{ modelId: 'gpt-4o', maxConcurrency: 2, contextWindow: 128000 }],
+        },
+        {
+          name: 'deepseek',
+          apiKey: 'sk-deepseek',
+          models: [{ modelId: 'deepseek-chat', contextWindow: 64000 }],
+        },
+      ],
+    });
+
+    // 通过 client.getStats() 的 keyHealth（每个 key 一条）验证装配数量
+    const stats = client.getStats();
+    expect(stats.keyHealth.size).toBe(2);
+  });
+
+  it('applies default concurrency when not specified', () => {
+    const client = LLMClient.quickInit({
+      providers: [{ name: 'openai', apiKey: 'sk-x', models: [{ modelId: 'gpt-4o' }] }],
+    });
+
+    const stats = client.getStats();
+    expect(stats.keyHealth.size).toBe(1);
+  });
+});

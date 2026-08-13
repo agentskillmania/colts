@@ -6,7 +6,6 @@
  */
 
 import type { TokenStats } from '@agentskillmania/llm-client';
-import { LLMClient } from '@agentskillmania/llm-client';
 import { EventEmitter } from 'eventemitter3';
 
 import type { RunnerContext } from './advance.js';
@@ -28,7 +27,6 @@ import type {
   IToolRegistry,
   IContextCompressor,
   CompressionConfig,
-  LLMQuickInit,
 } from '../types.js';
 import { executeAdvance, createRouter } from './advance.js';
 import { compressState, maybeCompress } from './compression.js';
@@ -218,24 +216,13 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    */
   constructor(options: RunnerOptions) {
     super();
-    // Validate LLM configuration (mutually exclusive)
-    if (options.llmClient && options.llm) {
+    // Validate LLM configuration（注入模式——引擎不内置 LLM 创建）
+    if (!options.llmClient) {
       throw new ConfigurationError(
-        'Cannot specify both llmClient and llm. Choose one: injection or quick initialization.'
+        'Must specify llmClient (injection). Use LLMClient.quickInit() for built-in init.'
       );
     }
-    if (!options.llmClient && !options.llm) {
-      throw new ConfigurationError('Must specify either llmClient or llm.');
-    }
-
-    // Initialize LLM provider
-    if (options.llmClient) {
-      this.llmProvider = options.llmClient;
-    } else {
-      // The validation above guarantees exactly one of llmClient/llm is set;
-      // reaching this branch means options.llm is present (quick-init path).
-      this.llmProvider = this.createLLMFromQuickInit(options.llm!);
-    }
+    this.llmProvider = options.llmClient;
 
     // Initialize tool registry (merge injection and quick init)
     const registry = options.toolRegistry ?? new ToolRegistry();
@@ -302,37 +289,6 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     // Initialize middleware
     this.middlewareExecutor = new MiddlewareExecutor(options.middleware ?? []);
     this.hasMiddleware = !this.middlewareExecutor.isEmpty;
-  }
-
-  /**
-   * Create LLMClient from quick initialization config
-   */
-  private createLLMFromQuickInit(llm: LLMQuickInit): LLMClient {
-    const client = new LLMClient();
-
-    for (const provider of llm.providers) {
-      const providerConcurrency = provider.maxConcurrency ?? 5;
-      client.registerProvider({
-        name: provider.name,
-        baseUrl: provider.baseUrl,
-        maxConcurrency: providerConcurrency,
-      });
-      client.registerApiKey({
-        key: provider.apiKey,
-        provider: provider.name,
-        maxConcurrency: providerConcurrency,
-        models: provider.models.map((model) => ({
-          modelId: model.modelId,
-          maxConcurrency: model.maxConcurrency ?? 3,
-          contextWindow: model.contextWindow,
-          maxTokens: model.maxTokens,
-          reasoning: model.reasoning,
-          input: model.input,
-        })),
-      });
-    }
-
-    return client;
   }
 
   /**

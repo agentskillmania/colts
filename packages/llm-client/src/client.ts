@@ -12,6 +12,7 @@ import { RequestScheduler } from './scheduler.js';
 import type {
   ProviderConfig,
   ApiKeyConfig,
+  LLMQuickInit,
   CallOptions,
   LLMResponse,
   StreamEvent,
@@ -113,6 +114,53 @@ export class LLMClient extends EventEmitter {
 
   /** Global default base URL used when a provider/key does not specify one. */
   private baseUrl?: string;
+
+  /**
+   * 便捷创建：从 provider 列表一次装配 LLMClient。
+   *
+   * 每个 provider 对应一个 API key；模型列表决定该 key 下可用的模型。
+   * 这是「内置 LLM」的入口——上层不需要自己维护 provider/key/model 注册。
+   *
+   * @param config - 快速初始化配置（providers + models）
+   * @param options - 可选：默认并发/Base URL 覆盖
+   * @returns 配置完成的 LLMClient
+   *
+   * @example
+   * ```typescript
+   * const client = LLMClient.quickInit({
+   *   providers: [{ name: 'openai', apiKey: 'sk-...', models: [{ modelId: 'gpt-4o' }] }],
+   * });
+   * ```
+   */
+  static quickInit(config: LLMQuickInit, options?: LLMClientOptions): LLMClient {
+    const client = new LLMClient(options);
+
+    for (const provider of config.providers) {
+      const providerConcurrency = provider.maxConcurrency ?? 5;
+
+      client.registerProvider({
+        name: provider.name,
+        baseUrl: provider.baseUrl,
+        maxConcurrency: providerConcurrency,
+      });
+
+      client.registerApiKey({
+        key: provider.apiKey,
+        provider: provider.name,
+        maxConcurrency: providerConcurrency,
+        models: provider.models.map((model) => ({
+          modelId: model.modelId,
+          maxConcurrency: model.maxConcurrency ?? 3,
+          contextWindow: model.contextWindow,
+          maxTokens: model.maxTokens,
+          reasoning: model.reasoning,
+          input: model.input,
+        })),
+      });
+    }
+
+    return client;
+  }
 
   /**
    * Creates a new LLMClient instance.
