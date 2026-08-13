@@ -18,40 +18,35 @@ export ENABLE_INTEGRATION_TESTS="true"
 
 ## 覆盖的用户故事
 
-### Story 1: 基础完成 (`basic-completion.test.ts`)
+### Story 1: 基础完成 (`01-basic-completion.test.ts`)
 - 简单的非流式对话
 - Token 统计
 - 请求超时
 - 多轮对话上下文
 
-### Story 2: 流式 (`streaming.test.ts`)
+### Story 2: 流式 (`02-streaming.test.ts`)
 - 实时逐字符输出
 - Delta 和累积内容
 - 流式中的 Trace ID 支持
 - 超时处理
 
-### Story 3: 多密钥 (`multi-key.test.ts`)
+### Story 3: 多密钥 (`03-multi-key-switching.test.ts`)
 - 轮询负载均衡
 - 多个 API 密钥注册
 - 密钥健康统计
 - 单密钥回退
 
-### Story 4: 并发 (`concurrency.test.ts`)
+### Story 4: 并发 (`04-concurrency-limiting.test.ts`)
 - 达到限制时的队列
 - 实时统计
 - 默认并发配置
 
-### Story 5: 优先级 (`priority.test.ts`)
-- 高优先级请求优先处理
-- 队列位置估计
-- 默认优先级 (0)
-
-### Story 6: 重试 (`retry.test.ts`)
+### Story 5: 重试 (`06-automatic-retry.test.ts`)
 - 自定义重试配置
 - 重试事件监控
 - 带重试的流式
 
-### Story 7: 可观测性 (`observability.test.ts`)
+### Story 6: 可观测性 (`07-monitoring-debugging.test.ts`)
 - 通过 `getStats()` 获取实时统计
 - 请求生命周期事件
 - 密钥健康追踪

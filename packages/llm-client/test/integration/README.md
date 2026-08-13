@@ -18,40 +18,35 @@ export ENABLE_INTEGRATION_TESTS="true"
 
 ## User Stories Covered
 
-### Story 1: Basic Completion (`basic-completion.test.ts`)
+### Story 1: Basic Completion (`01-basic-completion.test.ts`)
 - Simple non-streaming chat
 - Token statistics
 - Request timeout
 - Multi-turn conversation context
 
-### Story 2: Streaming (`streaming.test.ts`)
+### Story 2: Streaming (`02-streaming.test.ts`)
 - Real-time character-by-character output
 - Delta and accumulated content
 - Trace ID support in streaming
 - Timeout handling
 
-### Story 3: Multi-Key (`multi-key.test.ts`)
+### Story 3: Multi-Key (`03-multi-key-switching.test.ts`)
 - Round-robin load balancing
 - Multiple API key registration
 - Key health statistics
 - Single key fallback
 
-### Story 4: Concurrency (`concurrency.test.ts`)
+### Story 4: Concurrency (`04-concurrency-limiting.test.ts`)
 - Queue when limit reached
 - Real-time stats
 - Default concurrency configuration
 
-### Story 5: Priority (`priority.test.ts`)
-- High priority requests processed first
-- Queue position estimation
-- Default priority (0)
-
-### Story 6: Retry (`retry.test.ts`)
+### Story 5: Retry (`06-automatic-retry.test.ts`)
 - Custom retry configuration
 - Retry event monitoring
 - Streaming with retry
 
-### Story 7: Observability (`observability.test.ts`)
+### Story 6: Observability (`07-monitoring-debugging.test.ts`)
 - Real-time stats via `getStats()`
 - Request lifecycle events
 - Key health tracking
