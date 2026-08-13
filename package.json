@@ -26,13 +26,9 @@
     "lint:fix": "eslint packages/*/src --fix",
     "format": "prettier --write \"packages/**/*.ts\"",
     "format:check": "prettier --check \"packages/**/*.ts\"",
-    "prepare": "husky",
-    "changeset": "changeset",
-    "version": "changeset version",
-    "release": "pnpm build && changeset publish"
+    "prepare": "husky"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.0",
     "@eslint/js": "^8.57.1",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
