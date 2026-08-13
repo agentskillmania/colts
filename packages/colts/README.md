@@ -103,10 +103,11 @@ runner.on('phase-change', (e) => console.log('Phase:', e.to.type));
 ```typescript
 import { createExecutionState, isTerminalPhase } from '@agentskillmania/colts';
 
-const execState = createExecutionState();
+let execState = createExecutionState();
 while (!isTerminalPhase(execState.phase)) {
   const result = await runner.advance(state, execState);
   state = result.state;
+  execState = result.execState;   // ExecutionState is immutable — take the updated one
 }
 ```
 
