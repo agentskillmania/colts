@@ -5,7 +5,7 @@
  * via IToolSchemaFormatter. No intermediate OpenAI function format.
  */
 
-import type { Tool } from '@mariozechner/pi-ai';
+import type { LLMTool as Tool } from '@agentskillmania/llm-client';
 
 import type { IToolRegistry } from '../types.js';
 import type { IToolSchemaFormatter } from './schema-formatter.js';

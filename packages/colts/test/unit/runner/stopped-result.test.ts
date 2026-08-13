@@ -10,6 +10,7 @@ import { AgentRunner } from '../../../src/runner/index.js';
 import type { AgentMiddleware } from '../../../src/middleware/types.js';
 import type { StepResult, RunResult } from '../../../src/execution/index.js';
 import { createAgentState } from '../../../src/state/index.js';
+import { createCallOnlyMockLLMClient } from '../../helpers/mock-llm.js';
 
 describe('Runner: stopped result propagation', () => {
   it('should propagate stopped result from beforeAdvance in run()', async () => {
@@ -41,7 +42,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
+      llmClient: createCallOnlyMockLLMClient([]),
       middleware: [middleware],
     });
 
@@ -76,7 +77,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
+      llmClient: createCallOnlyMockLLMClient([]),
       middleware: [middleware],
     });
 
@@ -170,7 +171,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
+      llmClient: createCallOnlyMockLLMClient([]),
       middleware: [middleware],
     });
 
@@ -196,7 +197,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
+      llmClient: createCallOnlyMockLLMClient([]),
       middleware: [middleware],
     });
 
@@ -231,7 +232,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
+      llmClient: createCallOnlyMockLLMClient([]),
       middleware: [middleware],
     });
 
@@ -266,7 +267,7 @@ describe('Runner: stopped result propagation', () => {
 
     const runner = new AgentRunner({
       model: 'gpt-4',
-      llm: { providers: [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }] },
+      llmClient: createCallOnlyMockLLMClient([]),
       middleware: [middleware],
     });
 

@@ -75,28 +75,7 @@ describe('AgentRunner', () => {
       expect(runner).toBeInstanceOf(AgentRunner);
     });
 
-    it('should throw ConfigurationError when both llmClient and llm are provided', () => {
-      const client = createMockClient();
-      const providers = [{ name: 'openai', apiKey: 'test-key', models: [{ modelId: 'gpt-4' }] }];
-
-      expect(() => {
-        new AgentRunner({
-          model: 'gpt-4',
-          llmClient: client,
-          llm: { providers },
-        });
-      }).toThrow();
-
-      expect(() => {
-        new AgentRunner({
-          model: 'gpt-4',
-          llmClient: client,
-          llm: { providers },
-        });
-      }).toThrow('Cannot specify both llmClient and llm');
-    });
-
-    it('should throw ConfigurationError when neither llmClient nor llm is provided', () => {
+    it('should throw ConfigurationError when llmClient is not provided', () => {
       expect(() => {
         new AgentRunner({
           model: 'gpt-4',
@@ -107,7 +86,7 @@ describe('AgentRunner', () => {
         new AgentRunner({
           model: 'gpt-4',
         } as any);
-      }).toThrow('Must specify either llmClient or llm');
+      }).toThrow('Must specify llmClient');
     });
 
     it('should use injected messageAssembler', async () => {

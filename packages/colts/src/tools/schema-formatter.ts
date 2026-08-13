@@ -6,7 +6,7 @@
  * providers (pi-ai, MCP, etc.).
  */
 
-import type { Tool as PiAiTool } from '@mariozechner/pi-ai';
+import type { LLMTool as PiAiTool } from '@agentskillmania/llm-client';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import type { Tool } from './registry.js';

@@ -15,7 +15,6 @@ import type {
   IToolRegistry,
   IContextCompressor,
   CompressionConfig,
-  LLMQuickInit,
 } from '../types.js';
 
 /**
@@ -28,10 +27,9 @@ export interface RunnerOptions {
   model: string;
 
   // --- LLM: 注入或快速初始化（互斥） ---
-  /** LLM provider 实例（注入模式） */
+  /** LLM provider 实例（注入模式）——引擎不内置 LLM 创建；
+   *  需要内置便捷请用 `LLMClient.quickInit()`（@agentskillmania/colts/llm） */
   llmClient?: ILLMProvider;
-  /** LLM 快速初始化配置 */
-  llm?: LLMQuickInit;
 
   // --- 工具: 注入或快速初始化（可合并） ---
   /** 工具注册表实例（注入模式） */

@@ -5,7 +5,7 @@
  * The router dispatches to registered IPhaseHandler instances.
  */
 
-import type { Message } from '@mariozechner/pi-ai';
+import type { Message } from '@agentskillmania/llm-client';
 
 import type { AdvanceResult, ExecutionState, AdvanceOptions } from '../execution/index.js';
 import { updateExecState } from '../execution/index.js';

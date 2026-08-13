@@ -12,7 +12,7 @@
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
 
-import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
+import type { Message as PiAIMessage, TextContent, ToolCall } from '@agentskillmania/llm-client';
 
 import type { AgentState } from '../types.js';
 import type { BuildMessagesOptions, IMessageAssembler } from './types.js';

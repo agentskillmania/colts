@@ -6,7 +6,7 @@
  * compression summaries, and conversation history.
  */
 
-import type { Message as PiAIMessage } from '@mariozechner/pi-ai';
+import type { Message as PiAIMessage } from '@agentskillmania/llm-client';
 
 import type { ISkillProvider } from '../skills/types.js';
 import type { AgentState } from '../types.js';

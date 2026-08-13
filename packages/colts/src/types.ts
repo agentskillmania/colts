@@ -151,7 +151,7 @@ export interface AgentState {
 // ========== Runner Configuration Interfaces ==========
 
 import type { LLMResponse, StreamEvent, ModelMeta } from '@agentskillmania/llm-client';
-import type { Message as LLMMessage, Tool as LLMTool } from '@mariozechner/pi-ai';
+import type { Message as LLMMessage, LLMTool } from '@agentskillmania/llm-client';
 import type { ZodTypeAny } from 'zod';
 
 import type { ToolSchema, Tool as LocalTool } from './tools/registry.js';
@@ -287,48 +287,8 @@ export interface IToolRegistry {
   getAll?(): LocalTool[];
 }
 
-/**
- * Model entry for quick initialization.
- */
-export interface ModelEntry {
-  /** Model identifier */
-  modelId: string;
-  /** Max concurrent requests for this model under its API key */
-  maxConcurrency?: number;
-  /** Context window size in tokens (overrides adapter defaults) */
-  contextWindow?: number;
-  /** Max output tokens per request (overrides adapter defaults) */
-  maxTokens?: number;
-  /** Whether the model supports native reasoning */
-  reasoning?: boolean;
-  /** Supported input modalities */
-  input?: string[];
-}
-
-/**
- * Provider entry for quick initialization.
- */
-export interface LLMProviderEntry {
-  /** Provider name */
-  name: string;
-  /** Custom base URL for this provider (optional) */
-  baseUrl?: string;
-  /** API key for this provider */
-  apiKey: string;
-  /** Max concurrent requests for this provider (default 5) */
-  maxConcurrency?: number;
-  /** Models available under this provider's API key */
-  models: ModelEntry[];
-}
-
-/**
- * LLM Quick Initialization Configuration
- * When passed, Runner internally creates LLMClient instance
- */
-export interface LLMQuickInit {
-  /** Multiple LLM provider configurations */
-  providers: LLMProviderEntry[];
-}
+// LLM 快速初始化配置类型已下放 llm-client（此处 re-export 保持兼容）
+export type { LLMQuickInit, LLMProviderEntry, ModelEntry } from '@agentskillmania/llm-client';
 
 /**
  * Tool Quick Initialization Configuration

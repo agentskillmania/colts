@@ -17,6 +17,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { createRealLLMClient } from './helpers.js';
 import { AgentRunner, ToolRegistry, calculatorTool } from '../../src/index.js';
+import { LLMClient } from '@agentskillmania/llm-client';
 import { createAgentState, addUserMessage } from '../../src/state/index.js';
 import type { AgentConfig } from '../../src/types.js';
 import { z } from 'zod';
@@ -81,7 +82,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
       async () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
-          llm: {
+          llmClient: LLMClient.quickInit({
             providers: [
               {
                 name: testConfig.provider,
@@ -91,7 +92,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
                 models: [{ modelId: testConfig.testModel }],
               },
             ],
-          },
+          }),
         });
 
         const state = createAgentState(defaultConfig);
@@ -129,7 +130,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
       async () => {
         const runner = new AgentRunner({
           model: testConfig.testModel,
-          llm: {
+          llmClient: LLMClient.quickInit({
             providers: [
               {
                 name: testConfig.provider,
@@ -138,7 +139,7 @@ describe('User Story: Runner Configuration and Dependency Inversion', () => {
                 models: [{ modelId: testConfig.testModel }],
               },
             ],
-          },
+          }),
           tools: [calculatorTool],
         });
 

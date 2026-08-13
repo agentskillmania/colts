@@ -6,7 +6,7 @@
  * Extracts tool calls into actions. Transitions to llm-response phase.
  */
 
-import type { Message } from '@mariozechner/pi-ai';
+import type { Message } from '@agentskillmania/llm-client';
 
 import type {
   ExecutionState,

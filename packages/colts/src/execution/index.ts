@@ -5,7 +5,7 @@
  */
 
 import type { TokenStats } from '@agentskillmania/llm-client';
-import type { Message as PiAiMessage } from '@mariozechner/pi-ai';
+import type { Message as PiAiMessage } from '@agentskillmania/llm-client';
 import { produce, type Draft } from 'immer';
 
 import type { HumanRequest } from '../hitl/types.js';
