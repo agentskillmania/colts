@@ -778,6 +778,89 @@ describe('ExecutingToolHandler', () => {
     );
   });
 
+  // ── R2P-114 (Rust 87a54aa): the injected directive row is tagged ─────────
+  it('should tag the injected skill directive with skill-directive (R2P-114)', async () => {
+    // SWITCH_SKILL result → after the tool message is written, the engine
+    // injects the driving instruction. The row must carry the skill-directive
+    // marker (the frontend fromHistory skips bubble rendering / does not cut
+    // the assistant turn on it) while the role stays user — LLM assembly is
+    // by role, so the model still receives it as a plain user message.
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
+    const switchSignal = {
+      type: 'SWITCH_SKILL' as const,
+      to: 'my-skill',
+      instructions: 'Do stuff',
+      task: 'Do the thing',
+    };
+    const registry = createMockToolRegistry(switchSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const msgs = result.state.context.messages;
+    // Tool result row + injected directive row; only the directive is tagged.
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0].role).toBe('tool');
+    expect(msgs[0].type).toBe('tool-result');
+    const directive = msgs[1];
+    expect(directive.role).toBe('user');
+    expect(directive.type).toBe('skill-directive');
+    // With a non-default task the injected text is the task itself.
+    expect(directive.content).toBe('Do the thing');
+    // History round-trip (persist → rebuild) keeps the marker recognizable.
+    const restored = JSON.parse(JSON.stringify(directive)) as typeof directive;
+    expect(restored.type).toBe('skill-directive');
+  });
+
+  it('should tag the fallback directive line too (default task text)', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
+    const switchSignal = {
+      type: 'SWITCH_SKILL' as const,
+      to: 'new-skill',
+      instructions: 'Instructions',
+      task: 'Execute as instructed',
+    };
+    const registry = createMockToolRegistry(switchSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const directive = result.state.context.messages[result.state.context.messages.length - 1];
+    expect(directive.role).toBe('user');
+    expect(directive.type).toBe('skill-directive');
+    expect(directive.content).toBe(
+      'Follow the loaded skill instructions to complete the user request.'
+    );
+  });
+
+  // ── R2P-114 (Rust c78cfcc/f1096cc): inventory rides the tool result ──────
+  it('should persist the bundled-files inventory in the load_skill tool result', async () => {
+    const state = createMockState();
+    const execState = createExecutionState();
+    execState.phase = { type: 'executing-tool', actions: [createAction({ tool: 'load_skill' })] };
+    const switchSignal = {
+      type: 'SWITCH_SKILL' as const,
+      to: 'create-image',
+      instructions: 'Draw things.',
+      task: 'draw',
+      resources: ['reference/catalog.md'],
+      scripts: ['generate.js'],
+    };
+    const registry = createMockToolRegistry(switchSignal);
+    const ctx = createMockCtx();
+
+    const result = await handler.execute(ctx, state, execState, registry);
+
+    const toolMsg = result.state.context.messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain('--- bundled files');
+    expect(toolMsg?.content).toContain('resources: reference/catalog.md');
+    expect(toolMsg?.content).toContain('scripts: generate.js');
+  });
+
   it('should pass abort signal to tool execution', async () => {
     const state = createMockState();
     const execState = createExecutionState();

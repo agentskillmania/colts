@@ -77,7 +77,23 @@ export interface ISkillProvider {
  * load_skill tool result content in conversation history.
  */
 export type SkillSignal =
-  | { type: 'SWITCH_SKILL'; to: string; instructions: string; task: string }
+  /**
+   * SWITCH_SKILL carries the skill's bundled-file inventory (relative paths
+   * from the manifest): read_skill_resource / run_skill_script path inputs
+   * may only come from this inventory or references in the skill's
+   * instructions — without it the model can only guess paths.
+   * (R2P-114, aligned with Rust c78cfcc.)
+   */
+  | {
+      type: 'SWITCH_SKILL';
+      to: string;
+      instructions: string;
+      task: string;
+      /** Relative paths of bundled resource files (empty when none) */
+      resources?: string[];
+      /** Relative paths of bundled script files (empty when none) */
+      scripts?: string[];
+    }
   | { type: 'SKILL_NOT_FOUND'; requested: string; available: string[] };
 
 /**

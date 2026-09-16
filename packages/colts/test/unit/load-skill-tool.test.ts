@@ -43,8 +43,10 @@ describe('Step 8: load_skill Tool', () => {
       const tool = createLoadSkillTool(provider);
 
       expect(tool.name).toBe('load_skill');
+      // R2P-114 (Rust c78cfcc): the description announces the bundled-file
+      // inventory so paths are not guessed.
       expect(tool.description).toBe(
-        "Load a skill's detailed instructions by name. Use this when you need to follow a specific skill's workflow or guidelines. The skill instructions will be loaded and you will switch to that skill mode."
+        "Load a skill's detailed instructions by name. Use this when you need to follow a specific skill's workflow or guidelines. The result also lists the skill's bundled resource and script files — use those exact paths with read_skill_resource / run_skill_script; do not construct paths."
       );
     });
 
@@ -70,11 +72,15 @@ describe('Step 8: load_skill Tool', () => {
       const tool = createLoadSkillTool(provider);
       const result = await tool.execute({ name: 'code-review' });
 
+      // R2P-114 (Rust c78cfcc): the manifest inventory always rides the
+      // signal (empty arrays when the manifest has none — unwrap_or_default).
       expect(result).toEqual({
         type: 'SWITCH_SKILL',
         to: 'code-review',
         instructions: '# Code Review\n\nStep 1: Read the code.',
         task: 'Execute as instructed',
+        resources: [],
+        scripts: [],
       });
     });
 

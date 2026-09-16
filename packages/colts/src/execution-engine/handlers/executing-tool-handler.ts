@@ -25,7 +25,12 @@ import { upsertPendingInterrupt, retargetToolCallId } from '../../hitl/interrupt
 import type { HumanRequest } from '../../hitl/types.js';
 import { formatSkillToolResult } from '../../skills/signal-handler.js';
 import { isSkillSignal, type SkillSignal } from '../../skills/types.js';
-import { addToolMessage, addUserMessage, incrementStepCount } from '../../state/index.js';
+import {
+  addToolMessage,
+  addUserMessage,
+  incrementStepCount,
+  updateState,
+} from '../../state/index.js';
 import { ToolSuspensionError } from '../../tools/registry.js';
 import type { AgentState, IToolRegistry } from '../../types.js';
 import type { IPhaseHandler, PhaseHandlerContext } from '../types.js';
@@ -201,11 +206,34 @@ export class ExecutingToolHandler implements IPhaseHandler {
           task && task !== 'Execute as instructed'
             ? task
             : 'Follow the loaded skill instructions to complete the user request.';
-        const withTask = addUserMessage(newState, instruction);
+        // Tag the injected row as a skill directive: assembly is by role, so
+        // the LLM still receives a plain user message (zero model-side
+        // change); the history rebuild (frontend fromHistory) uses the
+        // marker to skip bubble rendering — the line is not a real user
+        // utterance and must not cut the assistant turn (live/resume
+        // isomorphism). (R2P-114, aligned with Rust 87a54aa.)
+        const withTask = tagSkillDirective(addUserMessage(newState, instruction));
         return { state: withTask, execState: nextExec, phase: nextExec.phase, done: false };
       }
     }
 
     return { state: newState, execState: nextExec, phase: nextExec.phase, done: false };
   }
+}
+
+/**
+ * Tag the just-injected trailing user message as a skill directive.
+ *
+ * Private to this handler (zero public state-surface increment, mirroring
+ * Rust's `tag_last_user_message`): addUserMessage without a length limit
+ * never throws, so the last row is always the just-injected directive; the
+ * role guard only defends the invariant. (R2P-114, aligned with Rust 87a54aa.)
+ */
+function tagSkillDirective(state: AgentState): AgentState {
+  return updateState(state, (draft) => {
+    const last = draft.context.messages[draft.context.messages.length - 1];
+    if (last && last.role === 'user') {
+      last.type = 'skill-directive';
+    }
+  });
 }

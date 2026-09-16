@@ -116,7 +116,12 @@ function applySwitchSkill(
  *
  * For SWITCH_SKILL, the instructions become the tool result content so the
  * skill text persists in conversation history (the redesigned persistence
- * model). Non-string instructions are JSON-stringified.
+ * model). Non-string instructions are JSON-stringified. When the signal
+ * carries a bundled-file inventory, it is appended as a '--- bundled files
+ * ---' suffix so both delivery paths (load_skill tool call and the wrangler
+ * /skill: command's synthesized result) emit identical inventory text —
+ * read_skill_resource / run_skill_script path inputs may only come from
+ * that inventory. (R2P-114, aligned with Rust c78cfcc/f1096cc.)
  *
  * @param result - Raw tool result (may or may not be a SkillSignal)
  * @returns String representation suitable as a tool result
@@ -127,12 +132,43 @@ export function formatSkillToolResult(result: unknown): string {
   }
   const sig = result as SkillSignal;
   switch (sig.type) {
-    case 'SWITCH_SKILL':
+    case 'SWITCH_SKILL': {
       // Instructions become the tool result content, persisting in history.
-      return typeof sig.instructions === 'string'
-        ? sig.instructions
-        : JSON.stringify(sig.instructions);
+      const base =
+        typeof sig.instructions === 'string' ? sig.instructions : JSON.stringify(sig.instructions);
+      return `${base}${bundledFilesSuffix(sig)}`;
+    }
     case 'SKILL_NOT_FOUND':
       return `Skill '${sig.requested}' not found`;
   }
+}
+
+/**
+ * Bundled resource/script inventory suffix for SWITCH_SKILL results.
+ *
+ * read_skill_resource / run_skill_script path inputs may only come from
+ * this inventory or references in the skill's instructions — without the
+ * suffix the model can only guess paths. Empty and missing lists are
+ * skipped; when both are absent nothing is appended (legacy signals stay
+ * byte-identical).
+ * (R2P-114, aligned with Rust c78cfcc `bundled_files_suffix`.)
+ */
+function bundledFilesSuffix(sig: Extract<SkillSignal, { type: 'SWITCH_SKILL' }>): string {
+  const lines: string[] = [];
+  const partitions = [
+    ['resources', sig.resources],
+    ['scripts', sig.scripts],
+  ] as const;
+  for (const [label, files] of partitions) {
+    if (files && files.length > 0) {
+      lines.push(`${label}: ${files.join(', ')}`);
+    }
+  }
+  if (lines.length === 0) {
+    return '';
+  }
+  return (
+    '\n\n--- bundled files (use these exact paths with read_skill_resource / ' +
+    `run_skill_script) ---\n${lines.join('\n')}`
+  );
 }

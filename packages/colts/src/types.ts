@@ -39,7 +39,19 @@ export type MessageType =
    * context. The wire name must stay for old archive deserialization.
    * (R2P-101b, aligned with Rust 5120a3e/1f08b1f.)
    */
-  | 'system-reminder';
+  | 'system-reminder'
+  /**
+   * Driving instruction the engine injects after a successful load_skill
+   * (role 'user' — the task text, or the fallback English line). LLM
+   * assembly is by role: such rows are still sent as ordinary user messages
+   * (zero model-side change); the history rebuild (frontend fromHistory)
+   * uses the marker to skip bubble rendering — the line is not a real user
+   * utterance and must not cut the assistant turn (live/resume
+   * isomorphism). Distinct from system-reminder rows: those are role
+   * 'system' rows the assembler skips entirely.
+   * (R2P-114, aligned with Rust 87a54aa MessageType::SkillDirective.)
+   */
+  | 'skill-directive';
 
 /**
  * Conversation message
