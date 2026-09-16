@@ -37,8 +37,8 @@ function makeState(messages: Message[], anchor = 0, summary = ''): AgentState {
   return state;
 }
 
-function user(id: string): Message {
-  return { id, role: 'user', content: 'test', type: 'text', timestamp: 0, tokenCount: 1 };
+function user(id: string, content = 'test'): Message {
+  return { id, role: 'user', content, type: 'text', timestamp: 0, tokenCount: 1 };
 }
 
 function thought(id: string): Message {
@@ -220,6 +220,41 @@ describe('compressor anchor 规则——anchor 只落用户消息（R2P-102）',
     expect(llm.call).toHaveBeenCalledOnce();
     expect(result.summary).toBe('mock summary');
     expect(result.summaryTokenCount).toBeGreaterThan(0);
+  });
+
+  it('再压缩 prompt 覆盖 [existingAnchor, ·) 全段——不因双重切片丢 [ea,2ea) 段（评审 P1，对齐 Rust compressor.rs:411-421）', async () => {
+    const llm = mockLLM();
+    const c = new DefaultContextCompressor(
+      { strategy: 'summarize', keepRecent: 2, threshold: 1 },
+      llm,
+      'gpt-4'
+    );
+    // existingAnchor=2:[0][1] 已被上一轮锚定,[2] 起是本轮要进摘要的窗口。
+    // 双重切片 bug:applyPrunes 已从 existingAnchor 切起,外层再 slice(existingAnchor)
+    // 使实际输入从原下标 2*ea=4 开始 → [2][3] 永远进不了 summary prompt。
+    const state = makeState(
+      [
+        user('1', 'OLD-before-anchor-0'),
+        user('2', 'OLD-before-anchor-1'),
+        user('3', 'NEW-right-after-anchor'),
+        user('4', 'NEW-second-after-anchor'),
+        user('5', 'tail-0'),
+        user('6', 'tail-1'),
+      ],
+      2,
+      'previous summary'
+    );
+    const result = await c.compress(state);
+    expect(result.anchor).toBe(4); // max(2, 6-2)=4(user),锚点有进展
+    const callArgs = (llm.call as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const prompt = callArgs.messages[0].content as string;
+    // 紧随 existingAnchor 之后的消息必须进 prompt([2][3] 是双重切片下被丢的段)
+    expect(prompt).toContain('NEW-right-after-anchor');
+    expect(prompt).toContain('NEW-second-after-anchor');
+    // 已锚定之前的旧消息不得混入
+    expect(prompt).not.toContain('OLD-before-anchor');
+    // 既有 re-compress 契约:旧 summary 作为上文进 prompt
+    expect(prompt).toContain('previous summary');
   });
 });
 

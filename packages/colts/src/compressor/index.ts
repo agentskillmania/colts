@@ -207,14 +207,15 @@ export class DefaultContextCompressor {
     let summary = '';
     let summaryTokenCount: number | undefined;
     if (this.strategy === 'summarize') {
-      // Apply prunes to create message copy for summarization
+      // Apply prunes to create message copy for summarization.
+      // applyPrunes 内部已从 existingAnchor 切起,直接使用——外层再
+      // slice(existingAnchor) 会把输入错切到原下标 2*existingAnchor,
+      // 再压缩时 [existingAnchor, 2*existingAnchor) 段消息永远进不了
+      // summary prompt（对齐 Rust compressor.rs,无第二次切片）。
       const messagesForSummary = this.applyPrunes(messages, prunedMessages, existingAnchor);
 
       // Generate structured summary
-      summary = await this.generateSummary(
-        messagesForSummary.slice(existingAnchor),
-        state.context.compression?.summary
-      );
+      summary = await this.generateSummary(messagesForSummary, state.context.compression?.summary);
       summaryTokenCount = estimateTokens(summary);
     }
 
