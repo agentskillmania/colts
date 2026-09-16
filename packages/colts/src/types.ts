@@ -14,8 +14,9 @@ export type TokenStats = LLMTokenStats;
  * `'system'` rows are marker lines — timeline traces of session-level events
  * (compression, model switches). Content is by convention a compact JSON
  * string (`kind` + event metadata; see `addSystemMessage`); they are pure
- * persisted history and are always skipped by the message assembler, never
- * sent to the LLM. (R2P-105, aligned with Rust 0a3ec81.)
+ * persisted history and never enter conversation requests through the
+ * message assembler (markers in the live region can still appear in the
+ * summarize LLM input — same as Rust). (R2P-105, aligned with Rust 0a3ec81.)
  */
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 

@@ -363,7 +363,8 @@ describe('User Story: Context Compression with Real LLM', () => {
           // And: Compressed state has metadata
           expect(compressed.context.compression).toBeDefined();
           // 消息从不被删除；压缩额外追加恰好一行 system 标记（时间线痕迹，
-          // R2P-105 对齐 Rust 0a3ec81——标记永不进 LLM 上下文）。
+          // R2P-105 对齐 Rust 0a3ec81——标记不经装配器进对话请求；活区
+          // 标记会进 summarize 输入，与 Rust 一致）。
           expect(compressed.context.messages.length).toBe(originalLength + 1);
           expect(compressed.context.messages[compressed.context.messages.length - 1].role).toBe(
             'system'

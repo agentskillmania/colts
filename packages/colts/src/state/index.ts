@@ -153,9 +153,10 @@ export function addToolMessage(
  * compression, model switches). The content is by convention a compact JSON
  * string (e.g. `{"kind":"compact",...}`) that consumers (frontend shims)
  * localize for display; the assembler always skips system rows, so markers
- * never enter the LLM context — they are pure persisted history, not
- * conversation participants. (R2P-105, aligned with Rust 0a3ec81
- * `add_system_message`.)
+ * never enter conversation requests through the assembler — they are pure
+ * persisted history, not conversation participants. (Markers in the live
+ * region can still appear in the summarize LLM input — same as Rust.)
+ * (R2P-105, aligned with Rust 0a3ec81 `add_system_message`.)
  *
  * @param state - Current state
  * @param content - Marker content (compact JSON string by convention)

@@ -29,8 +29,9 @@ export type CompressionEventEmitter = (type: string, data: Record<string, unknow
  * marker row can carry the history of multiple compressions. The row content
  * is compact JSON (`kind` + coverage/token counts of THIS round); frontend
  * shims localize it for display. Messages are never deleted; the assembler
- * skips system rows so the marker never enters the LLM context.
- * (R2P-105, aligned with Rust 0a3ec81.)
+ * skips system rows so the marker never enters conversation requests through
+ * the assembler (markers in the live region can still appear in the
+ * summarize LLM input — same as Rust). (R2P-105, aligned with Rust 0a3ec81.)
  *
  * @param compressor - Context compressor implementation
  * @param state - Current agent state
@@ -62,12 +63,18 @@ export async function compressState(
       compressedAt: result.compressedAt,
     };
   });
+  // no-op/放弃轮零值守卫：生产压缩器早退时故意透传旧 summaryTokenCount
+  // （保护压缩 meta、防窗口估算欠触发——那是 state 侧的正确行为），但
+  // 标记行本轮覆盖 0 条消息，不能带旧摘要/移除数，否则「覆盖 0 条却
+  // 有 N token 摘要」自相矛盾。按锚点增量守卫：本轮无进展则一并归零
+  // （对齐 Rust no-op 的 ..Default::default() → 全 0）。
+  const delta = Math.max(0, result.anchor - prevAnchor);
   const marker = JSON.stringify({
     kind: 'compact',
     // 本次压缩新覆盖的消息条数（anchor 增量），与消息总数区分开。
-    coveredMessages: Math.max(0, result.anchor - prevAnchor),
-    removedTokens: result.removedTokenCount ?? 0,
-    summaryTokens: result.summaryTokenCount ?? 0,
+    coveredMessages: delta,
+    removedTokens: delta > 0 ? (result.removedTokenCount ?? 0) : 0,
+    summaryTokens: delta > 0 ? (result.summaryTokenCount ?? 0) : 0,
   });
   return addSystemMessage(applied, marker);
 }

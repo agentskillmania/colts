@@ -9,7 +9,8 @@
  * 用手写的 model-switch 行钉住读侧契约。
  *
  * LLM 可见性（Rust 现状判定）：DefaultMessageAssembler 跳过 system 行，
- * 标记永不进 LLM 上下文——它纯属持久化历史，不是对话参与者。
+ * 标记不经装配器进入对话请求（活区标记行会进 summarize 的 LLM 输入，
+ * 与 Rust 一致）——它纯属持久化历史，不是对话参与者。
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -138,14 +139,19 @@ describe('R2P-105: compressState appends a compact marker row', () => {
     // → 标记行照插、增量饱和为 0。与 maybeCompress 的 coveredMessages:0
     // 发射同点同语义（对齐 Rust apply_compression 的 saturating_sub——
     // shouldCompress 真即调，无「锚点不推进就跳过插标记」分支）。
+    // round-2/3 mock 镜像生产 no-op 早退形状（compressor/index.ts 放弃分支
+    // 透传旧 summaryTokenCount 保护压缩 meta，removedTokenCount 缺席）——
+    // 标记行若不按锚点增量守卫，旧摘要数会漏进 no-op 轮标记，写成
+    // 「覆盖 0 条却有 42 token 摘要」的自相矛盾行。
     let state = createAgentState(config);
     state = addUserMessage(state, 'q1');
-    state = await compressState(fixedCompressor({ anchor: 1 }), state);
-
     state = await compressState(
-      fixedCompressor({ anchor: 1, removedTokenCount: undefined, summaryTokenCount: undefined }),
+      fixedCompressor({ anchor: 1, removedTokenCount: 900, summaryTokenCount: 42 }),
       state
     );
+
+    // 生产 no-op 形状：anchor 不动，旧 summaryTokenCount（42）原样透传。
+    state = await compressState(fixedCompressor({ anchor: 1, summaryTokenCount: 42 }), state);
 
     expect(parseMarker(state)).toEqual({
       kind: 'compact',
@@ -155,9 +161,10 @@ describe('R2P-105: compressState appends a compact marker row', () => {
     });
     expect(state.context.messages.filter((m) => m.role === 'system')).toHaveLength(2);
 
-    // 回退（anchor < prevAnchor）同样饱和为 0，不出负数。
-    state = await compressState(fixedCompressor({ anchor: 0 }), state);
+    // 回退（anchor < prevAnchor）同样饱和为 0，不出负数，旧摘要数也不透传。
+    state = await compressState(fixedCompressor({ anchor: 0, summaryTokenCount: 42 }), state);
     expect(parseMarker(state).coveredMessages).toBe(0);
+    expect(parseMarker(state).summaryTokens).toBe(0);
   });
 
   it('does not append a marker when compression is skipped entirely (maybeCompress early return)', async () => {
@@ -238,9 +245,9 @@ describe('R2P-105: marker rows survive serialize/deserialize (resume restore)', 
   });
 });
 
-// ── 组装器：标记行永不进 LLM 上下文 ─────────────────────────────────────
+// ── 组装器：标记行不经装配器进对话请求 ─────────────────────────────────
 
-describe('R2P-105: system marker rows never reach the LLM', () => {
+describe('R2P-105: assembler skips system marker rows', () => {
   it('assembler skips system rows, adjacent messages unaffected', async () => {
     let state = createAgentState(bareConfig);
     state = addUserMessage(state, 'hello');

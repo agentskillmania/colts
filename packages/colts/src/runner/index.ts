@@ -902,14 +902,16 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    * Manually trigger context compression
    *
    * @param state - Current agent state
-   * @returns New state with compression metadata (immutable)
+   * @returns New state with compression metadata plus one appended system
+   * marker row (the timeline trace of this compression; immutable)
    * @throws Error if no compressor is configured
    *
    * @example
    * ```typescript
    * const compressedState = await runner.compress(state);
    * // compressedState.context.compression is set
-   * // compressedState.context.messages is unchanged
+   * // compressedState.context.messages gains exactly one role:'system' marker
+   * // row ({"kind":"compact",...}) at the end — messages are never deleted
    * ```
    */
   async compress(state: AgentState): Promise<AgentState> {
