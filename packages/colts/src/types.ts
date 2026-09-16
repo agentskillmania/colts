@@ -11,12 +11,17 @@ export type TokenStats = LLMTokenStats;
 /**
  * Message role
  *
- * `'system'` rows are marker lines — timeline traces of session-level events
- * (compression, model switches). Content is by convention a compact JSON
- * string (`kind` + event metadata; see `addSystemMessage`); they are pure
- * persisted history and never enter conversation requests through the
- * message assembler (markers in the live region can still appear in the
- * summarize LLM input — same as Rust). (R2P-105, aligned with Rust 0a3ec81.)
+ * `'system'` rows come in two kinds, told apart by `type`:
+ * - no `type` → marker lines, timeline traces of session-level events
+ *   (compression, model switches). Content is by convention a compact JSON
+ *   string (`kind` + event metadata; see `addSystemMessage`); they are pure
+ *   persisted history and never enter conversation requests through the
+ *   message assembler (markers in the live region can still appear in the
+ *   summarize LLM input — same as Rust).
+ * - `type: 'system-reminder'` → legacy per-turn dynamic reminder rows, which
+ *   the wrangler-side assembler replays into the LLM by merging into the
+ *   preceding user message's `<system-reminder>` tail (see {@link MessageType}).
+ * (R2P-105, aligned with Rust 0a3ec81; R2P-101b.)
  */
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
@@ -194,7 +199,16 @@ export interface AgentContext {
   totalTokens?: TokenStats;
   /** Estimated total token count of full LLM context (via js-tiktoken) */
   estimatedContextSize?: number;
-  /** V2 HITL: tool call IDs approved by human (consumed after use by HitlMiddleware) */
+  /**
+   * V2 HITL: tool call IDs approved by the human.
+   *
+   * NOT consumed after use: HitlMiddleware only SKIPS re-confirmation for
+   * ids present here (it never removes an entry), so an approval keeps
+   * letting its tool call through on every later advance of the same
+   * session. run()'s resume guard reads the same set as its "accounted for"
+   * exemption — the entry is what keeps an approved-but-not-yet-executed
+   * toolCall from being rejected as dangling. (R2P-108.)
+   */
   hitlApprovals?: string[];
   /**
    * V2 HITL: unanswered human requests (terminal-state persistence).
@@ -292,6 +306,14 @@ export interface ILLMProvider {
  *
  * Runner executes tools and gets tool schemas through this interface.
  * The ToolRegistry class satisfies this interface.
+ *
+ * Enumeration order is part of the contract: implementations MUST return
+ * `toToolSchemas()` sorted by tool name. The wire `tools` array is the very
+ * front of the provider prefix cache, so a non-deterministic order
+ * invalidates the cache wholesale across requests. Sort by UTF-16 code unit
+ * (the shared `compareByCodeUnit` util) — never `localeCompare`, whose
+ * collation is host/locale-dependent. (Prefix-cache structural property,
+ * R2P-101.)
  */
 export interface IToolRegistry {
   /**
@@ -307,7 +329,11 @@ export interface IToolRegistry {
   /**
    * Get JSON schemas of all tools (for LLM)
    *
-   * @returns Array of tool schemas
+   * MUST be sorted by tool name (prefix-cache contract, see the interface
+   * doc and R2P-101): identical name sets must serialize identically on
+   * every call and every host.
+   *
+   * @returns Array of tool schemas, sorted by tool name
    */
   toToolSchemas(): ToolSchema[];
 

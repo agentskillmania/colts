@@ -314,6 +314,38 @@ describe('HITL V2: respond() edge cases', () => {
     expect(newState.context.messages).toEqual(state.context.messages);
     expect(newState.context.hitlApprovals).toBeUndefined();
   });
+
+  it('should throw when a known response type does not match the request type (P3 guard)', async () => {
+    const { respond } = await import('../../../src/hitl/respond.js');
+
+    const state = makeState();
+    const questionRequest: HumanRequest = {
+      type: 'question',
+      questions: [{ id: 'q1', question: 'Name?', type: 'text' }],
+      toolCallId: 'c1',
+    };
+    // A tool-confirm "approval" attached to a question call would put the
+    // ask_human id into hitlApprovals — run()'s resume guard treats approved
+    // ids as accounted for, the call stays unanswered, provider 400. The
+    // mismatch must fail loud instead of corrupting the pairing.
+    expect(() => respond(state, questionRequest, { type: 'tool-confirm', approved: true })).toThrow(
+      /cannot answer HumanRequest type 'question'/
+    );
+
+    const confirmRequest: HumanRequest = {
+      type: 'tool-confirm',
+      toolName: 'delete_file',
+      args: {},
+      toolCallId: 'c2',
+    };
+    expect(() => respond(state, confirmRequest, { type: 'question', answers: {} })).toThrow(
+      /cannot answer HumanRequest type 'tool-confirm'/
+    );
+
+    // Nothing was written by the rejected calls.
+    expect(state.context.messages).toEqual([]);
+    expect(state.context.hitlApprovals).toBeUndefined();
+  });
 });
 
 describe('HITL V2: Integration with runner', () => {
@@ -884,6 +916,25 @@ describe('HITL: typed suspension through the kernel', () => {
     expect(result.state.context.pendingInterrupts).toHaveLength(1);
     expect(result.state.context.pendingInterrupts![0].request.toolCallId).toBe('call_ask');
     expect(ctx.executionPolicy.onToolError).toHaveBeenCalledTimes(1);
+
+    // The fail decision must still leave a durable record (review P3): the
+    // failed call's toolCall is answered with an isError tool message in the
+    // rejectTool shape, so answering the suspension and resuming does not hit
+    // run()'s dangling-toolCall guard (provider 400). Unreachable under the
+    // default policy (never decides 'fail'); defensive for custom policies.
+    const boomMsg = result.state.context.messages.find(
+      (m) => m.role === 'tool' && m.toolCallId === 'call_boom'
+    );
+    expect(boomMsg).toBeDefined();
+    expect(boomMsg!.isError).toBe(true);
+    expect(boomMsg!.content).toContain('policy-fail');
+    expect(boomMsg!.toolName).toBe('boom');
+
+    // The suspended call still has NO tool result (the question is unanswered).
+    const askMsg = result.state.context.messages.find(
+      (m) => m.role === 'tool' && m.toolCallId === 'call_ask'
+    );
+    expect(askMsg).toBeUndefined();
   });
 
   // ── P1-b: surfacing ALL suspended requests + resume guard ─────────────────

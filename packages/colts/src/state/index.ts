@@ -120,7 +120,7 @@ export function addAssistantMessage(
  *
  * @param state - Current state
  * @param content - Tool return content
- * @param options - Optional parameters (toolCallId, toolName)
+ * @param options - Optional parameters (toolCallId, toolName, isError)
  * @returns New state with the tool message appended
  */
 export function addToolMessage(
@@ -129,6 +129,8 @@ export function addToolMessage(
   options?: {
     toolCallId?: string;
     toolName?: string;
+    /** ERR2: mark the result as an error (rejection / failure), not a success */
+    isError?: boolean;
   }
 ): AgentState {
   return updateState(state, (draft) => {
@@ -142,6 +144,7 @@ export function addToolMessage(
     };
     if (options?.toolCallId) msg.toolCallId = options.toolCallId;
     if (options?.toolName) msg.toolName = options.toolName;
+    if (options?.isError) msg.isError = true;
     draft.context.messages.push(msg);
   });
 }

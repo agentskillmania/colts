@@ -22,6 +22,7 @@ import { estimateTokens } from '../utils/tokens.js';
  * @param request - The original HumanRequest from the run result
  * @param response - The human's response
  * @returns New AgentState ready for the next run()
+ * @throws Error when the response type does not match the request type
  */
 export function respond(
   state: AgentState,
@@ -29,17 +30,43 @@ export function respond(
   response: HumanResponse
 ): AgentState {
   if (response.type === 'question') {
+    assertMatchingType(request, response);
     return respondToQuestion(state, request, response);
   }
 
   if (response.type === 'tool-confirm') {
+    assertMatchingType(request, response);
     if (response.approved) {
       return approveTool(state, request);
     }
     return rejectTool(state, request);
   }
 
+  // Unknown response type: tolerated no-op (nothing is consumed).
   return state;
+}
+
+/**
+ * A response may only answer a request of the same kind.
+ *
+ * Both branches key their produced rows off `request.toolCallId`, so a
+ * mismatched answer is attached to the wrong tool call. A tool-confirm
+ * approval landing on a question request, for instance, would put the
+ * ask_human call's id into hitlApprovals — run()'s resume guard treats
+ * approved ids as accounted for, the call itself stays unanswered, and the
+ * provider rejects the next request with 400. Fail loud instead.
+ */
+function assertMatchingType(
+  request: HumanRequest,
+  response: { type: HumanResponse['type'] }
+): void {
+  if (request.type !== response.type) {
+    throw new Error(
+      `HumanResponse type '${response.type}' cannot answer HumanRequest type '${request.type}': ` +
+        `the response would be paired with tool call '${request.toolCallId}' as the wrong kind ` +
+        `(provider 400 on resume).`
+    );
+  }
 }
 
 function respondToQuestion(

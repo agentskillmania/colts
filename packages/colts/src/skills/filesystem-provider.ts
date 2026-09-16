@@ -12,6 +12,7 @@ import { parse as parseYaml } from 'yaml';
 import { getDefaultSkillFsOps } from './fs-ops.js';
 import type { SkillFsOps } from './fs-ops.js';
 import type { SkillManifest, ISkillProvider } from './types.js';
+import { compareByCodeUnit } from '../utils/compare.js';
 
 /**
  * SKILL.md filename constant
@@ -272,9 +273,7 @@ export class FilesystemSkillProvider implements ISkillProvider {
    */
   async listSkills(): Promise<SkillManifest[]> {
     await this.ensureDiscovered();
-    return Array.from(this.manifests.values()).sort((a, b) =>
-      a.name < b.name ? -1 : a.name > b.name ? 1 : 0
-    );
+    return Array.from(this.manifests.values()).sort((a, b) => compareByCodeUnit(a.name, b.name));
   }
 
   /**

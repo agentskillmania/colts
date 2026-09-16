@@ -27,6 +27,14 @@ export interface SkillManifest {
  *
  * Defines the abstract interface for skill discovery, loading, and resource access.
  * Supports different storage backends (filesystem, remote services, etc.).
+ *
+ * Enumeration order is part of the contract: implementations MUST return
+ * `listSkills()` sorted by skill name. The catalog becomes the system
+ * document (request's first user message), so a non-deterministic order
+ * invalidates the provider prefix cache wholesale across provider
+ * instances. Sort by UTF-16 code unit (`compareByCodeUnit`) — never
+ * `localeCompare`, whose collation is host/locale-dependent.
+ * (Prefix-cache structural property, R2P-101.)
  */
 export interface ISkillProvider {
   /**
@@ -59,7 +67,11 @@ export interface ISkillProvider {
   /**
    * List all discovered skill manifests
    *
-   * @returns Array of all skill manifests
+   * MUST be sorted by skill name (prefix-cache contract, see the interface
+   * doc and R2P-101): the catalog's line order must be identical across
+   * provider instances and hosts.
+   *
+   * @returns Array of all skill manifests, sorted by name
    */
   listSkills(): Promise<SkillManifest[]>;
 

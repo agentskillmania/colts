@@ -62,9 +62,12 @@ export class ToolResultHandler implements IPhaseHandler {
             timestamp: Date.now(),
             name: sigResult.skillName,
           });
-          const instructions =
-            (result as SkillSignal & { instructions?: string }).instructions ?? '';
-          const tokenCount = instructions.length > 0 ? Math.ceil(instructions.length / 4) : 0;
+          // The reported count must cover what the tool result actually
+          // carries: formatSkillToolResult appends the bundled-files suffix
+          // for SWITCH_SKILL, so counting the bare instructions under-reports
+          // the tokens the model receives. (R2P-114 review P3.)
+          const formatted = formatSkillToolResult(result);
+          const tokenCount = formatted.length > 0 ? Math.ceil(formatted.length / 4) : 0;
           effects.push({
             type: 'skill:loaded',
             timestamp: Date.now(),
@@ -82,7 +85,7 @@ export class ToolResultHandler implements IPhaseHandler {
             type: 'tool:end',
             timestamp: Date.now(),
             callId: firstCallId,
-            result: formatSkillToolResult(result),
+            result: formatted,
           });
           const nextExec = updateExecState(execState, (draft) => {
             draft.phase = { type: 'idle' };

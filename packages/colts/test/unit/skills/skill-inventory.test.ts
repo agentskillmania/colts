@@ -15,9 +15,11 @@
  * - formatSkillToolResult appends the Rust-shaped suffix, partitioned into
  *   'resources:' / 'scripts:' lines of exact relative paths; nothing appended
  *   when both lists are empty.
- * - Both delivery paths share the formatter: a tool-path signal and a
- *   slash-path synthesized signal with the same inventory format identically
- *   (the wrangler /skill: handler is the consumer to align — handover item).
+ * - formatSkillToolResult is pure on the signal: any two callers that build
+ *   the same signal payload (the load_skill tool path; the slash-path
+ *   synthesized signal the wrangler /skill: handler must build) format
+ *   identically. The wrangler handler itself is out of this repo — handover
+ *   item, not exercised here.
  * - Real FilesystemSkillProvider inventory flows end-to-end into the formatted
  *   result (exact relative paths).
  */
@@ -168,12 +170,12 @@ describe('R2P-114: formatSkillToolResult appends the bundled-files suffix', () =
     expect(result).toBe('Do stuff.');
   });
 
-  it('formats both delivery paths identically (shared formatter contract)', async () => {
-    // Path 1: the load_skill tool result (what the model gets when it calls
-    // the tool itself). Path 2: the slash-command synthesized signal with the
-    // same manifest inventory (what the wrangler /skill: handler must build —
-    // Rust f1096cc). Both go through formatSkillToolResult, so the emitted
-    // inventory text can never drift between paths.
+  it('formatter output is a pure function of the signal shape (tool payload vs synthesized payload)', async () => {
+    // What this actually pins: formatSkillToolResult is pure on the signal —
+    // callers that build the same signal payload get byte-identical output,
+    // so the wrangler /skill: handler (another repo, the handover consumer of
+    // this contract) cannot drift as long as it passes the same signal fields.
+    // It does NOT exercise the wrangler handler itself.
     const manifest: SkillManifest = {
       name: 'create-image',
       description: 'generate images',

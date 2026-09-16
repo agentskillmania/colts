@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import type { HumanRequest } from '../hitl/types.js';
+import { compareByCodeUnit } from '../utils/compare.js';
 
 /**
  * Tool definition interface using Zod for parameter validation
@@ -103,16 +104,6 @@ export class ToolRegistry {
   private tools = new Map<string, Tool<z.ZodTypeAny>>();
 
   /**
-   * Compare two strings by UTF-16 code units (not locale-aware).
-   *
-   * Matches Rust's byte-wise `String` ordering: enumeration order must be
-   * identical across runtimes and locales, not just within one process.
-   */
-  private static byName(a: string, b: string): number {
-    return a < b ? -1 : a > b ? 1 : 0;
-  }
-
-  /**
    * Register a tool
    *
    * @param tool - Tool definition
@@ -167,7 +158,7 @@ export class ToolRegistry {
    * @returns Array of registered tool names, sorted
    */
   getToolNames(): string[] {
-    return Array.from(this.tools.keys()).sort(ToolRegistry.byName);
+    return Array.from(this.tools.keys()).sort(compareByCodeUnit);
   }
 
   /**
@@ -222,7 +213,7 @@ export class ToolRegistry {
           parameters: zodToJsonSchema(tool.parameters),
         },
       }))
-      .sort((a, b) => ToolRegistry.byName(a.function.name, b.function.name));
+      .sort((a, b) => compareByCodeUnit(a.function.name, b.function.name));
   }
 
   /**
@@ -242,6 +233,6 @@ export class ToolRegistry {
    * @returns Array of all registered tools, sorted by name
    */
   getAll(): Tool<z.ZodTypeAny>[] {
-    return Array.from(this.tools.values()).sort((a, b) => ToolRegistry.byName(a.name, b.name));
+    return Array.from(this.tools.values()).sort((a, b) => compareByCodeUnit(a.name, b.name));
   }
 }

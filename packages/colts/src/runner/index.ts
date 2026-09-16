@@ -196,6 +196,15 @@ export interface RunnerEventMap {
 /** Default max steps for run() / runStream() when not specified */
 export const DEFAULT_RUNNER_MAX_STEPS = 500;
 
+/**
+ * Default request timeout (ms) when not specified — 30 minutes.
+ *
+ * One named source for the engine-layer number: call sites reference this
+ * constant, never an inline literal. (Rust 662c099 names the same default on
+ * the engine side so the deployment layer's config default can mirror it.)
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 1800000;
+
 /** Hard ceiling safety net for run() / runStream() to prevent infinite loops */
 export const RUN_HARD_LIMIT = 1000;
 
@@ -248,7 +257,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     this.options = {
       ...options,
       maxSteps: options.maxSteps ?? DEFAULT_RUNNER_MAX_STEPS,
-      requestTimeout: options.requestTimeout ?? 1800000,
+      requestTimeout: options.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT_MS,
       runHardLimit: options.runHardLimit ?? RUN_HARD_LIMIT,
     };
 
@@ -979,8 +988,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    * otherwise run() refuses with a diagnosable error, split by state:
    * - still in pendingInterrupts → "answer the pending human interrupt
    *   first (respond + removePendingInterrupt)";
-   * - neither → dangling tool_call (history corrupted / partially injected);
-   *   the provider would reject the next call with 400.
+   * - neither → dangling tool_call: no result was ever written (e.g. a
+   *   resume where the answer was lost before it reached history — not a
+   *   corrupt history, just an unpaired call); the provider would reject
+   *   the next call with 400.
    *
    * Only the last toolCall-bearing assistant row matters: earlier batches
    * completed (execution is batch-sequential).

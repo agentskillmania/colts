@@ -159,6 +159,39 @@ describe('ToolResultHandler — SWITCH_SKILL', () => {
     expect(result.execState.phase.type).toBe('idle');
   });
 
+  it('should count the bundled-files suffix in skill:loaded tokenCount (review P3)', async () => {
+    const state = createAgentState(defaultConfig);
+    const switchSignal = {
+      type: 'SWITCH_SKILL',
+      to: 'research',
+      instructions: 'Research thoroughly',
+      task: 'Find sources',
+      resources: ['reference/catalog.md'],
+      scripts: ['generate.js'],
+    };
+    const execState = createToolResultExecState(
+      { tc1: switchSignal },
+      {
+        action: {
+          id: 'tc1',
+          tool: 'load_skill',
+          arguments: { name: 'research', task: 'Find sources' },
+        },
+      }
+    );
+
+    const result = await handler.execute(createMockCtx(), state, execState);
+
+    const skillLoaded = result.effects![1] as { type: 'skill:loaded'; tokenCount: number };
+    const toolEnd = result.effects![3] as { type: 'tool:end'; result: unknown };
+    // Exactly the bytes the model receives (instructions + bundled-files
+    // suffix), so the event no longer under-reports by the suffix.
+    expect(String(toolEnd.result)).toContain('--- bundled files');
+    expect(skillLoaded.tokenCount).toBe(Math.ceil(String(toolEnd.result).length / 4));
+    // Strictly above the bare-instructions count, which was the old value.
+    expect(skillLoaded.tokenCount).toBeGreaterThan(Math.ceil('Research thoroughly'.length / 4));
+  });
+
   it('should produce skill:start with current updated for a second load', async () => {
     let state = createAgentState(defaultConfig);
     state = updateState(state, (draft) => {

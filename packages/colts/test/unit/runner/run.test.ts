@@ -6,6 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { LLMClient, LLMResponse } from '@agentskillmania/llm-client';
 import {
   AgentRunner,
+  DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_RUNNER_MAX_STEPS,
   RUN_HARD_LIMIT,
 } from '../../../src/runner/index.js';
@@ -180,6 +181,12 @@ describe('run()', () => {
 
   it('should use default maxSteps of 500', () => {
     expect(DEFAULT_RUNNER_MAX_STEPS).toBe(500);
+  });
+
+  it('should expose the named default request timeout (30 minutes, R2P-134)', () => {
+    // One named engine-layer source for the default (Rust 662c099 names the
+    // same value), never a scattered 1800000 literal at call sites.
+    expect(DEFAULT_REQUEST_TIMEOUT_MS).toBe(1800000);
   });
 
   it('should handle LLM error and return error result', async () => {

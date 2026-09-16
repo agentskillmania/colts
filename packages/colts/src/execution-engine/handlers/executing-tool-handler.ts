@@ -131,8 +131,12 @@ export class ExecutingToolHandler implements IPhaseHandler {
       )
       .map((s) => s.value);
     const failures = settled
-      .filter((s): s is PromiseRejectedResult => s.status === 'rejected')
-      .map((s) => s.reason as Error);
+      .map((s, i) => ({ settled: s, action: actions[i] }))
+      .filter(
+        (x): x is { settled: PromiseRejectedResult; action: Action } =>
+          x.settled.status === 'rejected'
+      )
+      .map(({ settled: s, action }) => ({ action, error: s.reason as Error }));
 
     // Executed siblings' durable record — write tool messages for every ok
     // result even when the advance ends suspended: the side effects already
@@ -163,6 +167,22 @@ export class ExecutingToolHandler implements IPhaseHandler {
       for (const { request } of suspends) {
         newState = upsertPendingInterrupt(newState, request);
       }
+      // A custom fail policy can reject one action while a sibling suspends:
+      // the suspension terminal still outranks the fail, but the failed call
+      // must leave a durable record. Without one its tool_call stays
+      // unpaired once the human answers, and run()'s resume guard would then
+      // refuse the resume (the provider would reject it with 400). Written
+      // in the rejectTool shape (isError tool message) so the durable record
+      // matches a human rejection. Unreachable under the default policy
+      // (onToolError never decides 'fail') — defensive for custom policies.
+      // (R2P-108 review P3.)
+      for (const { action, error } of failures) {
+        newState = addToolMessage(newState, `Tool execution failed: ${error.message}`, {
+          toolCallId: action.id,
+          toolName: action.tool,
+          isError: true,
+        });
+      }
       const requests = suspends.map((s) => s.request);
       const nextExec = updateExecState(execState, (draft) => {
         draft.phase = { type: 'waiting-human', request: requests[0], requests };
@@ -178,7 +198,7 @@ export class ExecutingToolHandler implements IPhaseHandler {
     // No suspends: a collected fail propagates (first failure, matching
     // Promise.all's first-rejection semantics).
     if (failures.length > 0) {
-      throw failures[0];
+      throw failures[0].error;
     }
 
     // Aggregate results into Record<toolCallId, result>
@@ -227,13 +247,22 @@ export class ExecutingToolHandler implements IPhaseHandler {
  * Private to this handler (zero public state-surface increment, mirroring
  * Rust's `tag_last_user_message`): addUserMessage without a length limit
  * never throws, so the last row is always the just-injected directive; the
- * role guard only defends the invariant. (R2P-114, aligned with Rust 87a54aa.)
+ * role guard only defends the invariant. If the invariant is ever violated
+ * the row stays untagged (a phantom user utterance the history rebuild will
+ * render as a real user bubble), so warn instead of failing silently.
+ * (R2P-114, aligned with Rust 87a54aa; review P3.)
  */
 function tagSkillDirective(state: AgentState): AgentState {
   return updateState(state, (draft) => {
     const last = draft.context.messages[draft.context.messages.length - 1];
     if (last && last.role === 'user') {
       last.type = 'skill-directive';
+    } else {
+      console.warn(
+        '[colts] tagSkillDirective: last history row is not a user message ' +
+          `(role=${last?.role ?? 'none'}) — the skill directive stays untagged; ` +
+          'the history rebuild would render it as a phantom user utterance.'
+      );
     }
   });
 }

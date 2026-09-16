@@ -424,27 +424,32 @@ describe('Tool Registry (Step 3)', () => {
     };
 
     it('toToolSchemas output is name-sorted and byte-identical across insertion orders', () => {
-      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta']);
-      const b = regWith(['beta', 'mid_tool', 'zebra', 'alpha']);
+      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta', 'Zulu']);
+      const b = regWith(['Zulu', 'beta', 'mid_tool', 'zebra', 'alpha']);
 
       const schemaNames = (r: ToolRegistry) => r.toToolSchemas().map((s) => s.function.name);
-      expect(schemaNames(a)).toEqual(['alpha', 'beta', 'mid_tool', 'zebra']);
+      // 'Zulu' first pins code-unit order: localeCompare would put it last
+      // (collation is case-insensitive-ish), so this assertion set fails if
+      // the comparator is ever swapped for a locale-aware one.
+      expect(schemaNames(a)).toEqual(['Zulu', 'alpha', 'beta', 'mid_tool', 'zebra']);
       // Byte-level pin: two insertion orders must serialize identically.
       expect(JSON.stringify(a.toToolSchemas())).toBe(JSON.stringify(b.toToolSchemas()));
     });
 
     it('getToolNames is name-sorted and equal across insertion orders', () => {
-      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta']);
-      const b = regWith(['beta', 'mid_tool', 'zebra', 'alpha']);
-      expect(a.getToolNames()).toEqual(['alpha', 'beta', 'mid_tool', 'zebra']);
+      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta', 'Zulu']);
+      const b = regWith(['Zulu', 'beta', 'mid_tool', 'zebra', 'alpha']);
+      // Non-localeCompare pin (see toToolSchemas test).
+      expect(a.getToolNames()).toEqual(['Zulu', 'alpha', 'beta', 'mid_tool', 'zebra']);
       expect(a.getToolNames()).toEqual(b.getToolNames());
     });
 
     it('getAll snapshots are name-sorted and equal across insertion orders', () => {
-      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta']);
-      const b = regWith(['beta', 'mid_tool', 'zebra', 'alpha']);
+      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta', 'Zulu']);
+      const b = regWith(['Zulu', 'beta', 'mid_tool', 'zebra', 'alpha']);
       const names = (r: ToolRegistry) => r.getAll().map((t) => t.name);
-      expect(names(a)).toEqual(['alpha', 'beta', 'mid_tool', 'zebra']);
+      // Non-localeCompare pin (see toToolSchemas test).
+      expect(names(a)).toEqual(['Zulu', 'alpha', 'beta', 'mid_tool', 'zebra']);
       expect(names(a)).toEqual(names(b));
     });
   });
