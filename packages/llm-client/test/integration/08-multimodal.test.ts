@@ -19,14 +19,12 @@ import type { AssistantMessage, Message, UserMessage } from '../../src/types';
 import { multimodalConfig, isMultimodalConfigured, itif } from './config';
 
 /**
- * 64x64 solid red PNG (test fixture, generated locally with zlib — verified
- * to decode back to solid red and accepted by the real vision API).
- *
- * NOTE: deliberately NOT the Rust 35dc808 fixture constant — that base64 is a
- * malformed PNG (broken IDAT), rejected by the provider as "unsupported
- * image". The Rust test never ran against a real API (Rust .env never set
- * ENABLE_MULTIMODEL_INTEGRATION_TESTS), so its fixture went unvalidated;
- * this is the corrected equivalent fixture.
+ * 64x64 solid red PNG (test fixture) — byte-identical to the Rust 35dc808
+ * RED_PNG_BASE64 (verified: cmp-equal after extraction from the Rust commit;
+ * decodes with valid PNG signature, all chunk CRCs, IHDR 64x64 8-bit RGB and
+ * 4096 pure-red pixels; accepted by the real vision API). The Rust test never
+ * executed against a real API only because the Rust .env never set
+ * ENABLE_MULTIMODEL_INTEGRATION_TESTS — the fixture itself was always valid.
  */
 const RED_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC';

@@ -92,7 +92,7 @@
  * @packageDocumentation
  */
 
-export { LLMClient, type LLMClientOptions } from './client.js';
+export { LLMClient, LLMClientValidationError, type LLMClientOptions } from './client.js';
 
 // Re-export all types
 export type {

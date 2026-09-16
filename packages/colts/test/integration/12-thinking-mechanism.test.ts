@@ -9,9 +9,35 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { testConfig, itif } from './config.js';
 import { LLMClient } from '@agentskillmania/llm-client';
 import { AgentRunner } from '../../src/runner/index.js';
+import type { AgentState } from '../../src/types.js';
 import { createAgentState, addUserMessage } from '../../src/state/index.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { z } from 'zod';
+
+/**
+ * Run `attempt` until the produced state contains at least one `thought`
+ * message, or the attempt budget is exhausted.
+ *
+ * Under sustained suite load the provider throttles `glm-5`: a throttled call
+ * comes back with empty content and no reasoning (verified directly against
+ * the API, which returns the account-usage error with `content: null`), which
+ * would otherwise fail these tests for purely environmental reasons. All
+ * attempts missing reasoning still fail, so a real pipeline regression that
+ * dropped reasoning content cannot pass.
+ */
+async function runUntilReasoning(
+  attempt: () => Promise<AgentState>,
+  attempts = 3
+): Promise<AgentState> {
+  let last: AgentState | undefined;
+  for (let i = 0; i < attempts; i++) {
+    last = await attempt();
+    if (last.context.messages.some((m) => m.type === 'thought')) {
+      return last;
+    }
+  }
+  return last!;
+}
 
 describe('User Story: Thinking Mechanism with Real LLM', () => {
   let client: LLMClient;
@@ -66,7 +92,9 @@ describe('User Story: Thinking Mechanism with Real LLM', () => {
         tools: [],
       });
 
-      const { state: finalState } = await runner.run(addUserMessage(state, 'What is 15 + 27?'));
+      const finalState = await runUntilReasoning(() =>
+        runner.run(addUserMessage(state, 'What is 15 + 27?')).then((r) => r.state)
+      );
       const messages = finalState.context.messages;
 
       // glm-5 returns native thinking. Verify it is saved as a thought message.
@@ -104,10 +132,10 @@ describe('User Story: Thinking Mechanism with Real LLM', () => {
         tools: registry.toToolSchemas(),
       });
 
-      const { state: finalState } = await runner.run(
-        addUserMessage(state, 'Echo "integration test"'),
-        undefined,
-        registry
+      const finalState = await runUntilReasoning(() =>
+        runner
+          .run(addUserMessage(state, 'Echo "integration test"'), undefined, registry)
+          .then((r) => r.state)
       );
       const messages = finalState.context.messages;
 
@@ -147,7 +175,7 @@ describe('User Story: Thinking Mechanism with Real LLM', () => {
       });
 
       // Execute step (events available via runner.on)
-      const { state: finalState } = await runner.step(state);
+      const finalState = await runUntilReasoning(() => runner.step(state).then((r) => r.state));
       const messages = finalState.context.messages;
 
       // Should have a thought message from native thinking

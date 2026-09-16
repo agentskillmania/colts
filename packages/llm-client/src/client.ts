@@ -37,6 +37,35 @@ export interface LLMClientOptions extends LLMClientConfig {
 }
 
 /**
+ * Client-side validation error for programmatically distinguishable rejections.
+ *
+ * @remarks
+ * Thrown by the multimodal defensive gate ({@link LLMClient.call}/
+ * {@link LLMClient.stream}) when a request violates a declared-capability
+ * constraint — a configuration error, not a provider error. Callers can
+ * distinguish it from real provider failures (e.g. an API 400 about the
+ * image payload) via `error.name === 'LLMClientValidationError'` or
+ * `instanceof LLMClientValidationError`, and react accordingly (fix the
+ * model config instead of retrying).
+ *
+ * Retry semantics match Rust's `AdapterError::Validation` (non-retryable);
+ * Rust types it as an enum variant, here it is a named Error subclass.
+ *
+ * @public
+ */
+export class LLMClientValidationError extends Error {
+  /**
+   * Creates a validation error.
+   *
+   * @param message - Human-readable description of the violated constraint
+   */
+  constructor(message: string) {
+    super(message);
+    this.name = 'LLMClientValidationError';
+  }
+}
+
+/**
  * Unified LLM client with multi-provider support, concurrency control,
  * and comprehensive token tracking.
  *
@@ -252,13 +281,16 @@ export class LLMClient extends EventEmitter {
    * Check whether any message carries image parts (multimodal input).
    *
    * @param messages - Conversation messages to inspect
-   * @returns True if at least one user/toolResult message has an image part
+   * @returns True if at least one message of ANY role whose content is an
+   * array carries an image part
    *
    * @remarks
-   * Only array-shaped content is inspected: plain string content is text by
-   * definition. Text-only part arrays do NOT count as multimodal — the gate
-   * targets image payload specifically (wire-compatible text parts must not
-   * be rejected for text-only models).
+   * Scans every message regardless of role: array-shaped content is the only
+   * thing inspected (plain string content is text by definition), and while
+   * only user/toolResult content can carry `ImageContent` at the type level,
+   * the scan itself is role-agnostic. Text-only part arrays do NOT count as
+   * multimodal — the gate targets image payload specifically (wire-compatible
+   * text parts must not be rejected for text-only models).
    *
    * @internal
    */
@@ -272,8 +304,8 @@ export class LLMClient extends EventEmitter {
    * Multimodal defensive gate (mirrors Rust 37c3395 `validate_multimodal`).
    *
    * @param options - Request options including model and messages
-   * @throws Error when messages contain image parts but the model's
-   * registered capabilities do not declare `"image"` input
+   * @throws {LLMClientValidationError} when messages contain image parts but
+   * the model's resolved capabilities do not declare `"image"` input
    *
    * @remarks
    * When a message carries image parts, the model must have declared image
@@ -284,8 +316,19 @@ export class LLMClient extends EventEmitter {
    * produce a hard-to-locate 400 from the provider.
    *
    * The rejection happens pre-scheduler, so it is never retried and never
-   * pollutes key health stats (equivalent to Rust's non-retryable
-   * `AdapterError::Validation` classification).
+   * pollutes key health stats. Retry semantics are equivalent to Rust's
+   * non-retryable `AdapterError::Validation`; typing differs in degree —
+   * Rust is an enum variant, here a named Error subclass
+   * (`name === 'LLMClientValidationError'`), both programmatically
+   * distinguishable from provider errors.
+   *
+   * Deliberate divergence from Rust: the capability lookup resolves through
+   * the adapter, which falls back to pi-ai's built-in model registry — a
+   * registry-known vision model (e.g. `gpt-4o`) therefore passes the gate
+   * even without an explicit `input` declaration in the config. Rust has no
+   * registry fallback and rejects any model without an explicit declaration.
+   * The leniency is intentional: pi-ai registry data is authoritative for
+   * models it knows.
    *
    * @internal
    */
@@ -295,7 +338,7 @@ export class LLMClient extends EventEmitter {
     }
     const capabilities = this.getModelCapabilities(options.model);
     if (!capabilities.input.includes('image')) {
-      throw new Error(
+      throw new LLMClientValidationError(
         `messages contain multimodal parts but model '${options.model}' does not declare image input capability ` +
           `(set input: ["text", "image"] in the model's config to allow it)`
       );

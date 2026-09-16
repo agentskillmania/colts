@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LLMClient } from '../../src/client';
+import { LLMClient, LLMClientValidationError } from '../../src/client';
 import type { Message, UserMessage } from '../../src/types';
 
 vi.mock('@mariozechner/pi-ai', () => ({
@@ -151,6 +151,19 @@ describe('multimodal defensive gate (mirrors Rust multimodal_gate.rs)', () => {
       client.call({ model: 'unregistered-model', messages: [imageMessage('看图')] })
     ).rejects.toThrow("model 'unregistered-model' does not declare image input");
     expect(piComplete).not.toHaveBeenCalled();
+  });
+
+  it('gate rejections are typed as LLMClientValidationError (config error vs provider 400)', async () => {
+    // 可编程识别：调用方凭 name/instanceof 区分「能力未声明（配置错）」
+    // 与「真 API 400」，二者处置路径不同（改配置 vs 重试/换 key）。
+    const client = clientWithModel(undefined);
+    const error = await client
+      .call({ model: 'm', messages: [imageMessage('看图')] })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(LLMClientValidationError);
+    expect((error as Error).name).toBe('LLMClientValidationError');
+    // 消息文案不变（既有断言所依赖）
+    expect((error as Error).message).toContain('does not declare image input');
   });
 });
 
