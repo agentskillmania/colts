@@ -23,7 +23,23 @@ export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 /**
  * Message type
  */
-export type MessageType = 'text' | 'thought' | 'action' | 'tool-result';
+export type MessageType =
+  | 'text'
+  | 'thought'
+  | 'action'
+  | 'tool-result'
+  /**
+   * Legacy compatibility (Rust HEAD form): per-turn dynamic reminder rows
+   * (time context) persisted by the old daemon between Rust 5120a3e and
+   * 1f08b1f — current daemon no longer writes them (time is computed per
+   * request by the wrangler-side assembler as the trailing dynamic
+   * reminder's first line). role 'system' + this type → the wrangler-side
+   * assembler replays them by merging into the preceding user message's
+   * `<system-reminder>` tail; plain system marker rows never enter the LLM
+   * context. The wire name must stay for old archive deserialization.
+   * (R2P-101b, aligned with Rust 5120a3e/1f08b1f.)
+   */
+  | 'system-reminder';
 
 /**
  * Conversation message

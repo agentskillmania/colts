@@ -175,6 +175,42 @@ export function addSystemMessage(state: AgentState, content: string): AgentState
 }
 
 /**
+ * Append a system-reminder row to the conversation history.
+ *
+ * Legacy compatibility (Rust HEAD form): the old daemon persisted one such
+ * row per turn (frozen time context) between Rust 5120a3e and 1f08b1f; the
+ * current daemon stopped writing them — time now lives in the wrangler-side
+ * assembler's trailing dynamic reminder, computed per request. The row type
+ * and writer are kept for old-archive deserialization and byte-stable
+ * replay.
+ *
+ * The opposite of marker rows ({@link addSystemMessage}): reminder rows DO
+ * enter the LLM context — the wrangler-side assembler merges them into the
+ * preceding user message's `<system-reminder>` tail (the colts default
+ * assembler skips them like every system row). The colts assembler never
+ * synthesizes this content at request time, so replay is byte-stable and
+ * prefix-cache-friendly. The frontend filters these rows by type, keeping
+ * them out of the UI.
+ * (R2P-101b, aligned with Rust 5120a3e/1f08b1f `add_system_reminder`.)
+ *
+ * @param state - Current state
+ * @param content - Reminder content (frozen verbatim at write time)
+ * @returns New state with the system-reminder row appended
+ */
+export function addSystemReminder(state: AgentState, content: string): AgentState {
+  return updateState(state, (draft) => {
+    draft.context.messages.push({
+      id: globalThis.crypto.randomUUID(),
+      role: 'system',
+      content,
+      type: 'system-reminder',
+      timestamp: Date.now(),
+      tokenCount: estimateTokens(content),
+    });
+  });
+}
+
+/**
  * Increment the step counter
  *
  * @param state - Current state

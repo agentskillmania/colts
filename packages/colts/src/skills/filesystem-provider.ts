@@ -256,13 +256,25 @@ export class FilesystemSkillProvider implements ISkillProvider {
   }
 
   /**
-   * List all discovered skill manifests
+   * List all discovered skill manifests (sorted by skill name)
    *
-   * @returns Array of all skill manifests
+   * Ordering is a structural property, not cosmetic: the catalog feeds the
+   * system document (the request's first user message, right after the
+   * tools block in the token stream), so any order wobble across provider
+   * instances invalidates the provider prefix cache wholesale. JS Map
+   * iteration is insertion-ordered (= scan order), and readdir order is not
+   * guaranteed alphabetical across filesystems/backends — sorting here makes
+   * every consumer (colts default-assembler catalog, wrangler `## Available
+   * Skills`, /skills routes) deterministically immune.
+   * (R2P-101b, aligned with Rust 5e238bc HashMap→BTreeMap.)
+   *
+   * @returns Array of all skill manifests, sorted by name
    */
   async listSkills(): Promise<SkillManifest[]> {
     await this.ensureDiscovered();
-    return Array.from(this.manifests.values());
+    return Array.from(this.manifests.values()).sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    );
   }
 
   /**
