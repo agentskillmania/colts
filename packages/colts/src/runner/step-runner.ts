@@ -394,6 +394,23 @@ export class StepRunner {
       };
     }
 
+    // HITL suspension terminal state produced by the executing-tool handler
+    // (typed ToolSuspensionError): the step ends in waiting-human — the run
+    // loop maps it to a waiting-human RunResult via the execution policy.
+    // Mirrors Rust's step loop breaking naturally on the terminal
+    // waiting-human phase; here the mapping must be explicit.
+    if (effectiveResult.done && effectiveResult.phase.type === 'waiting-human') {
+      return {
+        state: currentState,
+        result: {
+          type: 'waiting-human',
+          request: effectiveResult.phase.request,
+          tokens: stepTokens,
+          duration: 0,
+        },
+      };
+    }
+
     if (
       effectiveResult.phase.type === 'tool-result' &&
       effectiveResult.effects &&

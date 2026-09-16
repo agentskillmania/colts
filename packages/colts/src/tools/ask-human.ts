@@ -9,6 +9,7 @@
 import { z } from 'zod';
 
 import type { Tool } from './registry.js';
+import { ToolSuspensionError } from './registry.js';
 
 // ============================================================
 // Types
@@ -50,16 +51,53 @@ export type Answer =
 export type HumanResponse = Record<string, Answer>;
 
 /**
+ * ask_human suspend signal (non-blocking HITL, Rust `AskOutcome::Suspend`).
+ *
+ * Returned by hosts that want the run to PAUSE and surface the questions
+ * (run ends in the waiting-human phase; the unanswered request is persisted
+ * in `context.pendingInterrupts`) instead of parking the tool call on a
+ * promise. Blocking hosts keep returning plain answers.
+ */
+export interface AskSuspendSignal {
+  type: 'suspend';
+  /** Questions to surface to the human */
+  questions: Question[];
+  /** Optional context from the agent */
+  context?: string;
+  /**
+   * Transitional tool-call id (e.g. a bridge-invented `human-<uuid>` used
+   * as the frontend requestId). The kernel retargets the persisted request
+   * to the LLM's action.id — the value here never reaches state.
+   */
+  toolCallId?: string;
+}
+
+/**
+ * Discriminant for {@link AskSuspendSignal} within the handler outcome
+ * union (answers are a plain `Record`, so the `type` key is unambiguous).
+ */
+export function isAskSuspendSignal(
+  outcome: HumanResponse | AskSuspendSignal
+): outcome is AskSuspendSignal {
+  return (
+    typeof outcome === 'object' &&
+    outcome !== null &&
+    (outcome as AskSuspendSignal).type === 'suspend'
+  );
+}
+
+/**
  * Handler function provided by the user to implement UI interaction
  *
  * @param params - Questions, optional context, and optional abort signal
- * @returns Mapping of question ids to answers
+ * @returns Mapping of question ids to answers (blocking), or a suspend
+ *   signal requesting the run to pause and wait for the human
  */
 export type AskHumanHandler = (params: {
   questions: Question[];
   context?: string;
   signal?: AbortSignal;
-}) => Promise<HumanResponse>;
+}) => Promise<HumanResponse | AskSuspendSignal>;
 
 // ============================================================
 // Zod schema
@@ -122,8 +160,21 @@ export function createAskHumanTool(handler: AskHumanHandler): Tool<typeof askHum
       'Use text/number for open-ended answers, single-select for one choice, multi-select for multiple choices.',
     parameters: askHumanParameters,
     execute: async ({ questions, context }, options) => {
-      const result = await handler({ questions, context, signal: options?.signal });
-      return result;
+      const outcome = await handler({ questions, context, signal: options?.signal });
+      if (isAskSuspendSignal(outcome)) {
+        // Typed suspension: the tool layer converts the host's suspend
+        // signal into ToolSuspensionError; the kernel's executing-tool
+        // handler intercepts it before the error policy, anchors the id to
+        // the LLM's action.id and persists the request. Not a failure.
+        throw new ToolSuspensionError({
+          type: 'question',
+          questions: outcome.questions,
+          context: outcome.context,
+          // Transitional only — the kernel retargets to action.id.
+          toolCallId: outcome.toolCallId ?? `human-${globalThis.crypto.randomUUID()}`,
+        });
+      }
+      return outcome;
     },
   };
 }

@@ -69,3 +69,21 @@ export interface HitlConfig {
   /** Tools requiring confirmation (non-blocking) */
   confirmTools?: string[];
 }
+
+// ─── Interrupt list (terminal-state persistence) ────────────────
+
+/**
+ * A pending (unanswered) human request.
+ *
+ * First-class data that survives across runs: when a run ends in the
+ * waiting-human phase the unanswered request is persisted with the state
+ * (context.pendingInterrupts), so round switches and restarts do not lose
+ * it. The responder (e.g. daemon /respond) injects the answer, removes the
+ * entry, and resumes.
+ */
+export interface PendingInterrupt {
+  /** The unanswered request */
+  request: HumanRequest;
+  /** Creation timestamp (ms since Unix epoch) */
+  createdAt: number;
+}

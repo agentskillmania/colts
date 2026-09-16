@@ -9,6 +9,7 @@ export {
   ToolRegistry,
   ToolNotFoundError,
   ToolParameterError,
+  ToolSuspensionError,
   type Tool,
   type ToolSchema,
 } from './registry.js';
@@ -17,11 +18,13 @@ export { calculatorTool } from './calculator.js';
 
 export {
   createAskHumanTool,
+  isAskSuspendSignal,
   type QuestionType,
   type Question,
   type Answer,
   type HumanResponse,
   type AskHumanHandler,
+  type AskSuspendSignal,
 } from './ask-human.js';
 
 export {

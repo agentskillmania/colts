@@ -184,6 +184,16 @@ export interface AgentContext {
   estimatedContextSize?: number;
   /** V2 HITL: tool call IDs approved by human (consumed after use by HitlMiddleware) */
   hitlApprovals?: string[];
+  /**
+   * V2 HITL: unanswered human requests (terminal-state persistence).
+   *
+   * Written by the executing-tool handler when a run suspends with
+   * waiting-human; persisted with the state so round switches / restarts
+   * keep the pending questions. The responder (daemon /respond) injects
+   * answers via respond() + removePendingInterrupt() and resumes.
+   * Optional: legacy states without the field deserialize unchanged.
+   */
+  pendingInterrupts?: PendingInterrupt[];
 }
 
 /**
@@ -209,6 +219,7 @@ import type { LLMResponse, StreamEvent, ModelMeta } from '@agentskillmania/llm-c
 import type { Message as LLMMessage, LLMTool } from '@agentskillmania/llm-client';
 import type { ZodTypeAny } from 'zod';
 
+import type { PendingInterrupt } from './hitl/types.js';
 import type { ToolSchema, Tool as LocalTool } from './tools/registry.js';
 
 export type { SkillManifest, ISkillProvider } from './skills/types.js';

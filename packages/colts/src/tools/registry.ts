@@ -8,6 +8,8 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+import type { HumanRequest } from '../hitl/types.js';
+
 /**
  * Tool definition interface using Zod for parameter validation
  */
@@ -55,6 +57,27 @@ export class ToolParameterError extends Error {
     const issues = zodError.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ');
     super(`Parameter validation failed for tool '${toolName}': ${issues}`);
     this.name = 'ToolParameterError';
+  }
+}
+
+/**
+ * Typed HITL suspension signal — a tool requesting the whole run to pause
+ * and wait for human input (R2P-108, Rust `ToolError::Suspend` equivalent).
+ *
+ * This is NOT a failure: it is a typed control signal crossing the registry
+ * boundary through the error channel (the Tool interface's return signature
+ * stays unchanged — built-in tools, MCP and delegate wrappers are all
+ * unaffected). The executing-tool handler intercepts this class BEFORE the
+ * error policy, anchors the request to the LLM's action.id, persists it in
+ * `context.pendingInterrupts` and ends the advance with the waiting-human
+ * phase. The predecessor of this contract was a `__hitl_suspend__` sentinel
+ * string inside tool results — unguardable by the compiler (it let an id
+ * pairing bug slip through), hence typed.
+ */
+export class ToolSuspensionError extends Error {
+  constructor(public readonly request: HumanRequest) {
+    super('tool requested suspension (HITL)');
+    this.name = 'ToolSuspensionError';
   }
 }
 

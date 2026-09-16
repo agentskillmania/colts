@@ -76,8 +76,10 @@ export {
   ToolRegistry,
   ToolNotFoundError,
   ToolParameterError,
+  ToolSuspensionError,
   calculatorTool,
   createAskHumanTool,
+  isAskSuspendSignal,
   ConfirmableRegistry,
   type Tool,
   type ToolSchema,
@@ -86,6 +88,7 @@ export {
   type Answer,
   type HumanResponse,
   type AskHumanHandler,
+  type AskSuspendSignal,
   type ConfirmHandler,
   type ConfirmableRegistryOptions,
 } from './tools/index.js';
@@ -178,7 +181,13 @@ export type {
   HumanQuestion,
   HumanAnswer,
   HitlConfig,
+  PendingInterrupt,
 } from './hitl/index.js';
 export { HitlMiddleware } from './hitl/index.js';
 export type { HitlMiddlewareOptions } from './hitl/index.js';
 export { respond } from './hitl/index.js';
+export {
+  upsertPendingInterrupt,
+  removePendingInterrupt,
+  retargetToolCallId,
+} from './hitl/index.js';

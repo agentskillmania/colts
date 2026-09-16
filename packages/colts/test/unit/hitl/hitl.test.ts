@@ -46,11 +46,14 @@ describe('HITL V2: ExecutionPolicy', () => {
 });
 
 describe('HITL V2: HitlMiddleware', () => {
-  it('should intercept ask_human tool at executing-tool phase', async () => {
-    // Import HitlMiddleware — this test should FAIL because it doesn't exist yet
+  it('should NOT intercept ask_human by name — suspension is the tool layer’s typed signal (single-track, R2P-108)', async () => {
+    // ask_human 挂起单轨化（对齐 Rust a2d508d/9a2bcd3）：中间件不再按名字
+    // 拦截 ask_human —— 是否挂起由 ask_human 工具经 ToolSuspensionError 类型化
+    // 信号表达，由内核 executing-tool handler 拦截（见下方 kernel 测试）。
+    // 名字匹配是隐式约定：任何叫 ask_human 的工具都会被拦，无论它是否想挂起。
     const { HitlMiddleware } = await import('../../../src/hitl/middleware.js');
 
-    const mw = new HitlMiddleware({ askHumanToolName: 'ask_human' });
+    const mw = new HitlMiddleware();
     const agentMw: AgentMiddleware = mw;
 
     const execState = makeExecStateWithAction('ask_human', {
@@ -66,19 +69,9 @@ describe('HITL V2: HitlMiddleware', () => {
       runnerOptions: {} as any,
     });
 
-    // Middleware should stop execution and return an AdvanceResult with waiting-human phase
-    expect(chain.stopResult).toBeDefined();
-    expect(chain.stopResult.phase.type).toBe('waiting-human');
-    expect(chain.stopResult.done).toBe(true);
-
-    // Verify the request contains the question data
-    const request = chain.stopResult.phase.request as HumanRequest;
-    expect(request.type).toBe('question');
-    if (request.type === 'question') {
-      expect(request.questions).toHaveLength(1);
-      expect(request.questions[0].id).toBe('q1');
-      expect(request.toolCallId).toBe('call_1');
-    }
+    // Middleware must NOT stop — the action flows to the tool layer, where
+    // suspension is expressed (or not) by the tool itself.
+    expect(chain.stopResult).toBeUndefined();
   });
 
   it('should intercept confirmed tools at executing-tool phase', async () => {
@@ -468,5 +461,288 @@ describe('HITL V2: Integration with runner', () => {
     if (secondResult.type === 'error') {
       throw new Error(`Unexpected error: ${secondResult.error.message}`);
     }
+  });
+});
+
+// ============================================================================
+// HITL interrupt-terminal-state: typed suspension through the kernel
+// (R2P-108, aligned with Rust a2d508d / ca8276f / 9a2bcd3)
+// ============================================================================
+describe('HITL: typed suspension through the kernel', () => {
+  /** Registry whose ask_human tool always requests suspension. */
+  async function suspendRegistry() {
+    const { ToolRegistry } = await import('../../../src/tools/registry.js');
+    const { createAskHumanTool } = await import('../../../src/tools/ask-human.js');
+    const registry = new ToolRegistry();
+    registry.register(
+      createAskHumanTool(async ({ questions, context }) => ({
+        type: 'suspend' as const,
+        questions,
+        context,
+        toolCallId: 'human-bridge-made-up',
+      }))
+    );
+    return registry;
+  }
+
+  function makeCtx() {
+    return {
+      executionPolicy: {
+        onToolError: vi.fn((error: Error) => ({
+          decision: 'continue' as const,
+          sanitizedResult: `Error: ${error.message}`,
+        })),
+      },
+    } as any;
+  }
+
+  it('handler suspends: waiting-human phase, pendingInterrupts persisted with the LLM action id, no tool result written', async () => {
+    const { ExecutingToolHandler } =
+      await import('../../../src/execution-engine/handlers/executing-tool-handler.js');
+    const handler = new ExecutingToolHandler();
+    const state = makeState();
+    const execState = {
+      phase: {
+        type: 'executing-tool' as const,
+        actions: [
+          {
+            id: 'call_00_llm',
+            tool: 'ask_human',
+            arguments: {
+              questions: [{ id: 'q1', question: 'name?', type: 'text' }],
+              context: 'need name',
+            },
+          },
+        ],
+      },
+    } as any;
+    const ctx = makeCtx();
+
+    const result = await handler.execute(ctx, state, execState, await suspendRegistry());
+
+    // Terminal phase: waiting-human with the (retargeted) first request.
+    expect(result.done).toBe(true);
+    expect(result.phase.type).toBe('waiting-human');
+    const request = (result.phase as { request: HumanRequest }).request;
+    expect(request.type).toBe('question');
+    // ca8276f anti-400 invariant: the persisted id is the LLM's action id,
+    // never the bridge-invented one.
+    expect(request.toolCallId).toBe('call_00_llm');
+    expect(request.toolCallId.startsWith('human-')).toBe(false);
+
+    // pendingInterrupts carries the question payload (toolCallId + questions + context).
+    const list = result.state.context.pendingInterrupts;
+    expect(list).toHaveLength(1);
+    expect(list![0].request.toolCallId).toBe('call_00_llm');
+    if (list![0].request.type === 'question') {
+      expect(list![0].request.questions[0].question).toBe('name?');
+      expect(list![0].request.context).toBe('need name');
+    }
+    expect(typeof list![0].createdAt).toBe('number');
+
+    // No tool result message — the question has no answer yet.
+    const toolMsg = result.state.context.messages.find(
+      (m) => m.role === 'tool' && m.toolCallId === 'call_00_llm'
+    );
+    expect(toolMsg).toBeUndefined();
+
+    // Suspension is a control signal, not a failure: the error policy must
+    // never see it (9a2bcd3).
+    expect(ctx.executionPolicy.onToolError).not.toHaveBeenCalled();
+  });
+
+  it('parallel double-ask: both requests enter pendingInterrupts, each paired with its own action id', async () => {
+    const { ExecutingToolHandler } =
+      await import('../../../src/execution-engine/handlers/executing-tool-handler.js');
+    const handler = new ExecutingToolHandler();
+    const state = makeState();
+    const execState = {
+      phase: {
+        type: 'executing-tool' as const,
+        actions: [
+          {
+            id: 'call_A',
+            tool: 'ask_human',
+            arguments: { questions: [{ id: 'qa', question: 'first?', type: 'text' }] },
+          },
+          {
+            id: 'call_B',
+            tool: 'ask_human',
+            arguments: { questions: [{ id: 'qb', question: 'second?', type: 'text' }] },
+          },
+        ],
+      },
+    } as any;
+
+    const result = await handler.execute(makeCtx(), state, execState, await suspendRegistry());
+
+    expect(result.phase.type).toBe('waiting-human');
+    const list = result.state.context.pendingInterrupts!;
+    expect(list).toHaveLength(2);
+    const ids = list.map((p) => p.request.toolCallId).sort();
+    expect(ids).toEqual(['call_A', 'call_B']);
+    // First request takes the phase.
+    const phaseRequest = (result.phase as { request: HumanRequest }).request;
+    expect(['call_A', 'call_B']).toContain(phaseRequest.toolCallId);
+  });
+
+  it('respond + removePendingInterrupt clears the answered entry and keeps the sibling (no cross-talk)', async () => {
+    const { respond } = await import('../../../src/hitl/respond.js');
+    const { upsertPendingInterrupt, removePendingInterrupt } =
+      await import('../../../src/hitl/interrupts.js');
+
+    const first: HumanRequest = {
+      type: 'question',
+      questions: [{ id: 'qa', question: 'first?', type: 'text' }],
+      toolCallId: 'call_A',
+    };
+    const second: HumanRequest = {
+      type: 'question',
+      questions: [{ id: 'qb', question: 'second?', type: 'text' }],
+      toolCallId: 'call_B',
+    };
+    let state = upsertPendingInterrupt(makeState(), first);
+    state = upsertPendingInterrupt(state, second);
+
+    // Answer the first (respond injects the tool message; remove consumes
+    // the pending entry — same sequence as the Rust respond_and_continue).
+    state = respond(state, first, {
+      type: 'question',
+      answers: { qa: { type: 'direct', value: 'A' } },
+    });
+    state = removePendingInterrupt(state, 'call_A');
+
+    expect(state.context.pendingInterrupts).toHaveLength(1);
+    expect(state.context.pendingInterrupts![0].request.toolCallId).toBe('call_B');
+
+    // The injected tool result pairs with the assistant row's tool call id.
+    const toolMsg = state.context.messages.find(
+      (m) => m.role === 'tool' && m.toolCallId === 'call_A'
+    );
+    expect(toolMsg).toBeDefined();
+    expect(JSON.parse(toolMsg!.content)).toEqual({ qa: { type: 'direct', value: 'A' } });
+
+    // Answer the sibling too — list clears to undefined.
+    state = respond(state, second, {
+      type: 'question',
+      answers: { qb: { type: 'direct', value: 'B' } },
+    });
+    state = removePendingInterrupt(state, 'call_B');
+    expect(state.context.pendingInterrupts).toBeUndefined();
+  });
+
+  it(
+    'runner end-to-end: ask_human suspension → waiting-human + persisted pendingInterrupts; answer pairs by action id',
+    { timeout: 10000 },
+    async () => {
+      const { AgentRunner } = await import('../../../src/runner/index.js');
+      const { respond } = await import('../../../src/hitl/respond.js');
+      const { removePendingInterrupt } = await import('../../../src/hitl/interrupts.js');
+      const { createAskHumanTool } = await import('../../../src/tools/ask-human.js');
+
+      // Mock LLM: first round asks via ask_human (LLM-generated call id).
+      const mockLLM = {
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          yield {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc_00_llm',
+              name: 'ask_human',
+              arguments: {
+                questions: [
+                  {
+                    id: 'q1',
+                    question: 'Deploy now?',
+                    type: 'single-select',
+                    options: ['yes', 'no'],
+                  },
+                ],
+                context: 'release gate',
+              },
+            },
+          };
+          yield { type: 'done', roundTotalTokens: { input: 50, output: 20 } };
+        }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
+      };
+
+      const runner = new AgentRunner({
+        llmClient: mockLLM as any,
+        model: 'test-model',
+      });
+      runner.registerTool(
+        createAskHumanTool(async ({ questions, context }) => ({
+          type: 'suspend' as const,
+          questions,
+          context,
+          toolCallId: 'human-bridge-made-up',
+        }))
+      );
+
+      const { state: runState, result } = await runner.run(makeState());
+
+      expect(result.type).toBe('waiting-human');
+      if (result.type === 'waiting-human') {
+        // The surfaced request carries the LLM's action id, not the bridge's.
+        expect(result.request.toolCallId).toBe('tc_00_llm');
+      }
+
+      // Persistence: the unanswered question survives in state (round
+      // switch / restart does not lose it).
+      const list = runState.context.pendingInterrupts;
+      expect(list).toHaveLength(1);
+      expect(list![0].request.toolCallId).toBe('tc_00_llm');
+      if (list![0].request.type === 'question') {
+        expect(list![0].request.questions[0].question).toBe('Deploy now?');
+        expect(list![0].request.context).toBe('release gate');
+      }
+
+      // Answer via respond + removePendingInterrupt, then assert pairing:
+      // the tool-result row's toolCallId equals the assistant row's
+      // toolCalls id (a mismatch is what OpenAI-compat endpoints reject
+      // with 400 "tool_call_ids did not have response messages").
+      const answered = respond(runState, list![0].request, {
+        type: 'question',
+        answers: { q1: { type: 'direct', value: 'yes' } },
+      });
+      const cleared = removePendingInterrupt(answered, 'tc_00_llm');
+      expect(cleared.context.pendingInterrupts).toBeUndefined();
+
+      const msgs = cleared.context.messages;
+      const askId = msgs
+        .flatMap((m) => (m as { toolCalls?: Array<{ id: string; name: string }> }).toolCalls ?? [])
+        .find((tc) => tc.name === 'ask_human')?.id;
+      expect(askId).toBe('tc_00_llm');
+      expect(askId!.startsWith('human-')).toBe(false);
+      expect(msgs.some((m) => m.role === 'tool' && m.toolCallId === askId)).toBe(true);
+    }
+  );
+
+  it('plain tool errors still go through the error policy (suspension interception does not leak)', async () => {
+    const { ExecutingToolHandler } =
+      await import('../../../src/execution-engine/handlers/executing-tool-handler.js');
+    const { ToolRegistry } = await import('../../../src/tools/registry.js');
+    const handler = new ExecutingToolHandler();
+    const execState = {
+      phase: {
+        type: 'executing-tool' as const,
+        actions: [{ id: 'call_x', tool: 'boom', arguments: {} }],
+      },
+    } as any;
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'boom',
+      description: 'always fails',
+      parameters: z.object({}),
+      execute: async () => {
+        throw new Error('kaput');
+      },
+    });
+
+    const ctx = makeCtx();
+    const result = await handler.execute(ctx, makeState(), execState, registry);
+    expect(ctx.executionPolicy.onToolError).toHaveBeenCalledTimes(1);
+    expect(result.phase.type).toBe('tool-result');
   });
 });
