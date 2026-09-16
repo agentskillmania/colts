@@ -106,7 +106,7 @@ let execState = createExecutionState();
 while (!isTerminalPhase(execState.phase)) {
   const result = await runner.advance(state, execState);
   state = result.state;
-  execState = result.execState;   // ExecutionState is immutable — take the updated one
+  execState = result.execState; // ExecutionState is immutable — take the updated one
 }
 ```
 
@@ -180,7 +180,7 @@ Skills are domain-specific instruction sets loaded from `SKILL.md` files. The ru
 
 ```typescript
 import { AgentRunner, FilesystemSkillProvider, setDefaultSkillFsOps } from '@agentskillmania/colts';
-import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';   // Node backend (opt-in subpath)
+import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops'; // Node backend (opt-in subpath)
 
 // Node: register the default SkillFsOps once at startup, then construct the provider
 setDefaultSkillFsOps(nodeFsOps);
@@ -189,7 +189,7 @@ const skillProvider = new FilesystemSkillProvider(['./skills']);
 const runner = new AgentRunner({
   model: 'gpt-4o',
   llmClient,
-  skillProvider,   // injected — works with any backend
+  skillProvider, // injected — works with any backend
 });
 ```
 
@@ -235,7 +235,7 @@ const runner = new AgentRunner({
   llmClient,
   compressor: {
     strategy: 'truncate',
-    threshold: 50,
+    threshold: 120,
     thresholdType: 'message-count',
     keepRecent: 10,
   },

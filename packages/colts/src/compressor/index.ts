@@ -4,10 +4,11 @@
  * Built-in compressor that prevents conversation history from growing unbounded.
  * Never modifies messages — only affects what buildMessages() sends to the LLM.
  *
- * Pipeline: prune → summarize → truncate
+ * Pipeline: prune → truncate(anchor) → summarize
  * - Prune: stub out large tool outputs (zero-cost)
- * - Summarize: generate structured summary of old messages (LLM call)
- * - Truncate: set anchor to keep only recent messages
+ * - Truncate: decide the anchor (kept messages start at a user message)
+ * - Summarize: generate structured summary of old messages (LLM call, only
+ *   when the anchor actually advances — abandon/no-op paths exit early)
  */
 
 import type {
@@ -52,8 +53,10 @@ const WINDOW_TRIGGER_RATIO = 0.9;
  *
  * Pipeline:
  * 1. Prune: stub out tool outputs exceeding pruneThreshold (default 150 tokens)
- * 2. Summarize: generate structured summary (if strategy='summarize')
- * 3. Truncate: set anchor to keep only recent messages
+ * 2. Truncate: decide the anchor (backs up to a user message; abandoned/no-op
+ *    when no safe boundary exists — early exit, no LLM call)
+ * 3. Summarize: generate structured summary (if strategy='summarize' and the
+ *    anchor advanced past existingAnchor)
  *
  * @example
  * ```typescript
@@ -137,7 +140,12 @@ export class DefaultContextCompressor {
   }
 
   /**
-   * Execute compression with prune → summarize → truncate pipeline
+   * Execute compression with prune → truncate(anchor) → summarize pipeline
+   *
+   * The anchor decision runs BEFORE summarize: when compression is abandoned
+   * (no user message to anchor on) or a no-op (anchor cannot advance), we exit
+   * early without paying the summarize LLM call — the abandon path previously
+   * ran summarize first and threw the result away on every step.
    *
    * @param state - Current agent state
    * @returns Compression result with summary, anchor, and pruned message info
@@ -149,31 +157,18 @@ export class DefaultContextCompressor {
     // Step 1: Prune large tool outputs
     const prunedMessages = this.pruneToolOutputs(messages, existingAnchor);
 
-    // Step 2: Summarize (if strategy is 'summarize')
-    let summary = '';
-    let summaryTokenCount: number | undefined;
-    if (this.strategy === 'summarize') {
-      // Apply prunes to create message copy for summarization
-      const messagesForSummary = this.applyPrunes(messages, prunedMessages, existingAnchor);
-
-      // Generate structured summary
-      summary = await this.generateSummary(
-        messagesForSummary.slice(existingAnchor),
-        state.context.compression?.summary
-      );
-      summaryTokenCount = estimateTokens(summary);
-    }
-
-    // Step 3: Truncate (set anchor)
+    // Step 2: Truncate (decide the anchor) — 先判锚点再摘要：放弃/冻结路径零 LLM 成本
     let anchor = Math.max(existingAnchor, messages.length - this.keepRecent);
     // Skill instructions must stay visible: never let anchor skip past (advance beyond) a
-    // load_skill tool result. CONSEQUENCE (by-design): once a load_skill result ends up at
-    // or after the anchor, the anchor can no longer advance past it — summarize/truncate
-    // are frozen at that bound, so only prune (on non-skill tool outputs) continues to
+    // load_skill tool result. CONSEQUENCE (by-design): the pin is permanent — every
+    // compression rescans from existingAnchor and re-finds the load_skill result, so the
+    // anchor can never advance beyond it for the rest of the session; summarize/truncate
+    // freeze at that bound, and only prune (on non-skill tool outputs) continues to
     // reclaim tokens. This is intentional: skill instructions must persist for the agent's
     // lifetime (skill persistence redesign). R2P-102 note: the user-message rule below may
-    // still back the anchor UP past the pin (keeping more context); it only ever moves the
-    // anchor earlier, so the skill result stays visible either way.
+    // still back the anchor UP past the pin — potentially all the way before the skill
+    // load — but it only ever moves the anchor earlier, so the skill result stays visible
+    // either way (same behavior as Rust).
     for (let i = existingAnchor; i < anchor; i++) {
       if (messages[i].role === 'tool' && messages[i].toolName === 'load_skill') {
         anchor = i;
@@ -193,23 +188,34 @@ export class DefaultContextCompressor {
       anchor -= 1;
     }
 
-    // 没找到安全边界（只剩第一句用户消息，或没有用户消息）→ 不压缩，
-    // 保留全部上下文。宁可上下文长，不给 API 发坏数据。
-    if (messages[anchor]?.role !== 'user') {
+    // 放弃（回退到 existingAnchor 仍无用户消息可锚）或 no-op（锚点无法推进，
+    // 例如回退恰好停在 existingAnchor 的用户消息上）→ 本轮不压缩，保留全部
+    // 上下文。宁可上下文长，不给 API 发坏数据。两条路径的返回完全一致，合并
+    // 为同一早退；存量压缩元数据（summaryTokenCount/compressedAt）原样透传，
+    // 防止 compressState 覆写时清掉导致窗口估算欠触发。
+    if (messages[anchor]?.role !== 'user' || anchor <= existingAnchor) {
       return {
         summary: state.context.compression?.summary ?? '',
+        summaryTokenCount: state.context.compression?.summaryTokenCount,
+        compressedAt: state.context.compression?.compressedAt,
         anchor: existingAnchor,
         prunedMessages,
       };
     }
 
-    // Nothing to compress
-    if (anchor <= existingAnchor) {
-      return {
-        summary: state.context.compression?.summary ?? '',
-        anchor: existingAnchor,
-        prunedMessages,
-      };
+    // Step 3: Summarize — 只有锚点确有进展、策略为 summarize 时才付 LLM 调用
+    let summary = '';
+    let summaryTokenCount: number | undefined;
+    if (this.strategy === 'summarize') {
+      // Apply prunes to create message copy for summarization
+      const messagesForSummary = this.applyPrunes(messages, prunedMessages, existingAnchor);
+
+      // Generate structured summary
+      summary = await this.generateSummary(
+        messagesForSummary.slice(existingAnchor),
+        state.context.compression?.summary
+      );
+      summaryTokenCount = estimateTokens(summary);
     }
 
     // Calculate removed token count

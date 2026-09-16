@@ -11,10 +11,22 @@
  * tests/suite/compressor.rs 的旧行为测试更新。
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DefaultContextCompressor } from '../../src/compressor/index.js';
 import { createAgentState } from '../../src/state/index.js';
-import type { AgentState, Message } from '../../src/types.js';
+import type { AgentState, ILLMProvider, Message } from '../../src/types.js';
+
+function mockLLM(): ILLMProvider {
+  return {
+    call: vi.fn().mockResolvedValue({
+      content: 'mock summary',
+      tokens: { input: 1, output: 1 },
+      stopReason: 'stop',
+    }),
+    stream: vi.fn(),
+    getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
+  };
+}
 
 function makeState(messages: Message[], anchor = 0, summary = ''): AgentState {
   const state = createAgentState({ name: 't', instructions: '', tools: [] });
@@ -107,20 +119,25 @@ describe('compressor anchor 规则——anchor 只落用户消息（R2P-102）',
     expect(state.context.messages[result.anchor].role).toBe('user');
   });
 
-  it('全部回退到头没有 user 消息 → 放弃压缩、保留旧 summary（Rust no_user_message_no_compress）', async () => {
+  it('全部回退到头没有 user 消息 → 放弃压缩、保留旧 summary 与存量元数据（Rust no_user_message_no_compress）', async () => {
     // [thought, action(toolCalls), tool] —— 全程无 user
     const state = makeState(
       [thought('1'), action('2', 'c1'), toolResult('3', 'c1')],
       0,
       'kept summary'
     );
+    // 存量压缩元数据：放弃路径必须原样透传，否则 compressState 覆写后丢失，
+    // 窗口占用估算（estimateEffectiveTokens 含 summaryTokenCount）会欠触发。
+    state.context.compression!.summaryTokenCount = 33;
+    state.context.compression!.compressedAt = 111;
     const c = new DefaultContextCompressor({ strategy: 'truncate', keepRecent: 1, threshold: 1 });
     const result = await c.compress(state);
     // anchor 保持 existingAnchor(0),本轮不推进
     expect(result.anchor).toBe(0);
     expect(result.summary).toBe('kept summary');
+    expect(result.summaryTokenCount).toBe(33);
+    expect(result.compressedAt).toBe(111);
     expect(result.removedTokenCount).toBeUndefined();
-    expect(result.compressedAt).toBeUndefined();
   });
 
   it('existingAnchor 之后无 user 消息 → 放弃压缩、anchor 不变', async () => {
@@ -157,9 +174,52 @@ describe('compressor anchor 规则——anchor 只落用户消息（R2P-102）',
     // 只是保留了更多上下文(安全边界规则:anchor 必须落在用户消息上)。
     const c = new DefaultContextCompressor({ strategy: 'truncate', keepRecent: 2, threshold: 1 });
     const result = await c.compress(state);
+    // anchor=0(user):load_skill 结果(下标 2)在锚点之后,仍进入发送窗口
     expect(result.anchor).toBe(0);
-    // load_skill 结果(下标 2)在锚点之后,仍进入发送窗口
-    expect(result.anchor).toBeLessThanOrEqual(2);
+  });
+
+  it('放弃路径零 LLM 成本:summarize 策略 + 无 user 窗口 → 不调 generateSummary（R2P-102 返修 P1）', async () => {
+    // 锚点判定挪到 summarize 之前:放弃时不得先付 LLM 调用再整个丢弃。
+    const llm = mockLLM();
+    const c = new DefaultContextCompressor(
+      { strategy: 'summarize', keepRecent: 1, threshold: 1 },
+      llm,
+      'gpt-4'
+    );
+    const state = makeState([thought('1'), action('2', 'c1'), toolResult('3', 'c1')]);
+    const result = await c.compress(state);
+    expect(result.anchor).toBe(0);
+    expect(llm.call).not.toHaveBeenCalled();
+  });
+
+  it('no-op 路径零 LLM 成本:summarize 策略 + 锚点无法推进 → 不调 generateSummary（R2P-102 返修 P1）', async () => {
+    const llm = mockLLM();
+    const c = new DefaultContextCompressor(
+      { strategy: 'summarize', keepRecent: 100, threshold: 1 },
+      llm,
+      'gpt-4'
+    );
+    // keepRecent >> 消息数 → raw anchor = existingAnchor = 0(恰好是 user,no-op 而非放弃)
+    const state = makeState([user('1'), user('2'), user('3'), user('4'), user('5')]);
+    const result = await c.compress(state);
+    expect(result.anchor).toBe(0);
+    expect(result.summary).toBe('');
+    expect(llm.call).not.toHaveBeenCalled();
+  });
+
+  it('对偶契约:锚点确有进展时 summarize 才调 LLM 一次（排序改动不杀成功路径）', async () => {
+    const llm = mockLLM();
+    const c = new DefaultContextCompressor(
+      { strategy: 'summarize', keepRecent: 2, threshold: 1 },
+      llm,
+      'gpt-4'
+    );
+    const state = makeState([user('1'), user('2'), user('3'), user('4'), user('5')]);
+    const result = await c.compress(state);
+    expect(result.anchor).toBe(3); // 5-2=3,恰为 user
+    expect(llm.call).toHaveBeenCalledOnce();
+    expect(result.summary).toBe('mock summary');
+    expect(result.summaryTokenCount).toBeGreaterThan(0);
   });
 });
 
@@ -177,6 +237,22 @@ describe('压缩触发阈值（R2P-103，对齐 Rust b4b0fe3）', () => {
     expect(make().shouldCompress(withTokens(91))).toBe(true);
     expect(make().shouldCompress(withTokens(90))).toBe(true);
     expect(make().shouldCompress(withTokens(89))).toBe(false);
+  });
+
+  it('非整窗口向下取整:105 窗口 → 触发线 94(94 触发、93 不触发,杀 Math.round 变异)', () => {
+    // 105 × 0.9 = 94.5:floor → 94;若实现变异为 Math.round → 95,
+    // 94 将不触发——此边界把两种取整区分开。
+    const make = () => new DefaultContextCompressor({ contextWindowSize: 105, threshold: 1000 });
+
+    const withTokens = (tokens: number): AgentState => {
+      const state = createAgentState({ name: 't', instructions: '', tools: [] });
+      state.context.messages = [user('1')];
+      state.context.messages[0].tokenCount = tokens;
+      return state;
+    };
+
+    expect(make().shouldCompress(withTokens(94))).toBe(true);
+    expect(make().shouldCompress(withTokens(93))).toBe(false);
   });
 
   it('threshold 默认值 120:119 条不触发、120 条触发（对齐 Rust 6817c6c）', () => {
