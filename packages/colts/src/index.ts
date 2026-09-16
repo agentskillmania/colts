@@ -103,7 +103,17 @@ export type { IMessageAssembler, BuildMessagesOptions } from './message-assemble
 export { DefaultMessageAssembler } from './message-assembler/default-assembler.js';
 
 // Runner
-export { AgentRunner, type RunnerOptions, type RunnerEventMap } from './runner/index.js';
+// The three engine-layer defaults are exported on the lib face so deployments
+// reference the named source instead of re-declaring inline literals (Rust
+// lib.rs:70-73 exports the same three from `colts::`). (Task 9 review P3)
+export {
+  AgentRunner,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  DEFAULT_RUNNER_MAX_STEPS,
+  RUN_HARD_LIMIT,
+  type RunnerOptions,
+  type RunnerEventMap,
+} from './runner/index.js';
 
 // Per-request option types
 export type { PerRequestOptions, StepOptions, RunOptions } from './runner/options.js';
