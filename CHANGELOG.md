@@ -41,7 +41,13 @@ minor 无破坏——预发布走 alpha 通道（`npm publish --tag alpha`，`la
    question）以前静默返回原 state，现在抛 `Error`——那种配对会把应答挂到错误的
    `toolCallId` 上，续跑时 provider 返回 400，静默失败比抛错更难查。
    传参正确的调用方不受影响；未知 `response.type` 仍是容忍的 no-op。
-5. **净零项（非对外变化，列出以免考古）**：`CompressResult.coveredMessages` 曾在
+5. **llm-client 新增多模态请求门禁（行为变更）**（R2P-131）：消息含 image parts 而模型未
+   显式声明 `input: ["text","image"]` 时，`call()`/`stream()` 在进调度器前抛
+   `LLMClientValidationError`（可从 `error.name` 识别），不再把请求发给 provider 换一个
+   400。此前依赖「provider 报错」的调用方需改为声明模型 input 或捕获该错误类；
+   纯文本请求不受影响（只有实际含 image part 的消息触发，与 Rust 的宽松版不同——
+   Rust 对任何 parts 数组都校验）。
+6. **净零项（非对外变化，列出以免考古）**：`CompressResult.coveredMessages` 曾在
    `e65555d` 加入、`f7c279a` 移除——**净零，不是破坏性变更**；`compressed`
    **事件**载荷的 `coveredMessages` 保留（见下）。
 
