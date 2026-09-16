@@ -16,6 +16,14 @@
  * - MODEL: Model to use for tests (default: 'gpt-3.5-turbo')
  * - ENABLE_INTEGRATION_TESTS: Set to 'true' to enable integration tests
  *
+ * Multimodal-only environment variables (mirror Rust 35dc808 `_MULTIMODEL`
+ * series — point these at a model with image input):
+ * - OPENAI_API_KEY_MULTIMODEL: API key for the multimodal model (required)
+ * - OPENAI_BASE_URL_MULTIMODEL: Base URL override for the multimodal endpoint
+ * - PROVIDER_MULTIMODEL: Provider name (default: 'openai')
+ * - MODEL_MULTIMODEL: Vision-capable model (default: 'glm-4.5v')
+ * - ENABLE_MULTIMODEL_INTEGRATION_TESTS: Set to 'true' to enable multimodal tests
+ *
  * @example
  * ```bash
  * # Example .env file for ZhiPu AI
@@ -123,6 +131,68 @@ export const itif = (condition: boolean) => (condition ? it : it.skip);
  */
 export function isConfigured(): boolean {
   return testConfig.enabled && !!testConfig.apiKey;
+}
+
+/**
+ * Multimodal test configuration (mirror of Rust 35dc808 `_MULTIMODEL` series).
+ *
+ * @remarks
+ * Independent of the main integration config: multimodal tests target a
+ * dedicated vision-capable model and use their own enable flag, so a
+ * text-only main config never silently downgrades them.
+ */
+export interface MultimodalTestConfig {
+  /** API key for the multimodal-capable endpoint (required when enabled) */
+  apiKey: string;
+
+  /** Base URL override for the multimodal endpoint (optional) */
+  baseUrl?: string;
+
+  /** Provider name (default: 'openai') */
+  provider: string;
+
+  /** Vision-capable model to use for tests */
+  testModel: string;
+
+  /** Whether multimodal integration tests are enabled */
+  enabled: boolean;
+}
+
+/**
+ * Load multimodal test configuration from environment variables.
+ *
+ * @remarks
+ * Mirrors Rust `multimodal_enabled()`: requires
+ * ENABLE_MULTIMODEL_INTEGRATION_TESTS=true/1 AND a non-placeholder
+ * OPENAI_API_KEY_MULTIMODEL.
+ */
+function loadMultimodalConfig(): MultimodalTestConfig {
+  const flag = process.env.ENABLE_MULTIMODEL_INTEGRATION_TESTS;
+  const apiKey = process.env.OPENAI_API_KEY_MULTIMODEL || '';
+  const enabled =
+    (flag === 'true' || flag === '1') && apiKey !== '' && apiKey !== 'your_api_key_here';
+
+  return {
+    apiKey,
+    baseUrl: process.env.OPENAI_BASE_URL_MULTIMODEL || undefined,
+    provider: process.env.PROVIDER_MULTIMODEL || 'openai',
+    testModel: process.env.MODEL_MULTIMODEL || 'glm-4.5v',
+    enabled,
+  };
+}
+
+/**
+ * Global multimodal test configuration instance.
+ */
+export const multimodalConfig: MultimodalTestConfig = loadMultimodalConfig();
+
+/**
+ * Helper to check if multimodal test configuration is available
+ *
+ * @returns True if multimodal flag and API key are configured
+ */
+export function isMultimodalConfigured(): boolean {
+  return multimodalConfig.enabled;
 }
 
 /**

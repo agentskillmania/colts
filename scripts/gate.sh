@@ -27,8 +27,11 @@ require_env() {
 
 assert_no_skipped() {
   local log="$1"
-  # 已知例外：llm-client 03-multi-key-switching 的 2 个用例在 apiKey2 未配置时
-  # itif 跳过（可选能力，需第二把真实 key）。允许恰好 2 个 skip，超出即失败。
+  # 已知例外（恰好 3 个，超限即失败）：
+  # - llm-client 03-multi-key-switching 的 2 个用例在 apiKey2 未配置时
+  #   itif 跳过（可选能力，需第二把真实 key）。
+  # - llm-client 08-multimodal 的 1 个用例在 _MULTIMODEL env 系列未配置时
+  #   itif 跳过（可选能力，需独立视觉模型 key；R2P-131 对齐 Rust 35dc808）。
   # 只数 vitest 的 Tests 汇总行——文件行 "✓ xxx (3 tests | 2 skipped)" 描述的是
   # 同一批 skip，一起求和会把已知的 2 个数成 4 而误判假绿；"Test Files" 行不含
   # "Tests +数字" 结构，天然排除。锚定 "(^|:) *Tests"：pnpm -r 日志带
@@ -36,11 +39,11 @@ assert_no_skipped() {
   # 同时兼容 "N passed | M skipped" 与全 skip 包的 "M skipped (M)"。
   local n
   n="$(grep -E '(^|:) *Tests +[0-9]+' "$log" | grep -oE '[0-9]+ skipped' | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo 0)"
-  if [ "${n:-0}" -gt 2 ]; then
-    echo "_GATE_FAIL 存在 ${n} 个 skipped 集成用例（已知例外上限 2：multi-key apiKey2 未配）——疑似假绿，禁止提交"
+  if [ "${n:-0}" -gt 3 ]; then
+    echo "_GATE_FAIL 存在 ${n} 个 skipped 集成用例（已知例外上限 3：multi-key apiKey2 未配×2 + multimodel _MULTIMODEL 未配×1）——疑似假绿，禁止提交"
     exit 1
   fi
-  [ "${n:-0}" -eq 0 ] || echo "_GATE_WARN ${n} 个已知 skip（multi-key apiKey2 未配置；配置后自动启用）"
+  [ "${n:-0}" -eq 0 ] || echo "_GATE_WARN ${n} 个已知 skip（multi-key apiKey2 / multimodel _MULTIMODEL 未配置；配置后自动启用）"
 }
 
 case "$MODE" in

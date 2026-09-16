@@ -249,6 +249,60 @@ export class LLMClient extends EventEmitter {
   }
 
   /**
+   * Check whether any message carries image parts (multimodal input).
+   *
+   * @param messages - Conversation messages to inspect
+   * @returns True if at least one user/toolResult message has an image part
+   *
+   * @remarks
+   * Only array-shaped content is inspected: plain string content is text by
+   * definition. Text-only part arrays do NOT count as multimodal — the gate
+   * targets image payload specifically (wire-compatible text parts must not
+   * be rejected for text-only models).
+   *
+   * @internal
+   */
+  private hasImageParts(messages: CallOptions['messages']): boolean {
+    return messages.some(
+      (m) => Array.isArray(m.content) && m.content.some((part) => part.type === 'image')
+    );
+  }
+
+  /**
+   * Multimodal defensive gate (mirrors Rust 37c3395 `validate_multimodal`).
+   *
+   * @param options - Request options including model and messages
+   * @throws Error when messages contain image parts but the model's
+   * registered capabilities do not declare `"image"` input
+   *
+   * @remarks
+   * When a message carries image parts, the model must have declared image
+   * input capability (`input: ["text", "image"]` at registration time —
+   * `LLMQuickInit.providers[].models[].input` or `ModelConstraint.input`).
+   * Otherwise the request is rejected client-side before it reaches the
+   * scheduler — sending a base64 image to a text-only model would only
+   * produce a hard-to-locate 400 from the provider.
+   *
+   * The rejection happens pre-scheduler, so it is never retried and never
+   * pollutes key health stats (equivalent to Rust's non-retryable
+   * `AdapterError::Validation` classification).
+   *
+   * @internal
+   */
+  private validateMultimodal(options: CallOptions): void {
+    if (!this.hasImageParts(options.messages)) {
+      return;
+    }
+    const capabilities = this.getModelCapabilities(options.model);
+    if (!capabilities.input.includes('image')) {
+      throw new Error(
+        `messages contain multimodal parts but model '${options.model}' does not declare image input capability ` +
+          `(set input: ["text", "image"] in the model's config to allow it)`
+      );
+    }
+  }
+
+  /**
    * Make a non-streaming request to the LLM.
    *
    * @param options - Request options including model, messages, and configuration
@@ -284,6 +338,11 @@ export class LLMClient extends EventEmitter {
    */
   async call(options: CallOptions): Promise<LLMResponse> {
     const { model, totalTimeout, requestId, signal } = options;
+
+    // Multimodal gate: reject image parts for models without image input
+    // declared — before queueing, so it is neither retried nor counted as
+    // a key failure (mirrors Rust 37c3395).
+    this.validateMultimodal(options);
 
     const execute = async (ctx: {
       key: { key: string };
@@ -360,6 +419,10 @@ export class LLMClient extends EventEmitter {
    */
   async *stream(options: CallOptions): AsyncIterable<StreamEvent> {
     const { model, totalTimeout, requestId, signal } = options;
+
+    // Multimodal gate: same contract as call() — rejects on first iteration
+    // (before queueing) when image parts meet a text-only model.
+    this.validateMultimodal(options);
 
     // Merge timeout and caller signal into a single abort controller
     // so that totalTimeout covers both queue wait and stream consumption.
