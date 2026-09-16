@@ -44,7 +44,10 @@ assert_no_skipped() {
 }
 
 case "$MODE" in
-  static) pnpm build && pnpm lint ;;
+  static)
+    pnpm build || { echo "_GATE_FAIL build"; exit 1; }
+    pnpm lint || { echo "_GATE_FAIL lint"; exit 1; }
+    ;;
   unit)   pnpm test:unit ;;
   intg)
     require_env
@@ -53,9 +56,13 @@ case "$MODE" in
     assert_no_skipped "$log"
     ;;
   full)
-    pnpm build && pnpm lint && pnpm test:unit
+    # 注意：case 分支内 set -e 对 AND-list 失败不生效（bash 陷阱：a && b && c 失败
+    # 不会退出，后续 intg 照跑）——必须逐行显式退出。
+    pnpm build || { echo "_GATE_FAIL build"; exit 1; }
+    pnpm lint || { echo "_GATE_FAIL lint"; exit 1; }
+    pnpm test:unit || { echo "_GATE_FAIL unit"; exit 1; }
     log="$(mktemp)"
-    pnpm test:intg 2>&1 | tee "$log"
+    pnpm test:intg 2>&1 | tee "$log" || { echo "_GATE_FAIL intg"; exit 1; }
     assert_no_skipped "$log"
     echo "_GATE_OK 门1/2/4/6 通过；门3(/review) 与门5(effective-testing) 由 agent 显式完成后方可提交"
     ;;
