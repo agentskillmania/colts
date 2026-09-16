@@ -80,6 +80,16 @@ export class ToolRegistry {
   private tools = new Map<string, Tool<z.ZodTypeAny>>();
 
   /**
+   * Compare two strings by UTF-16 code units (not locale-aware).
+   *
+   * Matches Rust's byte-wise `String` ordering: enumeration order must be
+   * identical across runtimes and locales, not just within one process.
+   */
+  private static byName(a: string, b: string): number {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+
+  /**
    * Register a tool
    *
    * @param tool - Tool definition
@@ -123,12 +133,18 @@ export class ToolRegistry {
   }
 
   /**
-   * Get all registered tool names
+   * Get all registered tool names (sorted by name)
    *
-   * @returns Array of registered tool names
+   * Sorting is not cosmetic: the wire `tools` array sits at the very front
+   * of the provider prefix cache (token-stream order: tools → system →
+   * messages), so enumeration order must be deterministic across registry
+   * instances. All public enumerations (names / snapshots / schemas) sort by
+   * tool name. (R2P-101a, aligned with Rust 5120a3e.)
+   *
+   * @returns Array of registered tool names, sorted
    */
   getToolNames(): string[] {
-    return Array.from(this.tools.keys());
+    return Array.from(this.tools.keys()).sort(ToolRegistry.byName);
   }
 
   /**
@@ -167,17 +183,23 @@ export class ToolRegistry {
   /**
    * Convert all tools to OpenAI function schema format
    *
-   * @returns Array of tool schemas for LLM
+   * Output is sorted by tool name — the wire `tools` array must be
+   * byte-stable across requests for provider prefix caching (see
+   * {@link getToolNames}). (R2P-101a, aligned with Rust 5120a3e.)
+   *
+   * @returns Array of tool schemas for LLM, sorted by name
    */
   toToolSchemas(): ToolSchema[] {
-    return Array.from(this.tools.values()).map((tool) => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: zodToJsonSchema(tool.parameters),
-      },
-    }));
+    return Array.from(this.tools.values())
+      .map((tool) => ({
+        type: 'function' as const,
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: zodToJsonSchema(tool.parameters),
+        },
+      }))
+      .sort((a, b) => ToolRegistry.byName(a.function.name, b.function.name));
   }
 
   /**
@@ -188,13 +210,15 @@ export class ToolRegistry {
   }
 
   /**
-   * Get all registered tool definitions
+   * Get all registered tool definitions (sorted by tool name)
    *
    * Used by IToolSchemaFormatter to convert tools for LLM consumption.
+   * Sorting keeps every enumeration deterministic for prefix caching
+   * (see {@link getToolNames}). (R2P-101a, aligned with Rust 5120a3e.)
    *
-   * @returns Array of all registered tools
+   * @returns Array of all registered tools, sorted by name
    */
   getAll(): Tool<z.ZodTypeAny>[] {
-    return Array.from(this.tools.values());
+    return Array.from(this.tools.values()).sort((a, b) => ToolRegistry.byName(a.name, b.name));
   }
 }

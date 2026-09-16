@@ -399,6 +399,56 @@ describe('Tool Registry (Step 3)', () => {
     });
   });
 
+  describe('R2P-101a: deterministic ordering for prefix caching', () => {
+    /**
+     * The wire `tools` array sits at the very front of the provider prefix
+     * cache (token-stream order: tools → system → messages). Any order
+     * wobble across requests breaks the cache right at the tool block, so
+     * every public enumeration (names / snapshots / schemas) must be sorted
+     * by tool name and independent of registration order.
+     * (Aligned with Rust 5120a3e `schema_order_is_deterministic_across_insertion_orders`;
+     * JS Map is insertion-ordered today — explicit sorting is defense-in-depth
+     * plus cross-instance determinism.)
+     */
+    const regWith = (names: string[]): ToolRegistry => {
+      const reg = new ToolRegistry();
+      for (const n of names) {
+        reg.register({
+          name: n,
+          description: `d ${n}`,
+          parameters: z.object({}),
+          execute: async () => '',
+        });
+      }
+      return reg;
+    };
+
+    it('toToolSchemas output is name-sorted and byte-identical across insertion orders', () => {
+      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta']);
+      const b = regWith(['beta', 'mid_tool', 'zebra', 'alpha']);
+
+      const schemaNames = (r: ToolRegistry) => r.toToolSchemas().map((s) => s.function.name);
+      expect(schemaNames(a)).toEqual(['alpha', 'beta', 'mid_tool', 'zebra']);
+      // Byte-level pin: two insertion orders must serialize identically.
+      expect(JSON.stringify(a.toToolSchemas())).toBe(JSON.stringify(b.toToolSchemas()));
+    });
+
+    it('getToolNames is name-sorted and equal across insertion orders', () => {
+      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta']);
+      const b = regWith(['beta', 'mid_tool', 'zebra', 'alpha']);
+      expect(a.getToolNames()).toEqual(['alpha', 'beta', 'mid_tool', 'zebra']);
+      expect(a.getToolNames()).toEqual(b.getToolNames());
+    });
+
+    it('getAll snapshots are name-sorted and equal across insertion orders', () => {
+      const a = regWith(['zebra', 'alpha', 'mid_tool', 'beta']);
+      const b = regWith(['beta', 'mid_tool', 'zebra', 'alpha']);
+      const names = (r: ToolRegistry) => r.getAll().map((t) => t.name);
+      expect(names(a)).toEqual(['alpha', 'beta', 'mid_tool', 'zebra']);
+      expect(names(a)).toEqual(names(b));
+    });
+  });
+
   describe('calculator tool', () => {
     it('should be available as built-in', () => {
       expect(calculatorTool.name).toBe('calculate');
