@@ -7,6 +7,7 @@
 
 import { produce } from 'immer';
 
+import { addSystemMessage } from '../state/index.js';
 import type { AgentState, IContextCompressor } from '../types.js';
 
 /**
@@ -20,16 +21,31 @@ export type CompressionEventEmitter = (type: string, data: Record<string, unknow
 /**
  * Manually compress state using the given compressor
  *
+ * The TS counterpart of Rust `apply_compression` (bundled with the `compress`
+ * call): applies pruned message content, writes compression metadata, then
+ * appends one system marker row so the compression lands in the timeline.
+ * Context compression is user-perceivable (the timeline abruptly "gets
+ * lighter") while `context.compression` is a single overwriting slot — only a
+ * marker row can carry the history of multiple compressions. The row content
+ * is compact JSON (`kind` + coverage/token counts of THIS round); frontend
+ * shims localize it for display. Messages are never deleted; the assembler
+ * skips system rows so the marker never enters the LLM context.
+ * (R2P-105, aligned with Rust 0a3ec81.)
+ *
  * @param compressor - Context compressor implementation
  * @param state - Current agent state
- * @returns New state with compression metadata applied
+ * @returns New state with compression metadata and marker row applied
  */
 export async function compressState(
   compressor: IContextCompressor,
   state: AgentState
 ): Promise<AgentState> {
   const result = await compressor.compress(state);
-  return produce(state, (draft) => {
+  // 旧锚点先读后写：多次压缩时标记行记录的是"本次新覆盖"的消息数。
+  // （anchor 增量，saturating——放弃/no-op 轮照插标记但增量为 0，与
+  // maybeCompress 的 coveredMessages 发射同点同语义。）
+  const prevAnchor = state.context.compression?.anchor ?? 0;
+  const applied = produce(state, (draft) => {
     // Apply pruned message content and updated token counts
     if (result.prunedMessages) {
       for (const { index, newContent, newTokenCount } of result.prunedMessages) {
@@ -46,6 +62,14 @@ export async function compressState(
       compressedAt: result.compressedAt,
     };
   });
+  const marker = JSON.stringify({
+    kind: 'compact',
+    // 本次压缩新覆盖的消息条数（anchor 增量），与消息总数区分开。
+    coveredMessages: Math.max(0, result.anchor - prevAnchor),
+    removedTokens: result.removedTokenCount ?? 0,
+    summaryTokens: result.summaryTokenCount ?? 0,
+  });
+  return addSystemMessage(applied, marker);
 }
 
 /**

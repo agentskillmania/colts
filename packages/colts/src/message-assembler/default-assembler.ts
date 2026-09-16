@@ -115,6 +115,14 @@ export class DefaultMessageAssembler implements IMessageAssembler {
         // Same-turn: fall through to normal assistant message conversion
       }
 
+      // System marker rows (timeline traces of compression / model switches)
+      // never go to the LLM — they are pure persisted history, and the system
+      // prompt is already injected separately as [System Instructions].
+      // (R2P-105, aligned with Rust DefaultMessageAssembler.)
+      if (msg.role === 'system') {
+        continue;
+      }
+
       switch (msg.role) {
         case 'user':
           messages.push({

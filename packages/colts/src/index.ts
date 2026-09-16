@@ -50,6 +50,7 @@ export {
   addUserMessage,
   addAssistantMessage,
   addToolMessage,
+  addSystemMessage,
   incrementStepCount,
   setLastToolResult,
   loadSkill,

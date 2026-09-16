@@ -147,6 +147,33 @@ export function addToolMessage(
 }
 
 /**
+ * Append a system marker row to the conversation history.
+ *
+ * Marker rows are timeline traces of session-level events (context
+ * compression, model switches). The content is by convention a compact JSON
+ * string (e.g. `{"kind":"compact",...}`) that consumers (frontend shims)
+ * localize for display; the assembler always skips system rows, so markers
+ * never enter the LLM context — they are pure persisted history, not
+ * conversation participants. (R2P-105, aligned with Rust 0a3ec81
+ * `add_system_message`.)
+ *
+ * @param state - Current state
+ * @param content - Marker content (compact JSON string by convention)
+ * @returns New state with the system marker appended
+ */
+export function addSystemMessage(state: AgentState, content: string): AgentState {
+  return updateState(state, (draft) => {
+    draft.context.messages.push({
+      id: globalThis.crypto.randomUUID(),
+      role: 'system',
+      content,
+      timestamp: Date.now(),
+      tokenCount: estimateTokens(content),
+    });
+  });
+}
+
+/**
  * Increment the step counter
  *
  * @param state - Current state
