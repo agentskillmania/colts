@@ -199,9 +199,6 @@ export class DefaultContextCompressor {
         summaryTokenCount: state.context.compression?.summaryTokenCount,
         compressedAt: state.context.compression?.compressedAt,
         anchor: existingAnchor,
-        // anchor 无进展 → 本轮没有盖住任何消息（R2P-104，对齐 Rust
-        // 7d964e5 的 saturating_sub 语义）
-        coveredMessages: 0,
         prunedMessages,
       };
     }
@@ -232,9 +229,6 @@ export class DefaultContextCompressor {
     return {
       summary,
       anchor,
-      // 本轮新覆盖的消息条数（anchor 增量）——无歧义的消息数口径，
-      // 与 removedTokenCount（token 数）语义分开（R2P-104）
-      coveredMessages: anchor - existingAnchor,
       summaryTokenCount,
       removedTokenCount,
       compressedAt: Date.now(),

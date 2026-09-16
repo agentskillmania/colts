@@ -258,52 +258,6 @@ describe('compressor anchor 规则——anchor 只落用户消息（R2P-102）',
   });
 });
 
-describe('coveredMessages——无歧义消息条数（R2P-104，对齐 Rust 7d964e5）', () => {
-  // removedCount 的单位随路径而变（自动压缩=token 数、/compact=消息数，历史
-  // 遗留），时间线标记需要无歧义的消息条数。coveredMessages = anchor 增量
-  // （新 anchor − existingAnchor），放弃/no-op 路径 anchor 无进展 → 0。
-  it('首次压缩：coveredMessages = anchor − existingAnchor = 3（0→3 覆盖 3 条）', async () => {
-    const c = new DefaultContextCompressor(
-      { strategy: 'summarize', keepRecent: 2, threshold: 1 },
-      mockLLM(),
-      'gpt-4'
-    );
-    const state = makeState([user('1'), user('2'), user('3'), user('4'), user('5')]);
-    const result = await c.compress(state);
-    expect(result.anchor).toBe(3);
-    expect(result.coveredMessages).toBe(3);
-  });
-
-  it('再压缩：coveredMessages 取本轮增量而非累计锚点（2→4 只覆盖 2 条）', async () => {
-    const c = new DefaultContextCompressor({ strategy: 'truncate', keepRecent: 2, threshold: 1 });
-    // existingAnchor=2：本轮锚点推进到 4，新盖住 [2,4) 两条——不是累计的 4
-    const state = makeState(
-      [user('1'), user('2'), user('3'), user('4'), user('5'), user('6')],
-      2,
-      'previous summary'
-    );
-    const result = await c.compress(state);
-    expect(result.anchor).toBe(4);
-    expect(result.coveredMessages).toBe(2);
-  });
-
-  it('放弃路径（无 user 消息可锚）：anchor 无进展 → coveredMessages = 0', async () => {
-    const c = new DefaultContextCompressor({ strategy: 'truncate', keepRecent: 1, threshold: 1 });
-    const state = makeState([thought('1'), action('2', 'c1'), toolResult('3', 'c1')]);
-    const result = await c.compress(state);
-    expect(result.anchor).toBe(0);
-    expect(result.coveredMessages).toBe(0);
-  });
-
-  it('no-op 路径（锚点无法推进）：coveredMessages = 0', async () => {
-    const c = new DefaultContextCompressor({ strategy: 'truncate', keepRecent: 100, threshold: 1 });
-    const state = makeState([user('1'), user('2'), user('3'), user('4'), user('5')]);
-    const result = await c.compress(state);
-    expect(result.anchor).toBe(0);
-    expect(result.coveredMessages).toBe(0);
-  });
-});
-
 describe('压缩触发阈值（R2P-103，对齐 Rust b4b0fe3）', () => {
   it('窗口占用 ≥ 90% 才触发:91 触发、89 不触发、90 边界触发', () => {
     const make = () => new DefaultContextCompressor({ contextWindowSize: 100, threshold: 1000 });

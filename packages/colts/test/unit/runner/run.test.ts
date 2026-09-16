@@ -9,7 +9,8 @@ import {
   DEFAULT_RUNNER_MAX_STEPS,
   RUN_HARD_LIMIT,
 } from '../../../src/runner/index.js';
-import { createAgentState } from '../../../src/state/index.js';
+import { DefaultContextCompressor } from '../../../src/compressor/index.js';
+import { createAgentState, addUserMessage } from '../../../src/state/index.js';
 import type { AgentConfig } from '../../../src/types.js';
 import { createMockLLMClient as _createMockLLMClient } from '../../helpers/mock-llm.js';
 import { safeEval } from '../helpers/safe-eval.js';
@@ -242,7 +243,8 @@ describe('run()', () => {
 
 describe('run() event emission', () => {
   it('should emit compress events in run when compression is triggered', async () => {
-    // Need at least 3 steps with 2 compressions to cover all ?? branches
+    // R2P-104 返修：发射下沉到 maybeCompress 共享 helper 后，StepRunner 步内
+    // 压缩同样发射——事件数从固定 4 条（仅步间）变为每次真实压缩一对。
     const toolCallResponse: LLMResponse = {
       content: 'Calculating',
       toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
@@ -292,7 +294,13 @@ describe('run() event emission', () => {
 
     await runner.run(state, undefined, registry);
 
-    expect(events).toEqual(['compressing', 'compressed', 'compressing', 'compressed']);
+    // 步内路径也发射：远多于旧契约的 4 条（2 对）
+    expect(events.length).toBeGreaterThanOrEqual(6);
+    // 严格 compressing → compressed 成对交替
+    for (let i = 0; i < events.length; i += 2) {
+      expect(events[i]).toBe('compressing');
+      expect(events[i + 1]).toBe('compressed');
+    }
   });
 
   it('should emit coveredMessages (per-round anchor delta) on every compressed event (R2P-104)', async () => {
@@ -354,9 +362,11 @@ describe('run() event emission', () => {
 
     await runner.run(state, undefined, registry);
 
-    // 三轮发射，每轮 anchor 增量都是 2——杀「累计 anchor」「只在首轮算增量」
-    // 「漏字段」等变异实现
-    expect(payloads.map((p) => p.coveredMessages)).toEqual([2, 2, 2]);
+    // R2P-104 返修：步内压缩路径同样发射——轮数远多于旧契约的 3 条。
+    // 每轮 anchor 增量都是 2——杀「累计 anchor」「只在首轮算增量」
+    // 「漏字段」「只步间发射」等变异实现
+    expect(payloads.length).toBeGreaterThanOrEqual(5);
+    expect(payloads.map((p) => p.coveredMessages)).toEqual(Array(payloads.length).fill(2));
   });
 
   it('should emit coveredMessages 0 when the anchor makes no progress (R2P-104)', async () => {
@@ -400,6 +410,125 @@ describe('run() event emission', () => {
     });
 
     const state = createAgentState(defaultConfig);
+
+    const payloads: Array<{ coveredMessages?: number }> = [];
+    runner.on('compressed', (e) => payloads.push(e));
+
+    await runner.run(state, undefined, registry);
+
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(payloads.map((p) => p.coveredMessages)).toEqual(Array(payloads.length).fill(0));
+  });
+
+  it('should emit compressed for real in-step compressions — ΣcoveredMessages telescopes to final anchor (R2P-104 返修 P1)', async () => {
+    // 评审 P1 复现：真实 DefaultContextCompressor 走 run()——旧实现只在步间
+    // 发射，而真实压缩器一轮成功后 shouldCompress 回落、同数组重算无法再
+    // 推进 → compressed 零发射（anchor 推进全部静默发生在 StepRunner 步内）。
+    // 修复后发射随 maybeCompress 下沉：每次真实压缩可见，且 anchor 变化只
+    // 经发射发生 → ΣcoveredMessages 严格望远镜求和 = 最终 anchor。
+    const toolCallResponse: LLMResponse = {
+      content: 'Calculating',
+      toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+    const finalResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([
+      toolCallResponse,
+      toolCallResponse,
+      toolCallResponse,
+      toolCallResponse,
+      finalResponse,
+    ]);
+
+    // 真实压缩器：truncate、窗口 60（90% 触发线 54）。12 条种子 user 消息
+    // 估算 ~120 token ≥ 54 必触发；keepRecent=10 → 朴素锚点 12−10=2 落 user。
+    const compressor = new DefaultContextCompressor({
+      strategy: 'truncate',
+      contextWindowSize: 60,
+    });
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculate',
+      description: 'Calculate',
+      parameters: z.object({ expression: z.string() }),
+      execute: async ({ expression }) => safeEval(expression).toString(),
+    });
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      compressor,
+    });
+
+    let state = createAgentState(defaultConfig);
+    for (let i = 0; i < 12; i++) {
+      state = addUserMessage(state, `Seed message ${i} for compression window accounting`);
+    }
+
+    const payloads: Array<{ coveredMessages?: number }> = [];
+    runner.on('compressed', (e) => payloads.push(e));
+
+    const { state: finalState } = await runner.run(state, undefined, registry);
+
+    // 修复前（P1）：此处为 0 条事件
+    expect(payloads.length).toBeGreaterThan(0);
+    const finalAnchor = finalState.context.compression?.anchor ?? 0;
+    expect(finalAnchor).toBeGreaterThan(0);
+    // 每轮增量非负（anchor 单调不回退），且总和望远镜到最终 anchor
+    for (const p of payloads) {
+      expect(p.coveredMessages).toBeGreaterThanOrEqual(0);
+    }
+    expect(payloads.reduce((sum, p) => sum + (p.coveredMessages ?? 0), 0)).toBe(finalAnchor);
+  });
+
+  it('should emit coveredMessages 0 when a compressor regresses the anchor (saturating; kills swap mutant)', async () => {
+    // P2：饱和分支。mock 回退：existingAnchor=5 → 返回 3。
+    // Math.max(0, 3−5)=0；swap 变异（Math.max(0, prev−new)）会得 2 —— 被杀。
+    const toolCallResponse: LLMResponse = {
+      content: 'Calculating',
+      toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+    const finalResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([toolCallResponse, finalResponse]);
+
+    const mockCompressor: import('../../../src/types.js').IContextCompressor = {
+      shouldCompress: vi.fn().mockReturnValue(true),
+      compress: vi.fn().mockResolvedValue({ summary: 'regressed', anchor: 3 }),
+    };
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculate',
+      description: 'Calculate',
+      parameters: z.object({ expression: z.string() }),
+      execute: async ({ expression }) => safeEval(expression).toString(),
+    });
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      compressor: mockCompressor,
+    });
+
+    const state = createAgentState(defaultConfig);
+    // 种子压缩锚点 5：压缩器返回 3 → anchor 回退 2 条
+    state.context.compression = { summary: 'seed', anchor: 5 };
 
     const payloads: Array<{ coveredMessages?: number }> = [];
     runner.on('compressed', (e) => payloads.push(e));

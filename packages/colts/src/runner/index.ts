@@ -867,24 +867,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
           return finalizeRun(currentState, runResult);
         }
 
-        // Auto-compress between steps
-        if (this.compressor && this.compressor.shouldCompress(currentState)) {
-          this.emit('compressing', { timestamp: Date.now() });
-          const prevAnchor = currentState.context.compression?.anchor ?? 0;
-          currentState = await maybeCompress(this.compressor, currentState);
-          const newAnchor = currentState.context.compression?.anchor ?? 0;
-          if (currentState.context.compression) {
-            this.emit('compressed', {
-              summary: currentState.context.compression.summary,
-              removedCount: newAnchor - prevAnchor,
-              // 本轮新覆盖的消息条数（anchor 增量）——无歧义消息数，
-              // 与 removedCount 的单位歧义脱钩；放弃/no-op 时增量为 0
-              // （saturating，对齐 Rust saturating_sub）。R2P-104。
-              coveredMessages: Math.max(0, newAnchor - prevAnchor),
-              timestamp: Date.now(),
-            });
-          }
-        }
+        // Auto-compress between steps — 发射在 maybeCompress 内与步内路径
+        // 共用同一 helper（对齐 Rust runner.rs:459 经 maybe_compress），
+        // compressed 载荷（含 coveredMessages）两路同构。R2P-104 返修。
+        currentState = await maybeCompress(this.compressor, currentState, (type, data) =>
+          this.emit(type as keyof RunnerEventMap, data as never)
+        );
       }
 
       // Hard limit reached (safety net for policy bugs)

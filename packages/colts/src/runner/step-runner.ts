@@ -148,7 +148,9 @@ export class StepRunner {
           };
         }
 
-        currentState = await maybeCompress(this.compressor, nextState);
+        // 步内压缩同样发射 compressing/compressed——沿既有 emit 回调接入
+        // maybeCompress 的下沉发射（对齐 Rust step.rs:190 经 maybe_compress）
+        currentState = await maybeCompress(this.compressor, nextState, emit);
 
         // Emit tool events based on phase transitions
         this.emitToolEvents(effectiveResult.phase, emit);
