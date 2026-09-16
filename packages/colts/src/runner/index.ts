@@ -27,6 +27,7 @@ import type {
   IToolRegistry,
   IContextCompressor,
   CompressionConfig,
+  TurnUsage,
 } from '../types.js';
 import { executeAdvance, createRouter } from './advance.js';
 import { compressState, maybeCompress } from './compression.js';
@@ -722,24 +723,37 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       runResult: RunResult
     ): Promise<{ state: AgentState; result: RunResult }> => {
       const resultWithDuration = { ...runResult, duration: Date.now() - runStartTime };
-      this.emit('run:end', { state: runState, result: resultWithDuration, timestamp: Date.now() });
+      // Stamp this turn's usage onto its last assistant message BEFORE
+      // run:end / afterRun — persistence happens in afterRun middleware, so
+      // the stamped state is what gets saved. All terminal paths (policy
+      // stops, abort signal, step abort, hard limit, thrown errors) funnel
+      // through here: the single common exit, the counterpart of Rust
+      // finish_run's stamp_turn_usage (Rust's abort/hard-limit exits bypass
+      // finish_run and call it directly; here they pass through finalizeRun).
+      // (R2P-106, aligned with Rust c904595)
+      const stampedState = stampTurnUsage(runState, resultWithDuration);
+      this.emit('run:end', {
+        state: stampedState,
+        result: resultWithDuration,
+        timestamp: Date.now(),
+      });
       // `/clear` reset the conversation: messages went from non-empty to empty.
       // Notify clients to drop their local view BEFORE the terminal `complete`
       // so the wire order is `session-cleared` → `done` (mirrors Rust
       // `RunnerEvent::SessionCleared`). `/compact` keeps messages non-empty
       // (it compresses), so it does not trigger this.
-      if (runState.context.messages.length === 0 && initialMessageCount > 0) {
+      if (stampedState.context.messages.length === 0 && initialMessageCount > 0) {
         this.emit('session-cleared', { timestamp: Date.now() });
       }
       this.emit('complete', { result: resultWithDuration, timestamp: Date.now() });
       if (this.hasMiddleware) {
         await this.middlewareExecutor.runAfterRun({
-          state: runState,
+          state: stampedState,
           result: resultWithDuration,
           runnerOptions: this.options,
         });
       }
-      return { state: runState, result: resultWithDuration };
+      return { state: stampedState, result: resultWithDuration };
     };
 
     try {
@@ -938,4 +952,61 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       draft.context.skillState!.current = null;
     });
   }
+}
+
+/**
+ * Stamp this run's usage onto the turn's LAST assistant message (the
+ * frontend fromHistory read-side convention: the turn-final row carries it).
+ *
+ * Semantics (R2P-106, aligned with Rust c904595 `stamp_turn_usage`):
+ * - waiting-human: not stamped — the turn is unfinished; the final run after
+ *   resume writes it once (its done frame likewise only carries the resume
+ *   segment, so both ends agree);
+ * - all-zero usage: not stamped — command-interception runs that never hit
+ *   the LLM; absent means "no usage";
+ * - no assistant row this run (run ended before first completion): nowhere
+ *   to attach, skipped.
+ *
+ * Returns the original state unchanged when skipping; otherwise a new state
+ * with the stamped message (immutable update).
+ */
+export function stampTurnUsage(state: AgentState, result: RunResult): AgentState {
+  if (result.type === 'waiting-human') {
+    return state;
+  }
+  const usage: TurnUsage = {
+    inputTokens: result.tokens.input,
+    outputTokens: result.tokens.output,
+    cacheRead: result.tokens.cacheRead,
+    cacheWrite: result.tokens.cacheWrite,
+    durationMs: result.duration,
+  };
+  if (isZeroTurnUsage(usage)) {
+    return state;
+  }
+  const messages = state.context.messages;
+  let lastAssistantIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') {
+      lastAssistantIndex = i;
+      break;
+    }
+  }
+  if (lastAssistantIndex === -1) {
+    return state;
+  }
+  return updateState(state, (draft) => {
+    draft.context.messages[lastAssistantIndex].usage = usage;
+  });
+}
+
+/** All-zero check: runs that never hit the LLM leave no account (absent = none). */
+function isZeroTurnUsage(usage: TurnUsage): boolean {
+  return (
+    usage.inputTokens === 0 &&
+    usage.outputTokens === 0 &&
+    usage.cacheRead === 0 &&
+    usage.cacheWrite === 0 &&
+    usage.durationMs === 0
+  );
 }

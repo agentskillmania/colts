@@ -26,6 +26,7 @@ export type {
   ToolQuickInit,
   // Token usage
   TokenStats,
+  TurnUsage,
   // Context Compression
   CompressionMeta,
   CompressResult,

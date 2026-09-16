@@ -58,6 +58,38 @@ export interface Message {
   }>;
   /** Estimated token count of this message's content (via js-tiktoken) */
   tokenCount?: number;
+  /**
+   * Per-turn (per-run) usage summary, stamped by the runner at run end onto
+   * the turn's LAST assistant message; the frontend's fromHistory restores
+   * per-turn duration/token display from it.
+   *
+   * Not written for waiting-human endings (turn unfinished — the final run
+   * after resume writes it once) or all-zero usage (command-interception
+   * runs; absent means "no usage"). Old archives simply lack the key.
+   * (R2P-106, aligned with Rust c904595.)
+   */
+  usage?: TurnUsage;
+}
+
+/**
+ * Usage summary for one run (one conversation turn), stamped on the turn's
+ * last assistant message via `Message.usage`.
+ *
+ * Field shape (camelCase JSON) is identical to the frontend skill-ui-state
+ * `TurnUsage` and the Rust colts `TurnUsage` (serde camelCase). Unlike
+ * {@link TokenStats} it carries the whole-turn duration.
+ */
+export interface TurnUsage {
+  /** Input tokens consumed this turn */
+  inputTokens: number;
+  /** Output tokens generated this turn */
+  outputTokens: number;
+  /** Cache-read tokens this turn */
+  cacheRead: number;
+  /** Cache-write tokens this turn */
+  cacheWrite: number;
+  /** Whole-turn duration (ms, including tool execution) */
+  durationMs: number;
 }
 
 /**
