@@ -730,8 +730,12 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
       // through here: the single common exit, the counterpart of Rust
       // finish_run's stamp_turn_usage (Rust's abort/hard-limit exits bypass
       // finish_run and call it directly; here they pass through finalizeRun).
-      // (R2P-106, aligned with Rust c904595)
-      const stampedState = stampTurnUsage(runState, resultWithDuration);
+      // The lower bound is the pre-run message count: rows before it belong
+      // to earlier turns and must never be overwritten (a first-call failure
+      // ends with zero tokens but nonzero duration); beforeRun-injected rows
+      // sit at index >= initialMessageCount, so they remain stampable.
+      // (R2P-106, aligned with Rust c904595 + 返修下界守卫)
+      const stampedState = stampTurnUsage(runState, resultWithDuration, initialMessageCount);
       this.emit('run:end', {
         state: stampedState,
         result: resultWithDuration,
@@ -965,12 +969,19 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
  * - all-zero usage: not stamped — command-interception runs that never hit
  *   the LLM; absent means "no usage";
  * - no assistant row this run (run ended before first completion): nowhere
- *   to attach, skipped.
+ *   to attach, skipped;
+ * - lower bound (`minIndex`): only assistant rows at index >= minIndex may
+ *   receive the account. A turn whose first LLM call fails ends with
+ *   all-zero tokens but nonzero duration — not all-zero — and without the
+ *   bound the reverse search would reach back into the PREVIOUS turn's row
+ *   and overwrite its account.
  *
  * Returns the original state unchanged when skipping; otherwise a new state
  * with the stamped message (immutable update).
+ *
+ * @internal Exported for unit tests only; not part of the package public API.
  */
-export function stampTurnUsage(state: AgentState, result: RunResult): AgentState {
+export function stampTurnUsage(state: AgentState, result: RunResult, minIndex = 0): AgentState {
   if (result.type === 'waiting-human') {
     return state;
   }
@@ -986,7 +997,7 @@ export function stampTurnUsage(state: AgentState, result: RunResult): AgentState
   }
   const messages = state.context.messages;
   let lastAssistantIndex = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
+  for (let i = messages.length - 1; i >= minIndex; i--) {
     if (messages[i].role === 'assistant') {
       lastAssistantIndex = i;
       break;

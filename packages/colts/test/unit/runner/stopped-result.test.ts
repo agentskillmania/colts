@@ -179,12 +179,26 @@ describe('Runner: stopped result propagation', () => {
       config: { model: 'gpt-4', instructions: 'Test agent' },
       context: { messages: [] },
     });
+    // A previous turn's assistant row: the beforeRun interception path never
+    // reaches the terminal usage stamp, so it must stay unaccounted.
+    initialState.context.messages = [
+      {
+        id: 'a-prev',
+        role: 'assistant',
+        content: 'previous answer',
+        type: 'text',
+        timestamp: 0,
+        tokenCount: 1,
+      },
+    ];
 
-    const { result } = await runner.run(initialState);
+    const { state: finalState, result } = await runner.run(initialState);
 
     // Verify the result is stopped with the custom data
     expect(result.type).toBe('stopped');
     expect(result.data).toBe(customData);
+    // Interception path writes no usage (R2P-106).
+    expect(finalState.context.messages.every((m) => m.usage === undefined)).toBe(true);
   });
 
   it('should fallback to error when middleware stops without result', async () => {

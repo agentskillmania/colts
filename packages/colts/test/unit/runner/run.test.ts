@@ -959,12 +959,26 @@ describe('Thinking mechanism', () => {
     });
 
     const state = createAgentState(defaultConfig);
-    const { result } = await runner.run(state);
+    // A previous turn's assistant row: the beforeRun interception path never
+    // reaches the terminal usage stamp, so it must stay unaccounted.
+    state.context.messages = [
+      {
+        id: 'a-prev',
+        role: 'assistant',
+        content: 'previous answer',
+        type: 'text',
+        timestamp: 0,
+        tokenCount: 1,
+      },
+    ];
+    const { state: finalState, result } = await runner.run(state);
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
       expect(result.answer).toBe('Custom result');
     }
+    // Interception path writes no usage (R2P-106).
+    expect(finalState.context.messages.every((m) => m.usage === undefined)).toBe(true);
   });
 
   it('should propagate error when beforeRun throws in run()', async () => {
