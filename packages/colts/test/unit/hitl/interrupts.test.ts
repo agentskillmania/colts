@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 
 // HITL interrupt-terminal-state port (R2P-108, aligned with Rust
 // a2d508d / ca8276f / 9a2bcd3): pendingInterrupts persistence + typed
@@ -113,6 +114,83 @@ describe('HITL interrupts: typed suspension signal', () => {
       {}
     );
     expect(result).toEqual({ q1: { type: 'direct', value: 'Alice' } });
+  });
+
+  it('rejects a suspend signal with empty questions (nothing to ask — never persisted)', async () => {
+    const registry = new ToolRegistry();
+    registry.register(
+      createAskHumanTool(async () => ({ type: 'suspend' as const, questions: [] }))
+    );
+
+    // A plain error (error-policy path), NOT a suspension — an empty
+    // question list must never reach pendingInterrupts.
+    await expect(
+      registry.execute(
+        'ask_human',
+        { questions: [{ id: 'q1', question: 'name?', type: 'text' }] },
+        {}
+      )
+    ).rejects.toThrow(/at least one question/i);
+    try {
+      await registry.execute(
+        'ask_human',
+        { questions: [{ id: 'q1', question: 'name?', type: 'text' }] },
+        {}
+      );
+      expect.unreachable('must throw');
+    } catch (e) {
+      expect(e).not.toBeInstanceOf(ToolSuspensionError);
+    }
+  });
+});
+
+// ─── Cross-copy suspension detection (P2-b) ─────────────────────────────────
+
+describe('HITL interrupts: cross-copy suspension detection', () => {
+  it('executing-tool handler honors a name-tagged suspension from a duplicate class copy', async () => {
+    const { ExecutingToolHandler } =
+      await import('../../../src/execution-engine/handlers/executing-tool-handler.js');
+    // Simulate a dual-package copy: an error that is NOT instanceof
+    // ToolSuspensionError but carries the class name and the request —
+    // instanceof alone would silently degrade it to a tool failure.
+    class DuplicateCopySuspension extends Error {
+      constructor(public readonly request: HumanRequest) {
+        super('tool requested suspension (HITL)');
+        this.name = 'ToolSuspensionError';
+      }
+    }
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'ask_human',
+      description: 'bridge from another package copy',
+      parameters: z.object({ questions: z.array(z.object({})) }),
+      execute: async () => {
+        throw new DuplicateCopySuspension(questionRequest('human-dup'));
+      },
+    });
+
+    const handler = new ExecutingToolHandler();
+    const execState = {
+      phase: {
+        type: 'executing-tool' as const,
+        actions: [{ id: 'call_dup', tool: 'ask_human', arguments: { questions: [] } }],
+      },
+    } as any;
+    const ctx = {
+      executionPolicy: {
+        onToolError: vi.fn((error: Error) => ({
+          decision: 'continue' as const,
+          sanitizedResult: `Error: ${error.message}`,
+        })),
+      },
+    } as any;
+
+    const result = await handler.execute(ctx, makeState(), execState, registry);
+    expect(result.phase.type).toBe('waiting-human');
+    const request = (result.phase as { request: HumanRequest }).request;
+    // Retargeted to the LLM's action id even across the copy boundary.
+    expect(request.toolCallId).toBe('call_dup');
+    expect(ctx.executionPolicy.onToolError).not.toHaveBeenCalled();
   });
 });
 

@@ -761,6 +761,14 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     };
 
     try {
+      // Resume guard (R2P-108 返修): fail fast with a diagnosable error when
+      // the resumed state would send the LLM a dangling tool_call id — e.g.
+      // the host answered only one of two parallel questions. OpenAI-compat
+      // endpoints reject that with 400 "tool_call_ids did not have response
+      // messages", far away from the actual mistake. Surfaced as a normal
+      // error RunResult via the catch below.
+      this.assertResumableState(currentState);
+
       while (totalSteps < runHardLimit) {
         if (options?.signal?.aborted) {
           const runResult: RunResult = {
@@ -866,14 +874,17 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
               duration: 0,
             };
           } else if (decision.runResultType === 'waiting-human') {
+            const stepWaiting = result as {
+              type: 'waiting-human';
+              request: HumanRequest;
+              requests: HumanRequest[];
+            };
             runResult = {
               type: 'waiting-human',
-              request: (
-                result as {
-                  type: 'waiting-human';
-                  request: HumanRequest;
-                }
-              ).request,
+              request: stepWaiting.request,
+              // Full suspended-request list (parallel double-ask): the host
+              // must see everything it has to answer before resuming.
+              requests: stepWaiting.requests,
               totalSteps,
               tokens: runTokens,
               duration: 0,
@@ -944,7 +955,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
    * active (the LLM replied directly without an explicit return path), clear the
    * current-skill marker so stale breadcrumbs do not leak into the next run.
    *
-   * Note: the skill stack was removed, so only `current` needs clearing.
+   * Note: The skill stack was removed, so only `current` needs clearing.
    *
    * @param state - Current AgentState
    * @returns Cleaned AgentState (if cleanup was needed)
@@ -955,6 +966,53 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
     return updateState(state, (draft) => {
       draft.context.skillState!.current = null;
     });
+  }
+
+  /**
+   * Resume guard (R2P-108 返修): every toolCall on the LAST assistant row
+   * carrying toolCalls must be accounted for before run() drives the LLM —
+   *
+   * - answered: a tool-role message with the same toolCallId exists, or
+   * - approved: the id sits in hitlApprovals (tool-confirm resume window —
+   *   the middleware lets it through this run and the tool executes), or
+   *
+   * otherwise run() refuses with a diagnosable error, split by state:
+   * - still in pendingInterrupts → "answer the pending human interrupt
+   *   first (respond + removePendingInterrupt)";
+   * - neither → dangling tool_call (history corrupted / partially injected);
+   *   the provider would reject the next call with 400.
+   *
+   * Only the last toolCall-bearing assistant row matters: earlier batches
+   * completed (execution is batch-sequential).
+   *
+   * @throws Error listing the offending toolCall ids and their state
+   */
+  private assertResumableState(state: AgentState): void {
+    const messages = state.context.messages;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const toolCalls = (messages[i] as { toolCalls?: Array<{ id: string }> }).toolCalls;
+      if (!toolCalls || toolCalls.length === 0) continue;
+
+      const answered = new Set(
+        messages.filter((m) => m.role === 'tool' && m.toolCallId).map((m) => m.toolCallId!)
+      );
+      const approvals = new Set(state.context.hitlApprovals ?? []);
+      const pending = new Set(
+        (state.context.pendingInterrupts ?? []).map((p) => p.request.toolCallId)
+      );
+      const unresolved = toolCalls.filter((tc) => !answered.has(tc.id) && !approvals.has(tc.id));
+      if (unresolved.length === 0) return;
+
+      const details = unresolved.map((tc) =>
+        pending.has(tc.id)
+          ? `${tc.id} (pending human interrupt — answer it via respond() + removePendingInterrupt() before resuming)`
+          : `${tc.id} (no tool result, not approved, not pending — dangling tool_call; the provider would reject the next call with 400)`
+      );
+      throw new Error(
+        `Unanswered tool call(s) on the last assistant message: ${details.join('; ')}. ` +
+          `Answer the pending interrupts and inject their tool results before calling run().`
+      );
+    }
   }
 }
 

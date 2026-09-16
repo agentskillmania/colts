@@ -33,6 +33,7 @@ describe('HITL V2: ExecutionPolicy', () => {
       {
         type: 'waiting-human',
         request: { type: 'question', questions: [], toolCallId: 'c1' },
+        requests: [{ type: 'question', questions: [], toolCallId: 'c1' }],
         tokens: { input: 10, output: 5 },
       },
       { stepCount: 1, maxSteps: 100 }
@@ -127,7 +128,7 @@ describe('HITL V2: HitlMiddleware', () => {
   it('should NOT intercept when phase is not executing-tool', async () => {
     const { HitlMiddleware } = await import('../../../src/hitl/middleware.js');
 
-    const mw = new HitlMiddleware({ askHumanToolName: 'ask_human', confirmTools: ['delete_file'] });
+    const mw = new HitlMiddleware({ confirmTools: ['delete_file'] });
 
     const execState = createExecutionState(); // idle phase
 
@@ -632,7 +633,7 @@ describe('HITL: typed suspension through the kernel', () => {
   });
 
   it(
-    'runner end-to-end: ask_human suspension → waiting-human + persisted pendingInterrupts; answer pairs by action id',
+    'runner end-to-end: ask_human suspension → waiting-human + persisted pendingInterrupts; answer pairs by action id and resumes',
     { timeout: 10000 },
     async () => {
       const { AgentRunner } = await import('../../../src/runner/index.js');
@@ -640,28 +641,39 @@ describe('HITL: typed suspension through the kernel', () => {
       const { removePendingInterrupt } = await import('../../../src/hitl/interrupts.js');
       const { createAskHumanTool } = await import('../../../src/tools/ask-human.js');
 
-      // Mock LLM: first round asks via ask_human (LLM-generated call id).
+      // Mock LLM: round 1 asks via ask_human (LLM-generated call id);
+      // round 2 (the resume) produces the final answer.
+      let round = 0;
       const mockLLM = {
         call: vi.fn(),
         stream: vi.fn().mockImplementation(async function* () {
-          yield {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc_00_llm',
-              name: 'ask_human',
-              arguments: {
-                questions: [
-                  {
-                    id: 'q1',
-                    question: 'Deploy now?',
-                    type: 'single-select',
-                    options: ['yes', 'no'],
-                  },
-                ],
-                context: 'release gate',
+          round += 1;
+          if (round === 1) {
+            yield {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc_00_llm',
+                name: 'ask_human',
+                arguments: {
+                  questions: [
+                    {
+                      id: 'q1',
+                      question: 'Deploy now?',
+                      type: 'single-select',
+                      options: ['yes', 'no'],
+                    },
+                  ],
+                  context: 'release gate',
+                },
               },
-            },
-          };
+            };
+          } else {
+            yield {
+              type: 'text',
+              delta: 'Deployed. All set.',
+              accumulatedContent: 'Deployed. All set.',
+            };
+          }
           yield { type: 'done', roundTotalTokens: { input: 50, output: 20 } };
         }),
         getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
@@ -686,6 +698,8 @@ describe('HITL: typed suspension through the kernel', () => {
       if (result.type === 'waiting-human') {
         // The surfaced request carries the LLM's action id, not the bridge's.
         expect(result.request.toolCallId).toBe('tc_00_llm');
+        // Full request list is surfaced (single suspend → one entry).
+        expect(result.requests.map((r) => r.toolCallId)).toEqual(['tc_00_llm']);
       }
 
       // Persistence: the unanswered question survives in state (round
@@ -716,6 +730,19 @@ describe('HITL: typed suspension through the kernel', () => {
       expect(askId).toBe('tc_00_llm');
       expect(askId!.startsWith('human-')).toBe(false);
       expect(msgs.some((m) => m.role === 'tool' && m.toolCallId === askId)).toBe(true);
+
+      // Resume: the second run() actually CONTINUES — the guard passes
+      // (every toolCall answered) and the LLM produces the final answer
+      // from the resumed history.
+      const { state: finalState, result: resumeResult } = await runner.run(cleared);
+      expect(resumeResult.type).toBe('success');
+      if (resumeResult.type === 'success') {
+        expect(resumeResult.answer).toContain('All set.');
+      }
+      // The answered tool result is still paired in the resumed history.
+      expect(
+        finalState.context.messages.some((m) => m.role === 'tool' && m.toolCallId === 'tc_00_llm')
+      ).toBe(true);
     }
   );
 
@@ -745,4 +772,206 @@ describe('HITL: typed suspension through the kernel', () => {
     expect(ctx.executionPolicy.onToolError).toHaveBeenCalledTimes(1);
     expect(result.phase.type).toBe('tool-result');
   });
+
+  // ── P1-a: mixed batch (suspend + ok sibling) ──────────────────────────────
+
+  it('mixed batch: executed sibling results are recorded, the suspended one is not — no dangling toolCall', async () => {
+    const { ExecutingToolHandler } =
+      await import('../../../src/execution-engine/handlers/executing-tool-handler.js');
+    const { ToolRegistry } = await import('../../../src/tools/registry.js');
+    const handler = new ExecutingToolHandler();
+    const before = makeState();
+    const execState = {
+      phase: {
+        type: 'executing-tool' as const,
+        actions: [
+          {
+            id: 'call_ask',
+            tool: 'ask_human',
+            arguments: { questions: [{ id: 'q1', question: 'name?', type: 'text' }] },
+          },
+          {
+            id: 'call_echo',
+            tool: 'echo',
+            arguments: { text: 'side effect happened' },
+          },
+        ],
+      },
+    } as any;
+
+    const registry = await suspendRegistry();
+    registry.register({
+      name: 'echo',
+      description: 'echo',
+      parameters: z.object({ text: z.string() }),
+      execute: async ({ text }) => ({ echoed: text }),
+    });
+
+    const result = await handler.execute(makeCtx(), before, execState, registry);
+
+    expect(result.phase.type).toBe('waiting-human');
+
+    // The executed sibling's tool result MUST be in history — its side
+    // effect already happened; dropping it leaves a dangling toolCall that
+    // providers reject with 400 on resume.
+    const echoMsg = result.state.context.messages.find(
+      (m) => m.role === 'tool' && m.toolCallId === 'call_echo'
+    );
+    expect(echoMsg).toBeDefined();
+    expect(echoMsg!.content).toContain('side effect happened');
+
+    // The suspended call has no tool result (no answer yet) and is the only
+    // pendingInterrupts entry.
+    const askMsg = result.state.context.messages.find(
+      (m) => m.role === 'tool' && m.toolCallId === 'call_ask'
+    );
+    expect(askMsg).toBeUndefined();
+    expect(result.state.context.pendingInterrupts).toHaveLength(1);
+    expect(result.state.context.pendingInterrupts![0].request.toolCallId).toBe('call_ask');
+
+    // The advance still counts as a step (the echo executed).
+    expect(result.state.context.stepCount).toBe(before.context.stepCount + 1);
+  });
+
+  // ── P2-a: suspension outranks a sibling's fail decision ───────────────────
+
+  it('suspend + fail mixed batch: suspends are persisted and waiting-human wins over the fail terminal', async () => {
+    const { ExecutingToolHandler } =
+      await import('../../../src/execution-engine/handlers/executing-tool-handler.js');
+    const { ToolRegistry } = await import('../../../src/tools/registry.js');
+    const handler = new ExecutingToolHandler();
+    const execState = {
+      phase: {
+        type: 'executing-tool' as const,
+        actions: [
+          {
+            id: 'call_ask',
+            tool: 'ask_human',
+            arguments: { questions: [{ id: 'q1', question: 'name?', type: 'text' }] },
+          },
+          { id: 'call_boom', tool: 'boom', arguments: {} },
+        ],
+      },
+    } as any;
+
+    const registry = await suspendRegistry();
+    registry.register({
+      name: 'boom',
+      description: 'always fails',
+      parameters: z.object({}),
+      execute: async () => {
+        throw new Error('kaput');
+      },
+    });
+
+    // Policy says 'fail' for the boom error — previously Promise.all would
+    // reject on it and silently swallow the sibling suspension.
+    const ctx = {
+      executionPolicy: {
+        onToolError: vi.fn(() => ({
+          decision: 'fail' as const,
+          error: new Error('policy-fail'),
+        })),
+      },
+    } as any;
+
+    const result = await handler.execute(ctx, makeState(), execState, registry);
+
+    // The human's question outranks the race-decided tool error: it is
+    // persisted and the advance ends waiting-human, not error.
+    expect(result.phase.type).toBe('waiting-human');
+    expect(result.done).toBe(true);
+    expect(result.state.context.pendingInterrupts).toHaveLength(1);
+    expect(result.state.context.pendingInterrupts![0].request.toolCallId).toBe('call_ask');
+    expect(ctx.executionPolicy.onToolError).toHaveBeenCalledTimes(1);
+  });
+
+  // ── P1-b: surfacing ALL suspended requests + resume guard ─────────────────
+
+  it(
+    'runner double-ask: RunResult carries BOTH requests; answering only one then run() trips the resume guard',
+    { timeout: 10000 },
+    async () => {
+      const { AgentRunner } = await import('../../../src/runner/index.js');
+      const { respond } = await import('../../../src/hitl/respond.js');
+      const { removePendingInterrupt } = await import('../../../src/hitl/interrupts.js');
+      const { createAskHumanTool } = await import('../../../src/tools/ask-human.js');
+
+      const mockLLM = {
+        call: vi.fn(),
+        stream: vi.fn().mockImplementation(async function* () {
+          yield {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc_ask_1',
+              name: 'ask_human',
+              arguments: { questions: [{ id: 'q1', question: 'first?', type: 'text' }] },
+            },
+          };
+          yield {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc_ask_2',
+              name: 'ask_human',
+              arguments: { questions: [{ id: 'q2', question: 'second?', type: 'text' }] },
+            },
+          };
+          yield { type: 'done', roundTotalTokens: { input: 50, output: 20 } };
+        }),
+        getModelMeta: vi.fn().mockReturnValue({ contextWindow: 128000, maxTokens: 4096 }),
+      };
+
+      const runner = new AgentRunner({ llmClient: mockLLM as any, model: 'test-model' });
+      runner.registerTool(
+        createAskHumanTool(async ({ questions, context }) => ({
+          type: 'suspend' as const,
+          questions,
+          context,
+        }))
+      );
+
+      const { state: runState, result } = await runner.run(makeState());
+      expect(result.type).toBe('waiting-human');
+
+      // ① The host can SEE everything it must answer (both requests).
+      if (result.type === 'waiting-human') {
+        expect(result.requests).toHaveLength(2);
+        expect(result.requests.map((r) => r.toolCallId).sort()).toEqual(['tc_ask_1', 'tc_ask_2']);
+        expect(result.request.toolCallId).toBe(result.requests[0].toolCallId);
+      }
+      expect(runState.context.pendingInterrupts).toHaveLength(2);
+
+      // ② Answer ONLY the first, then resume — the guard must go red with a
+      // diagnosable error instead of letting the LLM call go out with a
+      // dangling tool_call id (provider 400).
+      const first = runState.context.pendingInterrupts!.find(
+        (p) => p.request.toolCallId === 'tc_ask_1'
+      )!.request;
+      let state = respond(runState, first, {
+        type: 'question',
+        answers: { q1: { type: 'direct', value: 'A' } },
+      });
+      state = removePendingInterrupt(state, 'tc_ask_1');
+
+      const { result: guardResult } = await runner.run(state);
+      expect(guardResult.type).toBe('error');
+      if (guardResult.type === 'error') {
+        expect(guardResult.error.message).toContain('tc_ask_2');
+        expect(guardResult.error.message).toMatch(/pending human interrupt|answer/i);
+      }
+
+      // Answering the remaining one clears the guard path (both toolCalls
+      // now have tool results — runnable again).
+      const second = state.context.pendingInterrupts!.find(
+        (p) => p.request.toolCallId === 'tc_ask_2'
+      )!.request;
+      state = respond(state, second, {
+        type: 'question',
+        answers: { q2: { type: 'direct', value: 'B' } },
+      });
+      state = removePendingInterrupt(state, 'tc_ask_2');
+      const { result: afterBoth } = await runner.run(state);
+      expect(afterBoth.type).not.toBe('error');
+    }
+  );
 });

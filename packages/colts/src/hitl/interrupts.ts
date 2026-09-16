@@ -40,6 +40,12 @@ export function retargetToolCallId(request: HumanRequest, id: string): HumanRequ
 /**
  * Insert the request into `context.pendingInterrupts`, deduped by
  * toolCallId (idempotent — the run loop re-upserts resumed requests).
+ *
+ * Only requests the kernel has already retargeted to the LLM's action.id
+ * belong here (the executing-tool handler does this uniformly). Host-bridge
+ * ids (`human-<uuid>`) must never be upserted as-is: the wrangler bridge's
+ * dual-id window (frontend requestId vs action.id) is handed over to the
+ * wrangler batch (R2P-165) — the kernel-side contract is "retargeted only".
  */
 export function upsertPendingInterrupt(state: AgentState, request: HumanRequest): AgentState {
   return produce(state, (draft) => {

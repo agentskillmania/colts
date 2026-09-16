@@ -62,7 +62,13 @@ export type Phase =
   | { type: 'tool-result'; results: Record<string, unknown> }
   | { type: 'completed'; answer: string }
   | { type: 'error'; error: Error }
-  | { type: 'waiting-human'; request: HumanRequest };
+  | {
+      /** First (primary) suspended request — kept for single-question consumers */
+      type: 'waiting-human';
+      request: HumanRequest;
+      /** ALL suspended requests this advance collected (parallel double-ask); request === requests[0] */
+      requests: HumanRequest[];
+    };
 
 /**
  * Result of a single step (one ReAct cycle)
@@ -79,7 +85,14 @@ export type StepResult =
   | { type: 'error'; error: Error; tokens: TokenStats; duration: number }
   | { type: 'abort'; tokens: TokenStats; duration: number }
   | { type: 'stopped'; data?: unknown; tokens: TokenStats; duration: number }
-  | { type: 'waiting-human'; request: HumanRequest; tokens: TokenStats; duration: number };
+  | {
+      type: 'waiting-human';
+      request: HumanRequest;
+      /** ALL suspended requests (parallel double-ask); request === requests[0] */
+      requests: HumanRequest[];
+      tokens: TokenStats;
+      duration: number;
+    };
 
 /**
  * Events emitted during step/advance stream
@@ -123,7 +136,13 @@ export type StreamEvent =
       timestamp: number;
     }
   | { type: 'thinking'; content: string; timestamp: number }
-  | { type: 'waiting-human'; request: HumanRequest; timestamp: number };
+  | {
+      type: 'waiting-human';
+      request: HumanRequest;
+      /** ALL suspended requests (parallel double-ask); request === requests[0] */
+      requests: HumanRequest[];
+      timestamp: number;
+    };
 
 /**
  * Options for advance execution
@@ -242,6 +261,8 @@ export type RunResult =
   | {
       type: 'waiting-human';
       request: HumanRequest;
+      /** ALL suspended requests (parallel double-ask); request === requests[0] */
+      requests: HumanRequest[];
       totalSteps: number;
       tokens: TokenStats;
       duration: number;

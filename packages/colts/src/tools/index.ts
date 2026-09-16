@@ -25,6 +25,7 @@ export {
   type HumanResponse,
   type AskHumanHandler,
   type AskSuspendSignal,
+  type AskOutcome,
 } from './ask-human.js';
 
 export {

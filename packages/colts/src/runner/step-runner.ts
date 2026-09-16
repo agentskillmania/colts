@@ -242,6 +242,7 @@ export class StepRunner {
             result: {
               type: 'waiting-human',
               request: chain.stopResult.phase.request,
+              requests: chain.stopResult.phase.requests,
               tokens: stepTokens,
               duration: 0,
             },
@@ -315,6 +316,7 @@ export class StepRunner {
             result: {
               type: 'waiting-human',
               request: chain.stopResult.phase.request,
+              requests: chain.stopResult.phase.requests,
               tokens: stepTokens,
               duration: 0,
             },
@@ -398,13 +400,15 @@ export class StepRunner {
     // (typed ToolSuspensionError): the step ends in waiting-human — the run
     // loop maps it to a waiting-human RunResult via the execution policy.
     // Mirrors Rust's step loop breaking naturally on the terminal
-    // waiting-human phase; here the mapping must be explicit.
+    // waiting-human phase; here the mapping must be explicit. The full
+    // requests array travels along (parallel double-ask surfacing).
     if (effectiveResult.done && effectiveResult.phase.type === 'waiting-human') {
       return {
         state: currentState,
         result: {
           type: 'waiting-human',
           request: effectiveResult.phase.request,
+          requests: effectiveResult.phase.requests,
           tokens: stepTokens,
           duration: 0,
         },

@@ -91,7 +91,7 @@ export class HitlMiddleware implements AgentMiddleware {
     return {
       state,
       execState,
-      phase: { type: 'waiting-human', request },
+      phase: { type: 'waiting-human', request, requests: [request] },
       done: true,
     };
   }

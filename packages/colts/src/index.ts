@@ -89,6 +89,7 @@ export {
   type HumanResponse,
   type AskHumanHandler,
   type AskSuspendSignal,
+  type AskOutcome,
   type ConfirmHandler,
   type ConfirmableRegistryOptions,
 } from './tools/index.js';

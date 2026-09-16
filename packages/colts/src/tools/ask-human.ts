@@ -73,12 +73,16 @@ export interface AskSuspendSignal {
 }
 
 /**
- * Discriminant for {@link AskSuspendSignal} within the handler outcome
- * union (answers are a plain `Record`, so the `type` key is unambiguous).
+ * ask_human handler outcome (Rust `AskOutcome` vocabulary): the human's
+ * answers (blocking mode), or a suspend signal (non-blocking HITL).
  */
-export function isAskSuspendSignal(
-  outcome: HumanResponse | AskSuspendSignal
-): outcome is AskSuspendSignal {
+export type AskOutcome = HumanResponse | AskSuspendSignal;
+
+/**
+ * Discriminant for {@link AskSuspendSignal} within {@link AskOutcome}
+ * (answers are a plain `Record`, so the `type` key is unambiguous).
+ */
+export function isAskSuspendSignal(outcome: AskOutcome): outcome is AskSuspendSignal {
   return (
     typeof outcome === 'object' &&
     outcome !== null &&
@@ -97,7 +101,7 @@ export type AskHumanHandler = (params: {
   questions: Question[];
   context?: string;
   signal?: AbortSignal;
-}) => Promise<HumanResponse | AskSuspendSignal>;
+}) => Promise<AskOutcome>;
 
 // ============================================================
 // Zod schema
@@ -162,6 +166,14 @@ export function createAskHumanTool(handler: AskHumanHandler): Tool<typeof askHum
     execute: async ({ questions, context }, options) => {
       const outcome = await handler({ questions, context, signal: options?.signal });
       if (isAskSuspendSignal(outcome)) {
+        // A suspend with nothing to ask is a host bug — surface it as a
+        // plain tool error (error-policy path), never as a suspension:
+        // an empty/undefined question list must not reach pendingInterrupts.
+        if (!outcome.questions || outcome.questions.length === 0) {
+          throw new Error(
+            'ask_human suspend signal requires at least one question (got none — refusing to suspend with an empty question list)'
+          );
+        }
         // Typed suspension: the tool layer converts the host's suspend
         // signal into ToolSuspensionError; the kernel's executing-tool
         // handler intercepts it before the error policy, anchors the id to
