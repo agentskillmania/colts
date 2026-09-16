@@ -106,10 +106,11 @@ function createStateWithToolMessages(toolSizes: number[]): AgentState {
 describe('DefaultContextCompressor - Constructor', () => {
   it('should use default config values', () => {
     const compressor = new DefaultContextCompressor();
-    const state = createStateWithMessages(49);
+    // R2P-102(对齐 Rust 6817c6c):threshold 默认 50→120,工具密集对话几轮就到 50 条。
+    const state = createStateWithMessages(119);
     expect(compressor.shouldCompress(state)).toBe(false);
 
-    const state2 = createStateWithMessages(50);
+    const state2 = createStateWithMessages(120);
     expect(compressor.shouldCompress(state2)).toBe(true);
   });
 
@@ -188,8 +189,8 @@ describe('DefaultContextCompressor - Constructor', () => {
 // shouldCompress (token-based triggering)
 // ============================================================
 describe('DefaultContextCompressor - shouldCompress (token-based)', () => {
-  it('should trigger at 80% of contextWindowSize', () => {
-    // contextWindowSize=1000, 80%=800
+  it('should trigger at 90% of contextWindowSize', () => {
+    // R2P-103(对齐 Rust b4b0fe3):contextWindowSize=1000, 90%=900
     const compressor = new DefaultContextCompressor({
       contextWindowSize: 1000,
       threshold: 100, // message count fallback
@@ -202,12 +203,12 @@ describe('DefaultContextCompressor - shouldCompress (token-based)', () => {
       msg.tokenCount = 100;
     });
 
-    // 10 messages * 100 tokens = 1000 tokens >= 800 (80%)
+    // 10 messages * 100 tokens = 1000 tokens >= 900 (90%)
     expect(compressor.shouldCompress(state)).toBe(true);
   });
 
-  it('should not trigger below 80% of contextWindowSize', () => {
-    // contextWindowSize=1000, 80%=800
+  it('should not trigger below 90% of contextWindowSize', () => {
+    // R2P-103(对齐 Rust b4b0fe3):contextWindowSize=1000, 90%=900
     const compressor = new DefaultContextCompressor({
       contextWindowSize: 1000,
       threshold: 100,
@@ -220,7 +221,7 @@ describe('DefaultContextCompressor - shouldCompress (token-based)', () => {
       msg.tokenCount = 100;
     });
 
-    // 5 messages * 100 tokens = 500 tokens < 800 (80%)
+    // 5 messages * 100 tokens = 500 tokens < 900 (90%)
     expect(compressor.shouldCompress(state)).toBe(false);
   });
 
@@ -237,14 +238,14 @@ describe('DefaultContextCompressor - shouldCompress (token-based)', () => {
       msg.tokenCount = 100;
     });
 
-    // Add existing compression with 300-token summary
+    // Add existing compression with 400-token summary
     state.context.compression = {
-      summary: 'x'.repeat(1200), // ~300 tokens
+      summary: 'x'.repeat(1600), // ~400 tokens
       anchor: 0,
-      summaryTokenCount: 300,
+      summaryTokenCount: 400,
     };
 
-    // 5 messages * 100 + 300 summary = 800 tokens >= 800 (80%)
+    // 5 messages * 100 + 400 summary = 900 tokens >= 900 (90%)
     expect(compressor.shouldCompress(state)).toBe(true);
   });
 
@@ -268,7 +269,7 @@ describe('DefaultContextCompressor - shouldCompress (token-based)', () => {
       summaryTokenCount: 100,
     };
 
-    // 5 messages * 100 + 100 summary = 600 tokens < 800 (80%)
+    // 5 messages * 100 + 100 summary = 600 tokens < 900 (90%)
     expect(compressor.shouldCompress(state)).toBe(false);
   });
 });

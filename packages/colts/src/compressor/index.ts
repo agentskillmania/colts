@@ -32,6 +32,14 @@ const summaryFormat = `## Key Findings
 [constraints and preferences revealed during conversation]`;
 
 /**
+ * 窗口触发系数：估算占用 ≥ 模型窗口的 90% 才自动压缩（留 10% 余量
+ * 吸收估算误差 —— estimateEffectiveTokens 不含系统提示/技能注入，
+ * 是下界口径）。90 以前是 80，对大窗口模型过于严格，压缩来得太早。
+ * （R2P-103，对齐 Rust b4b0fe3）
+ */
+const WINDOW_TRIGGER_RATIO = 0.9;
+
+/**
  * Default context compressor implementation
  *
  * Supports two strategies:
@@ -39,7 +47,7 @@ const summaryFormat = `## Key Findings
  * - summarize: Call LLM to generate structured summary of old messages
  *
  * Compression triggering:
- * - If contextWindowSize is set: trigger when estimated tokens (from anchor onwards) >= 80% of contextWindow
+ * - If contextWindowSize is set: trigger when estimated tokens (from anchor onwards) >= 90% of contextWindow
  * - If not set: fall back to message count threshold (backward compatible)
  *
  * Pipeline:
@@ -50,7 +58,7 @@ const summaryFormat = `## Key Findings
  * @example
  * ```typescript
  * const compressor = new DefaultContextCompressor(
- *   { strategy: 'summarize', threshold: 50, keepRecent: 10, contextWindowSize: 128000, pruneThreshold: 150 },
+ *   { strategy: 'summarize', threshold: 120, keepRecent: 10, contextWindowSize: 128000, pruneThreshold: 150 },
  *   llmProvider,
  *   'gpt-4',
  * );
@@ -76,7 +84,7 @@ export class DefaultContextCompressor {
    * @throws Error if summarize strategy is used without an LLM provider
    */
   constructor(config?: CompressionConfig, llmProvider?: ILLMProvider, model?: string) {
-    this.threshold = config?.threshold ?? 50;
+    this.threshold = config?.threshold ?? 120;
     this.strategy = (config?.strategy ?? 'truncate') as 'truncate' | 'summarize';
     this.keepRecent = config?.keepRecent ?? 10;
     this.llmProvider = llmProvider;
@@ -101,7 +109,7 @@ export class DefaultContextCompressor {
    *
    * Triggering logic:
    * - If contextWindowSize is set: estimate tokens from anchor onwards (including existing summary)
-   *   and trigger when >= 80% of contextWindow
+   *   and trigger when >= 90% of contextWindow (WINDOW_TRIGGER_RATIO)
    * - If not set: fall back to message count threshold (backward compatible)
    *
    * @param state - Current agent state
@@ -114,7 +122,7 @@ export class DefaultContextCompressor {
     // Token-based triggering (when contextWindowSize is configured)
     if (this.contextWindowSize) {
       const effectiveTokens = this.estimateEffectiveTokens(state, existingAnchor);
-      const triggerThreshold = Math.floor(this.contextWindowSize * 0.8);
+      const triggerThreshold = Math.floor(this.contextWindowSize * WINDOW_TRIGGER_RATIO);
       return effectiveTokens >= triggerThreshold;
     }
 
@@ -158,11 +166,14 @@ export class DefaultContextCompressor {
 
     // Step 3: Truncate (set anchor)
     let anchor = Math.max(existingAnchor, messages.length - this.keepRecent);
-    // Skill instructions must stay visible: never let anchor skip past a load_skill tool result.
-    // CONSEQUENCE (by-design): once a load_skill result lands at the anchor, the anchor
-    // is pinned there forever — summarize/truncate can no longer advance past it, so only
-    // prune (on non-skill tool outputs) continues to reclaim tokens. This is intentional:
-    // skill instructions must persist for the agent's lifetime (skill persistence redesign).
+    // Skill instructions must stay visible: never let anchor skip past (advance beyond) a
+    // load_skill tool result. CONSEQUENCE (by-design): once a load_skill result ends up at
+    // or after the anchor, the anchor can no longer advance past it — summarize/truncate
+    // are frozen at that bound, so only prune (on non-skill tool outputs) continues to
+    // reclaim tokens. This is intentional: skill instructions must persist for the agent's
+    // lifetime (skill persistence redesign). R2P-102 note: the user-message rule below may
+    // still back the anchor UP past the pin (keeping more context); it only ever moves the
+    // anchor earlier, so the skill result stays visible either way.
     for (let i = existingAnchor; i < anchor; i++) {
       if (messages[i].role === 'tool' && messages[i].toolName === 'load_skill') {
         anchor = i;
@@ -170,21 +181,26 @@ export class DefaultContextCompressor {
       }
     }
 
-    // Ensure the anchor never splits an assistant `toolCalls` message from its
-    // following `tool` result(s). If the message immediately before the anchor
-    // is an assistant message carrying toolCalls, back the anchor up to include
-    // it in the sent window. Otherwise the assembler would emit an orphan
-    // `role:"tool"` whose toolCallId points at a dropped assistant message —
-    // rejected by the LLM as "Messages with role 'tool' must be a response to a
-    // preceding message with 'tool_calls'". Mirrors the Rust port
-    // (crates/colts/src/compressor.rs).
+    // anchor 只能落在用户消息上——天然闭合所有配对（toolCalls→tool 结果、
+    // reasoningContent→assistant）。用户消息打断一切序列，从它开始组装
+    // 永远不会产出孤儿消息。逐 case 回退（旧方案只查一步 assistant+
+    // toolCalls）覆盖不了连续 tool 结果的场景：anchor 落在 tool 上时，
+    // 它的父 action 可能在 3 步之外。（R2P-102，对齐 Rust 6817c6c）
     while (anchor > existingAnchor && anchor > 0) {
-      const prev = messages[anchor - 1];
-      if (prev.role === 'assistant' && prev.toolCalls && prev.toolCalls.length > 0) {
-        anchor -= 1;
-        continue;
+      if (messages[anchor]?.role === 'user') {
+        break;
       }
-      break;
+      anchor -= 1;
+    }
+
+    // 没找到安全边界（只剩第一句用户消息，或没有用户消息）→ 不压缩，
+    // 保留全部上下文。宁可上下文长，不给 API 发坏数据。
+    if (messages[anchor]?.role !== 'user') {
+      return {
+        summary: state.context.compression?.summary ?? '',
+        anchor: existingAnchor,
+        prunedMessages,
+      };
     }
 
     // Nothing to compress

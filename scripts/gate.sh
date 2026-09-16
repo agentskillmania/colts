@@ -29,8 +29,11 @@ assert_no_skipped() {
   local log="$1"
   # 已知例外：llm-client 03-multi-key-switching 的 2 个用例在 apiKey2 未配置时
   # itif 跳过（可选能力，需第二把真实 key）。允许恰好 2 个 skip，超出即失败。
+  # 只数 vitest 汇总行（"Tests  N passed | M skipped"）——文件行
+  # "✓ xxx.test.ts (3 tests | 2 skipped)" 描述的是同一批 skip，一起求和会把
+  # 已知的 2 个数成 4 而误判假绿。
   local n
-  n="$(grep -oE '[0-9]+ skipped' "$log" | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo 0)"
+  n="$(grep -oE 'passed \| [0-9]+ skipped' "$log" | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo 0)"
   if [ "${n:-0}" -gt 2 ]; then
     echo "_GATE_FAIL 存在 ${n} 个 skipped 集成用例（已知例外上限 2：multi-key apiKey2 未配）——疑似假绿，禁止提交"
     exit 1

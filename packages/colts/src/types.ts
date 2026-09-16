@@ -374,7 +374,7 @@ export type CompressionThresholdType = 'message-count' | 'estimated-tokens';
  * Configuration for the built-in DefaultContextCompressor
  */
 export interface CompressionConfig {
-  /** Compression threshold (default: 50) */
+  /** Compression threshold (default: 120) */
   threshold?: number;
   /** Threshold type (default: 'message-count') */
   thresholdType?: CompressionThresholdType;
