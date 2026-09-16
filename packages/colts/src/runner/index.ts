@@ -99,8 +99,18 @@ export interface RunnerEventMap {
   // ── Context compression (aligned with StreamEvent) ──
   /** Compression started */
   compressing: { timestamp: number };
-  /** Compression completed */
-  compressed: { summary: string; removedCount: number; timestamp: number };
+  /**
+   * Compression completed. `coveredMessages` 是本轮新覆盖的消息条数
+   * （anchor 增量，无歧义消息数）——`removedCount` 的单位随路径而变
+   * （自动压缩=token 数、/compact=消息数，历史遗留），时间线标记以
+   * coveredMessages 为准。（R2P-104，对齐 Rust 7d964e5）
+   */
+  compressed: {
+    summary: string;
+    removedCount: number;
+    coveredMessages: number;
+    timestamp: number;
+  };
 
   // ── Skill (aligned with StreamEvent) ──
   /** Skill loading */
@@ -867,6 +877,10 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             this.emit('compressed', {
               summary: currentState.context.compression.summary,
               removedCount: newAnchor - prevAnchor,
+              // 本轮新覆盖的消息条数（anchor 增量）——无歧义消息数，
+              // 与 removedCount 的单位歧义脱钩；放弃/no-op 时增量为 0
+              // （saturating，对齐 Rust saturating_sub）。R2P-104。
+              coveredMessages: Math.max(0, newAnchor - prevAnchor),
               timestamp: Date.now(),
             });
           }

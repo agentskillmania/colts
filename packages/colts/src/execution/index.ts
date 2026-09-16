@@ -95,7 +95,14 @@ export type StreamEvent =
   | { type: 'tools:end'; results: Record<string, unknown>; timestamp: number }
   | { type: 'error'; error: Error; context: { toolName?: string; step: number }; timestamp: number }
   | { type: 'compressing'; timestamp: number }
-  | { type: 'compressed'; summary: string; removedCount: number; timestamp: number }
+  | {
+      type: 'compressed';
+      summary: string;
+      removedCount: number;
+      /** 本轮新覆盖的消息条数（anchor 增量，无歧义消息数；removedCount 单位随路径而变） */
+      coveredMessages: number;
+      timestamp: number;
+    }
   | { type: 'skill:loading'; name: string; timestamp: number }
   | { type: 'skill:loaded'; name: string; tokenCount: number; timestamp: number }
   | { type: 'skill:start'; name: string; task: string; state?: AgentState; timestamp: number }

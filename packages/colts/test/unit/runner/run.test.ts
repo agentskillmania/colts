@@ -295,6 +295,121 @@ describe('run() event emission', () => {
     expect(events).toEqual(['compressing', 'compressed', 'compressing', 'compressed']);
   });
 
+  it('should emit coveredMessages (per-round anchor delta) on every compressed event (R2P-104)', async () => {
+    // removedCount 的单位随路径而变（历史遗留），时间线标记需要无歧义的
+    // 消息条数——coveredMessages = 本轮 anchor 增量（新 anchor − prevAnchor）。
+    // 注意时序：StepRunner 每步内部还有静默 maybeCompress（不发射事件但推进
+    // anchor），故 mock 的 anchor 必须是 existingAnchor 的纯函数——每次调用
+    // 恒 +2，则无论内部交织多少次，每轮发射的增量都精确为 2（对齐 Rust
+    // 7d964e5：时间线标记以本字段为准）。
+    const toolCallResponse: LLMResponse = {
+      content: 'Calculating',
+      toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+    const finalResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([
+      toolCallResponse,
+      toolCallResponse,
+      toolCallResponse,
+      finalResponse,
+    ]);
+
+    const mockCompressor: import('../../../src/types.js').IContextCompressor = {
+      shouldCompress: vi.fn().mockReturnValue(true),
+      compress: vi.fn().mockImplementation((state: import('../../../src/types.js').AgentState) => {
+        const existingAnchor = state.context.compression?.anchor ?? 0;
+        return Promise.resolve({
+          summary: 'Test summary',
+          anchor: existingAnchor + 2,
+        });
+      }),
+    };
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculate',
+      description: 'Calculate',
+      parameters: z.object({ expression: z.string() }),
+      execute: async ({ expression }) => safeEval(expression).toString(),
+    });
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      compressor: mockCompressor,
+    });
+
+    const state = createAgentState(defaultConfig);
+
+    const payloads: Array<{ coveredMessages?: number }> = [];
+    runner.on('compressed', (e) => payloads.push(e));
+
+    await runner.run(state, undefined, registry);
+
+    // 三轮发射，每轮 anchor 增量都是 2——杀「累计 anchor」「只在首轮算增量」
+    // 「漏字段」等变异实现
+    expect(payloads.map((p) => p.coveredMessages)).toEqual([2, 2, 2]);
+  });
+
+  it('should emit coveredMessages 0 when the anchor makes no progress (R2P-104)', async () => {
+    // 放弃/no-op：compressor 不推进 anchor（返回 existingAnchor）→ 本轮
+    // 没有盖住任何消息。事件仍发射（压缩元数据已写入），但增量为 0。
+    const toolCallResponse: LLMResponse = {
+      content: 'Calculating',
+      toolCalls: [{ id: 'call-1', name: 'calculate', arguments: { expression: '1+1' } }],
+      tokens: mockTokens,
+      stopReason: 'tool_calls',
+    };
+    const finalResponse: LLMResponse = {
+      content: 'Answer',
+      toolCalls: [],
+      tokens: mockTokens,
+      stopReason: 'stop',
+    };
+
+    const client = createMockLLMClient([toolCallResponse, toolCallResponse, finalResponse]);
+
+    const mockCompressor: import('../../../src/types.js').IContextCompressor = {
+      shouldCompress: vi.fn().mockReturnValue(true),
+      compress: vi.fn().mockImplementation((state: import('../../../src/types.js').AgentState) => {
+        const existingAnchor = state.context.compression?.anchor ?? 0;
+        return Promise.resolve({ summary: 'no progress', anchor: existingAnchor });
+      }),
+    };
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'calculate',
+      description: 'Calculate',
+      parameters: z.object({ expression: z.string() }),
+      execute: async ({ expression }) => safeEval(expression).toString(),
+    });
+
+    const runner = new AgentRunner({
+      model: 'gpt-4',
+      llmClient: client,
+      compressor: mockCompressor,
+    });
+
+    const state = createAgentState(defaultConfig);
+
+    const payloads: Array<{ coveredMessages?: number }> = [];
+    runner.on('compressed', (e) => payloads.push(e));
+
+    await runner.run(state, undefined, registry);
+
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(payloads.map((p) => p.coveredMessages)).toEqual(Array(payloads.length).fill(0));
+  });
+
   it('should emit abort event when custom policy returns abort in run()', async () => {
     const client = createMockLLMClient([
       { content: 'Hello', toolCalls: [], tokens: mockTokens, stopReason: 'stop' },

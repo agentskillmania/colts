@@ -322,6 +322,13 @@ export interface CompressResult {
   summary: string;
   /** Boundary index: messages[0..anchor-1] compressed, messages[anchor..] kept as-is */
   anchor: number;
+  /**
+   * 本次压缩新覆盖的消息条数（anchor 增量：新 anchor − existingAnchor）。
+   * removedCount 的单位随路径而变（自动压缩=token 数、/compact=消息数，历史
+   * 遗留），时间线标记需要无歧义的消息条数——以此字段为准。放弃/no-op
+   * 路径 anchor 无进展 → 0。（R2P-104，对齐 Rust 7d964e5）
+   */
+  coveredMessages?: number;
   /** Estimated token count of the summary text */
   summaryTokenCount?: number;
   /** Estimated token count of messages that were summarized */
