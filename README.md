@@ -19,7 +19,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/agentskillmania/colts.git
+git clone https://gitee.com/agentskillmania/colts.git
 cd colts
 
 # Install dependencies (pnpm is enforced)

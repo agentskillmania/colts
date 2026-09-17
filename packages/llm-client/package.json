@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/agentskillmania/colts.git",
+    "url": "https://gitee.com/agentskillmania/colts.git",
     "directory": "packages/llm-client"
   },
   "main": "./dist/index.js",

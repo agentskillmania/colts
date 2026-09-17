@@ -19,7 +19,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/agentskillmania/colts.git
+git clone https://gitee.com/agentskillmania/colts.git
 cd colts
 
 # 安装依赖（强制使用 pnpm）
