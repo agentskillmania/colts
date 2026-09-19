@@ -9,11 +9,11 @@
 
 ## 包列表
 
-| 包 | 说明 |
-|---------|-------------|
-| [`@agentskillmania/colts`](./packages/colts/) | 核心 ReAct Agent 框架 —— 无状态 runner、不可变状态、三级执行控制、事件驱动架构、上下文压缩、技能和子代理 |
-| [`@agentskillmania/llm-client`](./packages/llm-client/) | 统一 LLM 客户端 —— 多 provider 支持、三级并发控制、优先级队列和 token 统计 |
-| [`@agentskillmania/settings-yaml`](./packages/settings-yaml/) | YAML 配置管理库 —— 深度合并、默认值回退和运行时覆盖 |
+| 包                                                            | 说明                                                                                                     |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [`@agentskillmania/colts`](./packages/colts/)                 | 核心 ReAct Agent 框架 —— 无状态 runner、不可变状态、三级执行控制、事件驱动架构、上下文压缩、技能和子代理 |
+| [`@agentskillmania/llm-client`](./packages/llm-client/)       | 统一 LLM 客户端 —— 多 provider 支持、三级并发控制、优先级队列和 token 统计                               |
+| [`@agentskillmania/settings-yaml`](./packages/settings-yaml/) | YAML 配置管理库 —— 深度合并、默认值回退和运行时覆盖                                                      |
 
 ## 安装
 
@@ -30,11 +30,13 @@ pnpm install
 
 ```typescript
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
-import { LLMClient } from '@agentskillmania/colts/llm';   // 内置 LLM 入口（可选）
+import { LLMClient } from '@agentskillmania/colts/llm'; // 内置 LLM 入口（可选）
 
 const runner = new AgentRunner({
   model: 'gpt-4o',
-  llmClient: LLMClient.quickInit({ providers: [{ name: 'openai', apiKey, models: [{ modelId: 'gpt-4o' }] }] }),
+  llmClient: LLMClient.quickInit({
+    providers: [{ name: 'openai', apiKey, models: [{ modelId: 'gpt-4o' }] }],
+  }),
 });
 
 let state = createAgentState({ name: 'agent', instructions: '...', tools: [] });
@@ -48,10 +50,10 @@ const { result } = await runner.run(state);
 
 主入口（`@agentskillmania/colts`）平台无关——没有 `node:` 导入、不捆绑 LLM 运行时：
 
-| 能力 | 主入口 | 按需入口 |
-|------|--------|----------|
-| 内置 LLM 客户端 | 不捆绑 | `@agentskillmania/colts/llm`（re-export `LLMClient`；仅 import 时才解析 llm-client 及其 pi-ai 适配器） |
-| Node 技能文件系统 | 不捆绑 | `@agentskillmania/colts/skills/node-fs-ops`（`nodeFsOps`） |
+| 能力              | 主入口 | 按需入口                                                                                               |
+| ----------------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| 内置 LLM 客户端   | 不捆绑 | `@agentskillmania/colts/llm`（re-export `LLMClient`；仅 import 时才解析 llm-client 及其 pi-ai 适配器） |
+| Node 技能文件系统 | 不捆绑 | `@agentskillmania/colts/skills/node-fs-ops`（`nodeFsOps`）                                             |
 
 注入自己的 `ILLMProvider`（如浏览器原生 fetch 实现）或自己的 `SkillFsOps`（如 OPFS 实现）无需任何 cast——所有接口类型（`Message`、`LLMTool`、`StreamEvent`、`SkillFsOps`）都是本 monorepo 的一等平台无关类型。
 
@@ -62,6 +64,26 @@ const { result } = await runner.run(state);
 ### 事件
 
 runner 是 `EventEmitter`（token / thinking / 工具 / 相位变更 / 技能 / 子代理事件）——见 [colts 包 README](./packages/colts/README.zh_CN.md#事件系统)。
+
+## 版本说明
+
+### 0.5.0（当前 alpha：`0.5.0-alpha.x`，`npm i @agentskillmania/colts@alpha`）
+
+新能力：
+
+- **每轮用量** —— 每条 assistant 消息带 `usage`（`TurnUsage`：输入/输出/缓存 token + 耗时），落在每轮末条。
+- **HITL 持久性** —— `context.pendingInterrupts` 落盘未答人工问题；waiting-human 结果带全量 `requests: HumanRequest[]`；应答会把 `tool_call_id` 改写到模型 action id。
+- **前缀缓存友好** —— 工具/技能顺序确定化；时间上下文从系统提示头部挪到尾部 `<system-reminder>` 行；压缩标记与 `compressed` 事件的 `coveredMessages`。
+- **多模态输入声明** —— 模型声明 `input: ["text","image"]`；未声明却带图请求由客户端拒绝（`LLMClientValidationError`）。
+- **具名限额常量** —— `DEFAULT_REQUEST_TIMEOUT_MS`、`DEFAULT_RUNNER_MAX_STEPS`、`RUN_HARD_LIMIT`。
+
+破坏性变更（完整列表见 [CHANGELOG](./CHANGELOG.md)）：
+
+1. `HitlMiddlewareOptions.askHumanToolName` 移除（挂起改由工具自身发信号）。
+2. `AskHumanHandler` 返回类型扩宽为 `HumanResponse | AskSuspendSignal`（向后兼容超集）。
+3. waiting-human 的 `Phase`/`StepResult`/`RunResult` 新增必填 `requests: HumanRequest[]`（构造方需补，读取方兼容）。
+4. `respond()` 已知类型不匹配改为抛错（原静默 no-op）。
+5. llm-client 对未声明图片输入能力的模型拒绝带图请求。
 
 ## 开发
 
