@@ -139,6 +139,18 @@ export {
 export { FilesystemSkillProvider, createLoadSkillTool } from './skills/index.js';
 export type { SkillFsOps } from './skills/fs-ops.js';
 export { setDefaultSkillFsOps, getDefaultSkillFsOps } from './skills/fs-ops.js';
+// Skill signal vocabulary + the shared tool-result formatter (0.5.0-alpha.2):
+// hosts that build SWITCH_SKILL signals themselves (e.g. a `/skill:` command
+// path) must produce byte-identical tool results — use these instead of
+// mirroring the logic.
+export type { SkillSignal } from './skills/types.js';
+export { isSkillSignal } from './skills/types.js';
+export { formatSkillToolResult } from './skills/signal-handler.js';
+
+// Deterministic code-unit string ordering (0.5.0-alpha.2): the prefix-cache
+// contract requires name-sorted tool/skill listings; hosts sorting their own
+// collections must use the same comparator as the engine.
+export { compareByCodeUnit } from './utils/compare.js';
 
 // NOTE: nodeFsOps is intentionally NOT exported from the main entry — it
 // imports node:fs and would drag node: stubs into browser bundles. Import it
