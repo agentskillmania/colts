@@ -283,10 +283,20 @@ function buildEventsFixture() {
       'emitterOnly:true 表示该事件只在 EventEmitter 侧声明（无 yield/SSE 对应物：生命周期事件与部分过程事件，如 abort/todo:list）；yieldOnly:true 反之。名单直接读各事件的 channels/emitterOnly/yieldOnly，本 note 不逐一列举（免随实现漂移）。',
       'divergences 列出两侧都有的事件在 emitter 与 yield 上的差异：emitterOnly/yieldOnly 是字段集差、typeMismatches 是同名字段的类型或可选性差——任一项非空即线协议需显式对齐（消费方按 yield/SSE 为准；llm:request 的 model/contextWindow 是已知差异）。',
       'eventNames 是全部事件名的稳定排序（UTF-16 code unit），供两仓快照测试直接比对。',
+      'daemonInjected 列出 daemon 层（wrangler-daemon）在 SSE wire 构造时注入的加性字段——colts emitter/yield 两侧均无声明，fields/fieldTypes 也不含它们（手补进 fields 会随复跑还原且污染 emitter 语义；本节 generator-owned，复跑不丢）。',
     ],
     eventNames: names,
     events,
     divergences,
+    /**
+     * daemon 层注入字段（R2P-151/152）：seq 进每个对象 data 帧（会话内
+     * 单调，重连按它去重/补洞）；turnSeq 只进 done 帧（轮次归属）。值是
+     * 人类可读的注入范围描述——wrangler 侧快照测试断言键集，不锚文案。
+     */
+    daemonInjected: {
+      seq: 'all object-data frames (wire only)',
+      turnSeq: 'done frame',
+    },
   };
 }
 
