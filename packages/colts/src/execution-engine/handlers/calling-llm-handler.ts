@@ -7,7 +7,10 @@
  */
 
 import type { Message } from '@agentskillmania/llm-client';
+import { contentToPlainText } from '@agentskillmania/llm-client';
 
+import { hasFileRefParts } from '../../attachments/core.js';
+import { estimateContentTokens } from '../../compressor/index.js';
 import type {
   ExecutionState,
   AdvanceResult,
@@ -48,11 +51,13 @@ export class CallingLLMHandler implements IPhaseHandler {
     // re-reading config. getModelMeta is safe — always returns a ModelMeta.
     const modelMeta = ctx.llmProvider.getModelMeta(resolvedModel);
 
-    // Emit llm:request event before LLM call
+    // Emit llm:request event before LLM call. Multimodal parts degrade to
+    // plain text (image → "[image]") — the event payload must never carry
+    // base64. (R2P-107, aligned with Rust advance.rs Content::plain_text.)
     ctx.emit('llm:request', {
       messages: messages.map((m) => ({
         role: m.role,
-        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+        content: contentToPlainText(m.content),
       })),
       // Send name + description so dashboards can show tool tooltips.
       // (RunnerEventMap types `tools` as string[] for back-compat; consumers
@@ -67,6 +72,27 @@ export class CallingLLMHandler implements IPhaseHandler {
       timestamp: Date.now(),
     });
 
+    // `file:` attachment refs materialize onto the wire copy right before
+    // the LLM call — state, archive and the event above keep the ref form
+    // (base64 never lands anywhere persisted). Failure routes to the error
+    // phase like an LLM-call failure. (R2P-107, aligned with Rust
+    // calling_llm.rs; the node materializer is dynamically imported so the
+    // no-attachment fast path stays fs-free.)
+    let wireMessages = messages;
+    if (hasFileRefParts(messages)) {
+      const { materializeFileRefs } = await import('../../attachments/node.js');
+      try {
+        wireMessages = await materializeFileRefs(messages, ctx.options.attachmentDir);
+      } catch (error) {
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        ctx.emit('error', { error: errorObj, context: { step: 0 }, timestamp: Date.now() });
+        const nextExec = updateExecState(execState, (draft) => {
+          draft.phase = { type: 'error', error: errorObj };
+        });
+        return { state, execState: nextExec, phase: nextExec.phase, done: true };
+      }
+    }
+
     // Stream LLM response, accumulating content + emitting token events
     let accumulatedContent = '';
     let accumulatedThinking = '';
@@ -78,7 +104,7 @@ export class CallingLLMHandler implements IPhaseHandler {
     try {
       for await (const event of ctx.llmProvider.stream({
         model: resolvedModel,
-        messages,
+        messages: wireMessages,
         tools,
         requestTimeout: ctx.options.requestTimeout,
         thinkingEnabled: options?.thinkingEnabled ?? ctx.options.thinkingEnabled,
@@ -207,8 +233,7 @@ export class CallingLLMHandler implements IPhaseHandler {
       }));
 
     const estimatedContextSize = messages.reduce(
-      (sum, m) =>
-        sum + estimateTokens(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)),
+      (sum, m) => sum + estimateContentTokens(m.content),
       0
     );
 

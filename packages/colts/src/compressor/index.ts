@@ -12,6 +12,15 @@
  */
 
 import type {
+  MultimodalContent,
+  TextContent,
+  ImageContent,
+  ThinkingContent,
+  ToolCallContent,
+} from '@agentskillmania/llm-client';
+import { contentToPlainText } from '@agentskillmania/llm-client';
+
+import type {
   AgentState,
   ILLMProvider,
   CompressionConfig,
@@ -19,6 +28,44 @@ import type {
   Message,
 } from '../types.js';
 import { estimateTokens } from '../utils/tokens.js';
+
+/**
+ * Per-image token estimate for multimodal parts (parity with Rust
+ * compressor::IMAGE_PART_TOKEN_ESTIMATE — a rough proxy, never billed).
+ */
+export const IMAGE_PART_TOKEN_ESTIMATE = 1000;
+
+/**
+ * Token estimate for message content in either form: plain text is estimated
+ * as-is; parts estimate text/thinking by their text, image parts at a flat
+ * per-image constant (base64 blobs must never be fed to the estimator), and
+ * tool-call parts by their name + serialized arguments. Parity with Rust
+ * compressor::estimate_content_tokens (thinking/toolCall parts are the
+ * TS-side pi-ai shape superset).
+ */
+export function estimateContentTokens(
+  content: MultimodalContent | (TextContent | ImageContent | ThinkingContent | ToolCallContent)[]
+): number {
+  if (typeof content === 'string') return estimateTokens(content);
+  let total = 0;
+  for (const part of content) {
+    switch (part.type) {
+      case 'text':
+        total += estimateTokens(part.text);
+        break;
+      case 'thinking':
+        total += estimateTokens(part.thinking);
+        break;
+      case 'image':
+        total += IMAGE_PART_TOKEN_ESTIMATE;
+        break;
+      case 'toolCall':
+        total += estimateTokens(`${part.name}(${JSON.stringify(part.arguments)})`);
+        break;
+    }
+  }
+  return total;
+}
 
 /**
  * Structured summary format for LLM prompt
@@ -222,7 +269,7 @@ export class DefaultContextCompressor {
     // Calculate removed token count
     const messagesToCompress = messages.slice(existingAnchor, anchor);
     const removedTokenCount = messagesToCompress.reduce(
-      (sum, m) => sum + (m.tokenCount ?? estimateTokens(m.content)),
+      (sum, m) => sum + (m.tokenCount ?? estimateContentTokens(m.content)),
       0
     );
 
@@ -263,10 +310,10 @@ export class DefaultContextCompressor {
       if (msg.toolName === 'load_skill') continue;
 
       // Skip already-pruned stubs
-      if (msg.content.includes(', pruned]')) continue;
+      if (contentToPlainText(msg.content).includes(', pruned]')) continue;
 
       // Check if content exceeds threshold
-      const tokenCount = msg.tokenCount ?? estimateTokens(msg.content);
+      const tokenCount = msg.tokenCount ?? estimateContentTokens(msg.content);
       if (tokenCount > this.pruneThreshold) {
         const newContent = `[Tool result for ${msg.toolName ?? 'unknown'}: ${tokenCount} tokens, pruned]`;
         const newTokenCount = estimateTokens(newContent);
@@ -324,11 +371,12 @@ export class DefaultContextCompressor {
       throw new Error('LLM provider and model required for summarize strategy');
     }
 
-    // Build conversation text from messages
+    // Build conversation text from messages (multimodal parts degrade to
+    // plain text — base64 never enters the summarize prompt)
     const conversationText = messages
       .map((m) => {
         const prefix = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'Tool';
-        return `${prefix}: ${m.content}`;
+        return `${prefix}: ${contentToPlainText(m.content)}`;
       })
       .join('\n');
 
@@ -366,7 +414,7 @@ export class DefaultContextCompressor {
     // Add tokens from anchor onwards
     for (let i = anchor; i < state.context.messages.length; i++) {
       const msg = state.context.messages[i];
-      total += msg.tokenCount ?? estimateTokens(msg.content);
+      total += msg.tokenCount ?? estimateContentTokens(msg.content);
     }
 
     return total;

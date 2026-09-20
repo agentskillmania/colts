@@ -6,6 +6,8 @@
  * to preparing phase.
  */
 
+import { contentToPlainText } from '@agentskillmania/llm-client';
+
 import type { ExecutionState, AdvanceResult } from '../../execution/index.js';
 import { updateExecState } from '../../execution/index.js';
 import type { AgentState, Message as LocalMessage, MessageRole } from '../../types.js';
@@ -29,7 +31,9 @@ export class IdleHandler implements IPhaseHandler {
     const displayMessages: LocalMessage[] = messages.map((m) => ({
       id: globalThis.crypto.randomUUID(),
       role: m.role as MessageRole,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      // Multimodal parts degrade to plain text (image → "[image]") — the
+      // display payload must never carry base64. (R2P-107.)
+      content: contentToPlainText(m.content),
       timestamp: Date.now(),
     }));
     const nextExec = updateExecState(execState, (draft) => {

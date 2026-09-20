@@ -393,6 +393,7 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
         thinkingEnabled: this.options.thinkingEnabled,
         enablePromptThinking: this.options.enablePromptThinking,
         temperature: this.options.temperature,
+        attachmentDir: this.options.attachmentDir,
       },
       emit: (type: string, data: Record<string, unknown>) => {
         this.emit(type as keyof RunnerEventMap, data as never);

@@ -5,8 +5,11 @@
  * - All update operations return new state, original state remains unchanged
  */
 
+import type { TextContent, ImageContent } from '@agentskillmania/llm-client';
+import { contentToPlainText } from '@agentskillmania/llm-client';
 import { produce, Draft } from 'immer';
 
+import { estimateContentTokens } from '../compressor/index.js';
 import type { AgentState, AgentConfig, Message, TokenStats } from '../types.js';
 import { generateId } from '../utils/id.js';
 import { estimateTokens, addTokenStats } from '../utils/tokens.js';
@@ -61,15 +64,23 @@ export function updateState(
  * Add a user message to the conversation history.
  *
  * @param state - Current state
- * @param content - Message content
- * @param maxLength - Optional max character limit. Throws if exceeded.
+ * @param content - Message content: plain text or multimodal parts
+ *   (image `file:` refs stay as refs in the archive — materialization onto
+ *   the wire happens per LLM call, never here)
+ * @param maxLength - Optional max character limit, measured on the plain-text
+ *   form (parts degrade: image → `[image]`). Throws if exceeded.
  * @returns New state with the user message appended
- * @throws {Error} If content.length > maxLength
+ * @throws {Error} If plain-text length > maxLength
  */
-export function addUserMessage(state: AgentState, content: string, maxLength?: number): AgentState {
-  if (maxLength !== undefined && content.length > maxLength) {
+export function addUserMessage(
+  state: AgentState,
+  content: string | (TextContent | ImageContent)[],
+  maxLength?: number
+): AgentState {
+  const plain = contentToPlainText(content);
+  if (maxLength !== undefined && plain.length > maxLength) {
     throw new Error(
-      `Input exceeds maximum length of ${maxLength} characters (got ${content.length})`
+      `Input exceeds maximum length of ${maxLength} characters (got ${plain.length})`
     );
   }
   return updateState(state, (draft) => {
@@ -78,7 +89,7 @@ export function addUserMessage(state: AgentState, content: string, maxLength?: n
       role: 'user',
       content,
       timestamp: Date.now(),
-      tokenCount: estimateTokens(content),
+      tokenCount: estimateContentTokens(content),
     });
   });
 }

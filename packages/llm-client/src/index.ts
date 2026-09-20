@@ -93,6 +93,8 @@
  */
 
 export { LLMClient, LLMClientValidationError, type LLMClientOptions } from './client.js';
+// Runtime helper (value export — not part of the type-only block below).
+export { contentToPlainText } from './types.js';
 
 // Re-export all types
 export type {
@@ -137,6 +139,8 @@ export type {
   ThinkingContent,
   /** 图片内容块。 */
   ImageContent,
+  /** 用户/工具结果消息的 content 联合形态（纯文本或多模态 parts）。 */
+  MultimodalContent,
   /** 工具调用内容块。 */
   ToolCallContent,
   /** ToolCallContent 的兼容别名。 */

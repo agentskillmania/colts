@@ -5,7 +5,11 @@
  */
 
 // eslint-disable-next-line import/order
-import type { TokenStats as LLMTokenStats } from '@agentskillmania/llm-client';
+import type {
+  TokenStats as LLMTokenStats,
+  TextContent,
+  ImageContent,
+} from '@agentskillmania/llm-client';
 export type TokenStats = LLMTokenStats;
 
 /**
@@ -66,8 +70,14 @@ export interface Message {
   role: MessageRole;
   /** Unique message identifier (UUID v4) */
   id: string;
-  /** Message content */
-  content: string;
+  /**
+   * Message content: plain text (legacy form — old archives stay wire- and
+   * compat-identical) or multimodal parts (user messages with image
+   * attachments; `file:` refs stay as refs in the archive — base64 is
+   * materialized onto the wire copy only, right before the LLM call).
+   * (R2P-107, aligned with Rust llm_client::Content.)
+   */
+  content: string | (TextContent | ImageContent)[];
   /** Message type */
   type?: MessageType;
   /** Timestamp (milliseconds since epoch) */

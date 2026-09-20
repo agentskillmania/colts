@@ -26,11 +26,55 @@ export interface ThinkingContent {
   redacted?: boolean;
 }
 
-/** 图片内容块 */
+/**
+ * 图片内容块。
+ *
+ * 两种互斥形态：
+ * - 内联：`data`（纯 base64，不含 `data:` 前缀）+ `mimeType` —— pi-ai 适配器
+ *   序列化为 `image_url` 的 data URL 形态。
+ * - 引用：`ref` = `file:<相对路径>` —— 锚定调用方的附件目录（如会话目录），
+ *   由 runner 在发 LLM 前一刻物化为内联形态；存档与事件流只保留引用，
+ *   永不内联 base64。未经物化的 ref 到达 wire 会得到 `data:undefined` ——
+ *   物化器保证这不会发生。
+ */
 export interface ImageContent {
   type: 'image';
-  data: string;
-  mimeType: string;
+  /** 图片数据（纯 base64）。与 ref 二选一。 */
+  data?: string;
+  /** MIME 类型（data 形态必填，如 `image/png`）。 */
+  mimeType?: string;
+  /** `file:<相对路径>` 附件引用（见上）。与 data 二选一。 */
+  ref?: string;
+}
+
+/** UserMessage / ToolResultMessage 的 content 联合形态 */
+export type MultimodalContent = string | (TextContent | ImageContent)[];
+
+/**
+ * 把消息 content 降级为纯文本：图片 → `[image]` 占位，工具调用 →
+ * `[toolCall:<name>]` 标记，思考块保留原文，各 part 以 `\n` 连接。
+ * 事件载荷与压缩摘要用它，保证 base64 永不外泄。（对齐 Rust
+ * llm_client::Content::plain_text；thinking/toolCall 形态是 TS 侧
+ * pi-ai 形状的扩展。）
+ */
+export function contentToPlainText(
+  content: string | (TextContent | ImageContent | ThinkingContent | ToolCallContent)[]
+): string {
+  if (typeof content === 'string') return content;
+  return content
+    .map((part) => {
+      switch (part.type) {
+        case 'text':
+          return part.text;
+        case 'image':
+          return '[image]';
+        case 'thinking':
+          return part.thinking;
+        case 'toolCall':
+          return `[toolCall:${part.name}]`;
+      }
+    })
+    .join('\n');
 }
 
 /** 工具调用内容块（别名 ToolCall 供兼容引用） */

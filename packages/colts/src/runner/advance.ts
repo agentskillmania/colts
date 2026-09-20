@@ -41,6 +41,8 @@ export interface RunnerContext {
     thinkingEnabled?: boolean;
     enablePromptThinking?: boolean;
     temperature?: number;
+    /** `file:` 附件引用锚定目录（物化在 calling-llm 阶段发生） */
+    attachmentDir?: string;
   };
   /** Event emitter callback — forwards events to the runner's EventEmitter */
   emit: (type: string, data: Record<string, unknown>) => void;

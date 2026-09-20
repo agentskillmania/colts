@@ -37,6 +37,13 @@ export interface RunnerOptions {
   /** 工具数组（快速初始化） */
   tools?: ColtsTool[];
 
+  /**
+   * `file:` 附件引用的锚定目录（= 会话目录，与会话存储同源派生）。
+   * 无会话持久化时留空——收到 `file:` 引用会在 wire 物化时报错。
+   * （R2P-107，对齐 Rust RunnerOptions.attachment_dir。）
+   */
+  attachmentDir?: string;
+
   /** 系统提示词（可选，与 AgentConfig.instructions 合并） */
   systemPrompt?: string;
 

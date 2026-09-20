@@ -13,6 +13,7 @@
  */
 
 import type { Message as PiAIMessage, TextContent, ToolCall } from '@agentskillmania/llm-client';
+import { contentToPlainText } from '@agentskillmania/llm-client';
 
 import type { AgentState } from '../types.js';
 import type { BuildMessagesOptions, IMessageAssembler } from './types.js';
@@ -135,7 +136,9 @@ export class DefaultMessageAssembler implements IMessageAssembler {
           break;
 
         case 'assistant': {
-          const content: (TextContent | ToolCall)[] = [{ type: 'text', text: msg.content }];
+          const content: (TextContent | ToolCall)[] = [
+            { type: 'text', text: contentToPlainText(msg.content) },
+          ];
           if (msg.toolCalls && msg.toolCalls.length > 0) {
             for (const tc of msg.toolCalls) {
               content.push({
@@ -171,7 +174,7 @@ export class DefaultMessageAssembler implements IMessageAssembler {
             role: 'toolResult',
             toolCallId: msg.toolCallId ?? 'unknown',
             toolName: msg.toolName ?? 'unknown',
-            content: [{ type: 'text', text: msg.content }],
+            content: [{ type: 'text', text: contentToPlainText(msg.content) }],
             isError: msg.isError ?? false, // ERR2: propagate rejection/error flag
             timestamp: msg.timestamp,
           });
