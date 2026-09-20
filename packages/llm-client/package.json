@@ -1,6 +1,6 @@
 {
   "name": "@agentskillmania/llm-client",
-  "version": "0.5.0-alpha.2",
+  "version": "0.5.0-alpha.3",
   "type": "module",
   "description": "A unified LLM client with multi-provider support, concurrency control, and comprehensive token tracking.",
   "author": {
