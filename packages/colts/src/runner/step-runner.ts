@@ -229,6 +229,9 @@ export class StepRunner {
               data: chain.stopResult.phase.answer,
               tokens: stepTokens,
               duration: 0,
+              // 命令拦截标记透传（R2P-109）：消费方（daemon 回声）据此
+              // 判别"答案没走过 token 流"，不再依赖 stopped 形状启发。
+              ...(chain.stopResult.phase.fromCommand ? { fromCommand: true as const } : {}),
             },
           },
         };
@@ -303,6 +306,8 @@ export class StepRunner {
               data: chain.stopResult.phase.answer,
               tokens: stepTokens,
               duration: 0,
+              // 命令拦截标记透传（R2P-109）。
+              ...(chain.stopResult.phase.fromCommand ? { fromCommand: true as const } : {}),
             },
           },
         };

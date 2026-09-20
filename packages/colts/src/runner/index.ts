@@ -890,12 +890,19 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
             runResult = { type: 'abort', totalSteps, tokens: runTokens, duration: 0 };
             this.emit('abort', { totalSteps, timestamp: Date.now() });
           } else if (decision.runResultType === 'stopped') {
+            const stoppedStep = result as {
+              type: 'stopped';
+              data?: string;
+              fromCommand?: true;
+            };
             runResult = {
               type: 'stopped',
-              data: (result as { type: 'stopped'; data?: string }).data,
+              data: stoppedStep.data,
               totalSteps,
               tokens: runTokens,
               duration: 0,
+              // 命令拦截标记透传（R2P-109）。
+              ...(stoppedStep.fromCommand ? { fromCommand: true as const } : {}),
             };
           } else if (decision.runResultType === 'waiting-human') {
             const stepWaiting = result as {

@@ -60,7 +60,16 @@ export type Phase =
   | { type: 'parsed'; thought: string; action?: Action }
   | { type: 'executing-tool'; actions: Action[] }
   | { type: 'tool-result'; results: Record<string, unknown> }
-  | { type: 'completed'; answer: string }
+  | {
+      type: 'completed';
+      answer: string;
+      /**
+       * 答案来自命令拦截（没走过 token 流），消费方据此补发 token 帧
+       * （R2P-109，对齐 Rust Phase::Completed::from_command）。
+       * 缺省 = LLM 正常完结。
+       */
+      fromCommand?: true;
+    }
   | { type: 'error'; error: Error }
   | {
       /** First (primary) suspended request — kept for single-question consumers */
@@ -84,7 +93,7 @@ export type StepResult =
   | { type: 'done'; answer: string; tokens: TokenStats; duration: number }
   | { type: 'error'; error: Error; tokens: TokenStats; duration: number }
   | { type: 'abort'; tokens: TokenStats; duration: number }
-  | { type: 'stopped'; data?: unknown; tokens: TokenStats; duration: number }
+  | { type: 'stopped'; data?: unknown; tokens: TokenStats; duration: number; fromCommand?: true }
   | {
       type: 'waiting-human';
       request: HumanRequest;
@@ -257,7 +266,14 @@ export type RunResult =
   | { type: 'max_steps'; totalSteps: number; tokens: TokenStats; duration: number }
   | { type: 'error'; error: Error; totalSteps: number; tokens: TokenStats; duration: number }
   | { type: 'abort'; totalSteps: number; tokens: TokenStats; duration: number }
-  | { type: 'stopped'; data?: string; totalSteps: number; tokens: TokenStats; duration: number }
+  | {
+      type: 'stopped';
+      data?: string;
+      totalSteps: number;
+      tokens: TokenStats;
+      duration: number;
+      fromCommand?: true;
+    }
   | {
       type: 'waiting-human';
       request: HumanRequest;
