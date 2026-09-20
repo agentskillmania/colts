@@ -229,6 +229,20 @@ export class AgentRunner extends EventEmitter<RunnerEventMap> {
   }
 
   /**
+   * Late-bind the `file:` attachment anchor dir (R2P-107).
+   *
+   * TS hosts (daemon standard sessions) construct the runner BEFORE the
+   * session id exists — unlike Rust, where the id is known at build time.
+   * The host derives the session dir once known and binds it here; the value
+   * is read per LLM call (calling-llm materialization). Set before the first
+   * run; passing undefined clears it (refs then fail materialization with a
+   * named error, same as never setting it).
+   */
+  setAttachmentDir(dir: string | undefined): void {
+    this.options = { ...this.options, attachmentDir: dir };
+  }
+
+  /**
    * Create an AgentRunner instance
    *
    * @param options - Runner configuration options

@@ -288,3 +288,42 @@ describe('runner end-to-end wire materialization', () => {
     expect((llmClient.stream as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
   });
 });
+
+describe('AgentRunner.setAttachmentDir late binding', () => {
+  it('binds after construction and reaches the calling-llm phase', async () => {
+    const dir = await makeTempDir();
+    await writeFile(path.join(dir, 'late.png'), Buffer.from('L'));
+
+    const llmClient = createCallOnlyMockLLMClient([{ content: 'ok', toolCalls: [] }]);
+    const runner = new AgentRunner({ model: 'test-model', llmClient, maxSteps: 1 });
+    // Bound AFTER construction — daemon standard sessions know the session
+    // dir only once the session id exists (post-runner).
+    runner.setAttachmentDir(dir);
+
+    const requestEvents: Array<{ messages: Array<{ content: string }> }> = [];
+    runner.on('llm:request', (e) => requestEvents.push(e));
+
+    let state = createAgentState({ name: 't', instructions: '', tools: [] });
+    state = addUserMessage(state, [imagePart({ type: 'image', ref: 'file:late.png' })]);
+    await runner.run(state);
+
+    expect(requestEvents[0].messages.map((m) => m.content)).toContain('[image]');
+    const streamArg = (llmClient.stream as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const wireImage = (streamArg.messages[0].content as ImageContent[]).find(
+      (p) => p.type === 'image'
+    ) as ImageContent;
+    expect(wireImage.data).toBe(Buffer.from('L').toString('base64'));
+  });
+
+  it('clearing with undefined makes refs fail with a named error', async () => {
+    const llmClient = createCallOnlyMockLLMClient([{ content: 'ok', toolCalls: [] }]);
+    const runner = new AgentRunner({ model: 'm', llmClient, maxSteps: 1 });
+    runner.setAttachmentDir(undefined);
+    const errors: Array<{ error: Error }> = [];
+    runner.on('error', (e) => errors.push(e));
+    let state = createAgentState({ name: 't', instructions: '', tools: [] });
+    state = addUserMessage(state, [imagePart({ type: 'image', ref: 'file:x.png' })]);
+    await runner.run(state);
+    expect(errors[0].error.message).toContain('x.png');
+  });
+});
