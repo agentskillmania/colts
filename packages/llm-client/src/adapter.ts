@@ -662,11 +662,41 @@ export class PiAiAdapter {
     // Phase 1: Establish connection with p-retry
     // Verify the connection by awaiting the first event from the stream.
     // p-retry handles retries for connection-level failures automatically.
+    // requestTimeout guards the WHOLE stream (connection + iteration) as a
+    // total-duration cap — same semantics as the call() path's pTimeout and
+    // Rust's always-on reqwest stream timeout. Without it a hung stream
+    // never resolves and the caller's turn stays busy forever (stream path
+    // previously ignored requestTimeout; surfaced by an E2E hang where a
+    // turn sat in-flight indefinitely with no recovery but manual stop).
+    const deadline =
+      options.requestTimeout !== undefined ? Date.now() + options.requestTimeout : Infinity;
+    const remaining = () => deadline - Date.now();
+    const nextWithDeadline = async (): Promise<IteratorResult<AssistantMessageEvent>> => {
+      const left = remaining();
+      if (left <= 0) {
+        throw new Error(`Request timeout after ${options.requestTimeout}ms`);
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          iterator.next(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`Request timeout after ${options.requestTimeout}ms`)),
+              left
+            );
+          }),
+        ]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+    };
+
     let iterator: AsyncIterator<AssistantMessageEvent>;
     let firstEvent: AssistantMessageEvent;
 
     try {
-      const result = await this.withRetry(
+      const establish = this.withRetry(
         async (): Promise<{
           iterator: AsyncIterator<AssistantMessageEvent>;
           firstEvent: AssistantMessageEvent;
@@ -689,6 +719,26 @@ export class PiAiAdapter {
         retryOpts,
         onRetry
       );
+      // 连接阶段（含重试）同样受总时长约束——挂死的握手不允许吃满永续。
+      let result: Awaited<typeof establish>;
+      if (options.requestTimeout !== undefined) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          result = await Promise.race([
+            establish,
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error(`Request timeout after ${options.requestTimeout}ms`)),
+                remaining()
+              );
+            }),
+          ]);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+        }
+      } else {
+        result = await establish;
+      }
       iterator = result.iterator;
       firstEvent = result.firstEvent;
     } catch (error) {
@@ -709,7 +759,7 @@ export class PiAiAdapter {
     // Remaining events
     try {
       while (true) {
-        const { done, value } = await iterator.next();
+        const { done, value } = await nextWithDeadline();
         if (done) break;
         mapped = this.mapEvent(value);
         if (mapped) yield mapped;
