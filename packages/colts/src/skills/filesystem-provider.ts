@@ -226,6 +226,19 @@ export class FilesystemSkillProvider implements ISkillProvider {
       throw new Error(`Skill not found: ${name}`);
     }
 
+    // Path guard: only relative paths INSIDE the skill directory are
+    // accepted. Absolute paths and `..` traversal segments are rejected
+    // before the join — a joined traversal path handed to the fs reads
+    // outside the skill directory (same guard shape as run_skill_script;
+    // the Rust mirror is load_resource in crates/wrangler/src/skills/fs.rs,
+    // 3ac6ac5). Covers Windows drive-letter absolutes too.
+    if (
+      /^([\\/]|[a-zA-Z]:[\\/])/.test(relativePath) ||
+      relativePath.split(/[\\/]+/).includes('..')
+    ) {
+      throw new Error(`Invalid resource path: ${relativePath}`);
+    }
+
     const resourcePath = this.fsOps.join(manifest.source, relativePath);
     const cacheKey = `${name}:${relativePath}`;
 

@@ -141,3 +141,41 @@ describe('FilesystemSkillProvider cache coverage', () => {
     );
   });
 });
+
+describe('FilesystemSkillProvider resource path guard', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTestDir();
+  });
+
+  afterEach(() => {
+    if (existsSync(tempDir)) {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // 绝对路径与 .. 穿越一律拒绝,正常相对路径照常读(对齐 Rust
+  // 3ac6ac5:read_skill_resource 此前直接 join+read,../../ 能读到技能
+  // 目录之外的文件)。
+  it('rejects traversal and absolute resource paths, reads legit ones', async () => {
+    createSkillDir(tempDir, 'guarded', 'name: guarded\ndescription: Test', '# Body');
+    writeFileSync(join(tempDir, 'guarded', 'reference.md'), 'ref content');
+    writeFileSync(join(tempDir, 'victim.txt'), 'outside the skill');
+
+    const provider = new FilesystemSkillProvider([tempDir]);
+
+    await expect(provider.loadResource('guarded', '../../../victim.txt')).rejects.toThrow(
+      /Invalid resource path/
+    );
+    await expect(provider.loadResource('guarded', '/etc/passwd')).rejects.toThrow(
+      /Invalid resource path/
+    );
+    await expect(provider.loadResource('guarded', 'C:\\Windows\\win.ini')).rejects.toThrow(
+      /Invalid resource path/
+    );
+
+    const ok = await provider.loadResource('guarded', 'reference.md');
+    expect(ok).toBe('ref content');
+  });
+});
