@@ -67,7 +67,11 @@ runner 是 `EventEmitter`（token / thinking / 工具 / 相位变更 / 技能 / 
 
 ## 版本说明
 
-### 0.5.0（当前 alpha：`0.5.0-alpha.x`，`npm i @agentskillmania/colts@alpha`）
+### 0.5.1（仅 llm-client，patch）
+
+- **流式调用超时修复** —— `requestTimeout` 此前只在 `call()` 生效，流式路径（`streamWithRetry`）完全不消费——挂死的流永不返回，主会话轮永远占忙、只能手工 stop。现在连接阶段与逐事件迭代共享同一总时长上限，超时按与 `call()` 相同的语义产出 `error` 事件。升级：`npm i @agentskillmania/llm-client@^0.5.1`。
+
+### 0.5.0（`npm i @agentskillmania/colts@latest`）
 
 新能力：
 

@@ -135,3 +135,9 @@ llm-client ──────────► (no internal deps)
 ## License
 
 MIT
+
+## Release Notes
+
+### 0.5.1 (llm-client only, patch)
+
+- **Streaming timeout fix** — `requestTimeout` was only enforced on `call()`; the streaming path (`streamWithRetry`) never consumed it — a hung stream never resolved and the caller's turn stayed busy forever (manual stop was the only way out). Connection and per-event iteration now share one total-duration deadline; on expiry an `error` event is emitted with the same semantics as `call()`. Upgrade: `npm i @agentskillmania/llm-client@^0.5.1`.
